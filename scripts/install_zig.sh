@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 
+# QwD Script
+# Purpose: Downloads and installs the Zig compiler (v0.13.0) for the current OS and architecture.
+# Usage: ./scripts/install_zig.sh
+# Expected Output: Zig installed at /usr/local/zig and added to the user's PATH.
+
 set -e
 
 ZIG_VERSION="0.13.0"
