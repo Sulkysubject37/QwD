@@ -1,0 +1,4 @@
+context.md
+.zig-cache/
+zig-out/
+*.tar.xz
