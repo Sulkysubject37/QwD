@@ -7,12 +7,15 @@ pub const Stage = struct {
     vtable: *const VTable,
 
     pub const VTable = struct {
-        process: *const fn (ptr: *anyopaque, read: parser.Read) anyerror!void,
+        /// process(ptr, read) -> bool
+        /// true  -> continue processing
+        /// false -> discard read
+        process: *const fn (ptr: *anyopaque, read: *parser.Read) anyerror!bool,
         finalize: *const fn (ptr: *anyopaque) anyerror!void,
         report: *const fn (ptr: *anyopaque) void,
     };
 
-    pub fn process(self: Stage, read: parser.Read) !void {
+    pub fn process(self: Stage, read: *parser.Read) !bool {
         return self.vtable.process(self.ptr, read);
     }
 

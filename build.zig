@@ -41,10 +41,41 @@ pub fn build(b: *std.Build) void {
     length_mod.addImport("parser", parser_mod);
     length_mod.addImport("stage", stage_interface_mod);
 
+    const filter_mod = b.addModule("filter", .{
+        .root_source_file = b.path("stages/filter/filter_stage.zig"),
+    });
+    filter_mod.addImport("parser", parser_mod);
+    filter_mod.addImport("stage", stage_interface_mod);
+
+    const trim_mod = b.addModule("trim", .{
+        .root_source_file = b.path("stages/trim/trim_stage.zig"),
+    });
+    trim_mod.addImport("parser", parser_mod);
+    trim_mod.addImport("stage", stage_interface_mod);
+
+    const kmer_mod = b.addModule("kmer", .{
+        .root_source_file = b.path("stages/kmer/kmer_stage.zig"),
+    });
+    kmer_mod.addImport("parser", parser_mod);
+    kmer_mod.addImport("stage", stage_interface_mod);
+
     const metrics_mod = b.addModule("metrics", .{
         .root_source_file = b.path("core/metrics/metrics.zig"),
     });
     metrics_mod.addImport("scheduler", scheduler_mod);
+
+    const pipeline_mod = b.addModule("pipeline", .{
+        .root_source_file = b.path("core/pipeline/pipeline.zig"),
+    });
+    pipeline_mod.addImport("scheduler", scheduler_mod);
+    pipeline_mod.addImport("stage", stage_interface_mod);
+    pipeline_mod.addImport("qc", qc_mod);
+    pipeline_mod.addImport("gc", gc_mod);
+    pipeline_mod.addImport("length", length_mod);
+    pipeline_mod.addImport("filter", filter_mod);
+    pipeline_mod.addImport("trim", trim_mod);
+    pipeline_mod.addImport("kmer", kmer_mod);
+    pipeline_mod.addImport("parser", parser_mod);
 
     // CLI Executable
     const exe = b.addExecutable(.{
@@ -56,9 +87,7 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("parser", parser_mod);
     exe.root_module.addImport("scheduler", scheduler_mod);
     exe.root_module.addImport("allocator", allocator_mod);
-    exe.root_module.addImport("qc", qc_mod);
-    exe.root_module.addImport("gc", gc_mod);
-    exe.root_module.addImport("length", length_mod);
+    exe.root_module.addImport("pipeline", pipeline_mod);
     exe.root_module.addImport("metrics", metrics_mod);
     b.installArtifact(exe);
 
@@ -107,8 +136,28 @@ pub fn build(b: *std.Build) void {
     stage_tests.root_module.addImport("length", length_mod);
     const run_stage_tests = b.addRunArtifact(stage_tests);
 
+    const kmer_tests = b.addTest(.{
+        .root_source_file = b.path("tests/stages/kmer_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    kmer_tests.root_module.addImport("parser", parser_mod);
+    kmer_tests.root_module.addImport("kmer", kmer_mod);
+    const run_kmer_tests = b.addRunArtifact(kmer_tests);
+
+    const pipeline_tests = b.addTest(.{
+        .root_source_file = b.path("tests/pipeline/pipeline_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    pipeline_tests.root_module.addImport("parser", parser_mod);
+    pipeline_tests.root_module.addImport("pipeline", pipeline_mod);
+    const run_pipeline_tests = b.addRunArtifact(pipeline_tests);
+
     test_step.dependOn(&run_parser_tests.step);
     test_step.dependOn(&run_scheduler_tests.step);
     test_step.dependOn(&run_allocator_tests.step);
     test_step.dependOn(&run_stage_tests.step);
+    test_step.dependOn(&run_kmer_tests.step);
+    test_step.dependOn(&run_pipeline_tests.step);
 }

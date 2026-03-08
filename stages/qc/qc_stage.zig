@@ -1,6 +1,6 @@
 const std = @import("std");
 const parser = @import("parser");
-const stage_mod = @import("../../core/stage/stage.zig");
+const stage_mod = @import("stage");
 
 pub const QcStage = struct {
     total_reads: usize = 0,
@@ -8,7 +8,7 @@ pub const QcStage = struct {
     sum_quality: u64 = 0,
     mean_quality: f64 = 0.0,
 
-    pub fn process(ptr: *anyopaque, read: parser.Read) !void {
+    pub fn process(ptr: *anyopaque, read: *parser.Read) !bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         self.total_reads += 1;
         self.total_bases += read.seq.len;
@@ -16,6 +16,7 @@ pub const QcStage = struct {
             // phred = ascii_value - 33
             self.sum_quality += (q - 33);
         }
+        return true;
     }
 
     pub fn finalize(ptr: *anyopaque) !void {

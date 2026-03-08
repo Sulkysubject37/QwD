@@ -6,12 +6,12 @@ const length_mod = @import("length");
 
 test "QC Stage Test" {
     var qc = qc_mod.QcStage{};
-    const read = parser.Read{
+    var read = parser.Read{
         .id = "r1",
         .seq = "ACGT",
         .qual = "IIII", // 'I' is PHRED 40
     };
-    try qc_mod.QcStage.process(&qc, read);
+    _ = try qc_mod.QcStage.process(&qc, &read);
     try qc_mod.QcStage.finalize(&qc);
 
     try std.testing.expectEqual(@as(usize, 1), qc.total_reads);
@@ -21,12 +21,12 @@ test "QC Stage Test" {
 
 test "GC Stage Test" {
     var gc = gc_mod.GcStage{};
-    const read = parser.Read{
+    var read = parser.Read{
         .id = "r1",
         .seq = "ACGT",
         .qual = "IIII",
     };
-    try gc_mod.GcStage.process(&gc, read);
+    _ = try gc_mod.GcStage.process(&gc, &read);
     try gc_mod.GcStage.finalize(&gc);
 
     try std.testing.expectEqual(@as(f64, 0.5), gc.gc_ratio);
@@ -34,14 +34,14 @@ test "GC Stage Test" {
 
 test "Length Stage Test" {
     var length = length_mod.LengthStage{};
-    const reads = [_]parser.Read{
+    var reads = [_]parser.Read{
         .{ .id = "r1", .seq = "A" ** 10, .qual = "I" ** 10 },
         .{ .id = "r2", .seq = "A" ** 20, .qual = "I" ** 20 },
         .{ .id = "r3", .seq = "A" ** 30, .qual = "I" ** 30 },
     };
 
-    for (reads) |r| {
-        try length_mod.LengthStage.process(&length, r);
+    for (0..reads.len) |i| {
+        _ = try length_mod.LengthStage.process(&length, &reads[i]);
     }
     try length_mod.LengthStage.finalize(&length);
 
