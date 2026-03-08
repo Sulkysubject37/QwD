@@ -1,13 +1,13 @@
 const std = @import("std");
 const parser = @import("parser");
-const stage_mod = @import("../../core/stage/stage.zig");
+const stage_mod = @import("stage");
 
 pub const GcStage = struct {
     gc_bases: usize = 0,
     total_bases: usize = 0,
     gc_ratio: f64 = 0.0,
 
-    pub fn process(ptr: *anyopaque, read: parser.Read) !void {
+    pub fn process(ptr: *anyopaque, read: *parser.Read) !bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         for (read.seq) |base| {
             self.total_bases += 1;
@@ -15,6 +15,7 @@ pub const GcStage = struct {
                 self.gc_bases += 1;
             }
         }
+        return true;
     }
 
     pub fn finalize(ptr: *anyopaque) !void {

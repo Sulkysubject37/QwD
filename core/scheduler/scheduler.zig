@@ -22,11 +22,14 @@ pub const Scheduler = struct {
         try self.stages.append(stage);
     }
 
-    /// Receive a parsed read and forward it to all registered processing stages.
+    /// Receive a parsed read and forward it to registered processing stages.
+    /// If a stage returns false, processing for this read stops.
     pub fn process(self: *Scheduler, read: parser.Read) !void {
         self.read_count += 1;
+        var r = read; // Local copy allows stages to modify slices in-place
         for (self.stages.items) |stage| {
-            try stage.process(read);
+            const continue_processing = try stage.process(&r);
+            if (!continue_processing) break;
         }
     }
 
@@ -53,11 +56,13 @@ test "Scheduler test with dummy stage" {
     // Define a dummy stage
     const DummyStage = struct {
         processed: usize = 0,
+        should_continue: bool = true,
 
-        pub fn process(ptr: *anyopaque, read: parser.Read) !void {
+        pub fn process(ptr: *anyopaque, read: *parser.Read) !bool {
             _ = read;
             const self: *@This() = @ptrCast(@alignCast(ptr));
             self.processed += 1;
+            return self.should_continue;
         }
 
         pub fn finalize(ptr: *anyopaque) !void {
@@ -80,8 +85,10 @@ test "Scheduler test with dummy stage" {
         }
     };
 
-    var dummy = DummyStage{};
-    try scheduler.registerStage(dummy.stage());
+    var dummy1 = DummyStage{ .should_continue = false };
+    var dummy2 = DummyStage{};
+    try scheduler.registerStage(dummy1.stage());
+    try scheduler.registerStage(dummy2.stage());
 
     const read = parser.Read{
         .id = "test",
@@ -90,5 +97,6 @@ test "Scheduler test with dummy stage" {
     };
     try scheduler.process(read);
     try std.testing.expectEqual(@as(usize, 1), scheduler.read_count);
-    try std.testing.expectEqual(@as(usize, 1), dummy.processed);
+    try std.testing.expectEqual(@as(usize, 1), dummy1.processed);
+    try std.testing.expectEqual(@as(usize, 0), dummy2.processed); // Filtered out
 }

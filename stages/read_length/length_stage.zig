@@ -1,6 +1,6 @@
 const std = @import("std");
 const parser = @import("parser");
-const stage_mod = @import("../../core/stage/stage.zig");
+const stage_mod = @import("stage");
 
 pub const LengthStage = struct {
     total_reads: usize = 0,
@@ -9,13 +9,14 @@ pub const LengthStage = struct {
     max_length: usize = 0,
     mean_length: f64 = 0.0,
 
-    pub fn process(ptr: *anyopaque, read: parser.Read) !void {
+    pub fn process(ptr: *anyopaque, read: *parser.Read) !bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         const len = read.seq.len;
         self.total_reads += 1;
         self.total_length += len;
         if (len < self.min_length) self.min_length = len;
         if (len > self.max_length) self.max_length = len;
+        return true;
     }
 
     pub fn finalize(ptr: *anyopaque) !void {
