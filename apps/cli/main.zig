@@ -18,7 +18,7 @@ pub fn main() !void {
     defer std.process.argsFree(allocator, args);
 
     if (args.len < 3) {
-        std.debug.print("Usage: {s} <qc|pipeline> [options] <fastq_file>\n", .{args[0]});
+        std.debug.print("Usage: {s} <qc|pipeline|entropy|n50|quality-decay|adapter-detect> [options] <fastq_file>\n", .{args[0]});
         return;
     }
 
@@ -45,6 +45,18 @@ pub fn main() !void {
         while (it.next()) |stage_name| {
             try pipeline.addStageByName(stage_name);
         }
+    } else if (std.mem.eql(u8, command, "entropy")) {
+        file_path = args[2];
+        try pipeline.addStageByName("entropy");
+    } else if (std.mem.eql(u8, command, "n50")) {
+        file_path = args[2];
+        try pipeline.addStageByName("n50");
+    } else if (std.mem.eql(u8, command, "quality-decay")) {
+        file_path = args[2];
+        try pipeline.addStageByName("quality_decay");
+    } else if (std.mem.eql(u8, command, "adapter-detect")) {
+        file_path = args[2];
+        try pipeline.addStageByName("adapter_detect");
     } else {
         std.debug.print("Unknown command: {s}\n", .{command});
         return;

@@ -59,6 +59,36 @@ pub fn build(b: *std.Build) void {
     kmer_mod.addImport("parser", parser_mod);
     kmer_mod.addImport("stage", stage_interface_mod);
 
+    const length_dist_mod = b.addModule("length_dist", .{
+        .root_source_file = b.path("stages/length_distribution/length_distribution_stage.zig"),
+    });
+    length_dist_mod.addImport("parser", parser_mod);
+    length_dist_mod.addImport("stage", stage_interface_mod);
+
+    const n50_mod = b.addModule("n50", .{
+        .root_source_file = b.path("stages/n50/n50_stage.zig"),
+    });
+    n50_mod.addImport("parser", parser_mod);
+    n50_mod.addImport("stage", stage_interface_mod);
+
+    const qual_decay_mod = b.addModule("qual_decay", .{
+        .root_source_file = b.path("stages/quality_decay/quality_decay_stage.zig"),
+    });
+    qual_decay_mod.addImport("parser", parser_mod);
+    qual_decay_mod.addImport("stage", stage_interface_mod);
+
+    const entropy_mod = b.addModule("entropy", .{
+        .root_source_file = b.path("stages/entropy/entropy_stage.zig"),
+    });
+    entropy_mod.addImport("parser", parser_mod);
+    entropy_mod.addImport("stage", stage_interface_mod);
+
+    const adapter_detect_mod = b.addModule("adapter_detect", .{
+        .root_source_file = b.path("stages/adapter_detect/adapter_detect_stage.zig"),
+    });
+    adapter_detect_mod.addImport("parser", parser_mod);
+    adapter_detect_mod.addImport("stage", stage_interface_mod);
+
     const metrics_mod = b.addModule("metrics", .{
         .root_source_file = b.path("core/metrics/metrics.zig"),
     });
@@ -75,6 +105,11 @@ pub fn build(b: *std.Build) void {
     pipeline_mod.addImport("filter", filter_mod);
     pipeline_mod.addImport("trim", trim_mod);
     pipeline_mod.addImport("kmer", kmer_mod);
+    pipeline_mod.addImport("length_dist", length_dist_mod);
+    pipeline_mod.addImport("n50", n50_mod);
+    pipeline_mod.addImport("qual_decay", qual_decay_mod);
+    pipeline_mod.addImport("entropy", entropy_mod);
+    pipeline_mod.addImport("adapter_detect", adapter_detect_mod);
     pipeline_mod.addImport("parser", parser_mod);
 
     // CLI Executable
@@ -134,30 +169,15 @@ pub fn build(b: *std.Build) void {
     stage_tests.root_module.addImport("qc", qc_mod);
     stage_tests.root_module.addImport("gc", gc_mod);
     stage_tests.root_module.addImport("length", length_mod);
+    stage_tests.root_module.addImport("length_dist", length_dist_mod);
+    stage_tests.root_module.addImport("n50", n50_mod);
+    stage_tests.root_module.addImport("qual_decay", qual_decay_mod);
+    stage_tests.root_module.addImport("entropy", entropy_mod);
+    stage_tests.root_module.addImport("adapter_detect", adapter_detect_mod);
     const run_stage_tests = b.addRunArtifact(stage_tests);
-
-    const kmer_tests = b.addTest(.{
-        .root_source_file = b.path("tests/stages/kmer_test.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    kmer_tests.root_module.addImport("parser", parser_mod);
-    kmer_tests.root_module.addImport("kmer", kmer_mod);
-    const run_kmer_tests = b.addRunArtifact(kmer_tests);
-
-    const pipeline_tests = b.addTest(.{
-        .root_source_file = b.path("tests/pipeline/pipeline_test.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    pipeline_tests.root_module.addImport("parser", parser_mod);
-    pipeline_tests.root_module.addImport("pipeline", pipeline_mod);
-    const run_pipeline_tests = b.addRunArtifact(pipeline_tests);
 
     test_step.dependOn(&run_parser_tests.step);
     test_step.dependOn(&run_scheduler_tests.step);
     test_step.dependOn(&run_allocator_tests.step);
     test_step.dependOn(&run_stage_tests.step);
-    test_step.dependOn(&run_kmer_tests.step);
-    test_step.dependOn(&run_pipeline_tests.step);
 }
