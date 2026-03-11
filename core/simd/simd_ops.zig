@@ -62,12 +62,18 @@ pub fn sumPhredSimd(qual: []const u8) u64 {
 
     while (i + vec_size <= qual.len) : (i += vec_size) {
         const v: @Vector(vec_size, u8) = qual[i..][0..vec_size].*;
-        const phreds = v - sub_vec;
+        
+        // Clamp to 33 to prevent underflow
+        const clamped = @select(u8, v < sub_vec, sub_vec, v);
+        const phreds = clamped - sub_vec;
+        
         sum += @reduce(.Add, @as(@Vector(vec_size, u64), phreds));
     }
 
     while (i < qual.len) : (i += 1) {
-        sum += (qual[i] - 33);
+        const q = qual[i];
+        const phred = if (q >= 33) q - 33 else 0;
+        sum += phred;
     }
     return sum;
 }
@@ -75,7 +81,8 @@ pub fn sumPhredSimd(qual: []const u8) u64 {
 pub fn sumPhredScalar(qual: []const u8) u64 {
     var sum: u64 = 0;
     for (qual) |q| {
-        sum += (q - 33);
+        const phred = if (q >= 33) q - 33 else 0;
+        sum += phred;
     }
     return sum;
 }

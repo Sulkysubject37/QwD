@@ -13,7 +13,8 @@ pub const PerBaseQualityStage = struct {
         const limit = if (read.qual.len > MAX_POS) MAX_POS else read.qual.len;
 
         for (0..limit) |pos| {
-            const phred = read.qual[pos] - 33;
+            const q = read.qual[pos];
+            const phred = if (q >= 33) q - 33 else 0;
             self.quality_sum[pos] += phred;
             self.base_count[pos] += 1;
         }

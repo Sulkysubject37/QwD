@@ -20,7 +20,8 @@ pub const FilterStage = struct {
 
         var sum: u64 = 0;
         for (read.qual) |q| {
-            sum += (q - 33);
+            const phred = if (q >= 33) q - 33 else 0;
+            sum += phred;
         }
 
         const avg = if (read.qual.len > 0) @as(f64, @floatFromInt(sum)) / @as(f64, @floatFromInt(read.qual.len)) else 0.0;
