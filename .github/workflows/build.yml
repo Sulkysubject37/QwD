@@ -24,11 +24,43 @@ jobs:
       - name: Build project
         run: zig build
 
+      - name: Generate robust test fixtures
+        run: |
+          mkdir -p tests/fixtures
+          python3 -c "import random; random.seed(42); f=open('tests/fixtures/sample.fastq','w'); [f.write(f'@R_{i}\nACGT\n+\nIIII\n') for i in range(100000)]; f.close()"
+          touch tests/fixtures/sample.bam
+
       - name: Run unit tests
         run: zig build test --summary all
 
-      - name: Run performance tests
-        run: echo "Running performance tests (stubbed for CI)" && zig build run -- qc tests/fixtures/sample.fastq || true
+      - name: Run SIMD benchmark (Internal)
+        run: zig build bench
 
-      - name: Run reproducibility tests
-        run: echo "Running reproducibility tests (stubbed for CI)" && zig build run -- qc tests/fixtures/sample.fastq || true
+      - name: Run Core benchmark (Internal)
+        run: zig build bench-core
+
+      - name: FASTQ Reproducibility & Performance (Scalar vs SIMD, Single vs Multi)
+        shell: bash
+        run: |
+          echo "--- FASTQ: Single-core, SIMD ---"
+          time ./zig-out/bin/qwd qc tests/fixtures/sample.fastq > run_s_simd.txt
+          
+          echo "--- FASTQ: Single-core, Scalar ---"
+          time ./zig-out/bin/qwd qc --no-simd tests/fixtures/sample.fastq > run_s_scalar.txt
+          
+          echo "--- FASTQ: Multi-core (4 threads), SIMD ---"
+          time ./zig-out/bin/qwd qc --threads 4 tests/fixtures/sample.fastq > run_m_simd.txt
+          
+          echo "Verifying FASTQ reproducibility..."
+          diff run_s_simd.txt run_s_scalar.txt
+          diff run_s_simd.txt run_m_simd.txt
+
+      - name: BAM Reproducibility & Performance
+        shell: bash
+        run: |
+          echo "--- BAM: Alignment Stats ---"
+          time ./zig-out/bin/qwd bamstats tests/fixtures/sample.bam > bam_run1.txt
+          ./zig-out/bin/qwd bamstats tests/fixtures/sample.bam > bam_run2.txt
+          
+          echo "Verifying BAM reproducibility..."
+          diff bam_run1.txt bam_run2.txt

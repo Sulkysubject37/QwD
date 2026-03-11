@@ -308,6 +308,7 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("parser", parser_mod);
     exe.root_module.addImport("scheduler", scheduler_mod);
     exe.root_module.addImport("parallel_scheduler", parallel_scheduler_mod);
+    exe.root_module.addImport("simd_ops", simd_ops_mod);
     exe.root_module.addImport("allocator", allocator_mod);
     exe.root_module.addImport("pipeline", pipeline_mod);
     exe.root_module.addImport("pipeline_config", pipeline_config_mod);
@@ -337,6 +338,21 @@ pub fn build(b: *std.Build) void {
     const run_simd_bench = b.addRunArtifact(simd_bench);
     const bench_step = b.step("bench", "Run SIMD benchmark");
     bench_step.dependOn(&run_simd_bench.step);
+
+    const core_bench = b.addExecutable(.{
+        .name = "core_bench",
+        .root_source_file = b.path("benchmarks/core_bench.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    core_bench.root_module.addImport("parser", parser_mod);
+    core_bench.root_module.addImport("scheduler", scheduler_mod);
+    core_bench.root_module.addImport("parallel_scheduler", parallel_scheduler_mod);
+    b.installArtifact(core_bench);
+
+    const run_core_bench = b.addRunArtifact(core_bench);
+    const core_bench_step = b.step("bench-core", "Run Core scheduling benchmark");
+    core_bench_step.dependOn(&run_core_bench.step);
 
     const test_step = b.step("test", "Run unit tests");
 
