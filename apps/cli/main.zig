@@ -35,6 +35,7 @@ pub fn main() !void {
     defer positional_args.deinit();
 
     var i: usize = 1;
+    var force_scalar = false;
     while (i < args.len) : (i += 1) {
         if (std.mem.eql(u8, args[i], "--threads")) {
             if (i + 1 < args.len) {
@@ -42,6 +43,9 @@ pub fn main() !void {
                 i += 1;
                 continue;
             }
+        } else if (std.mem.eql(u8, args[i], "--no-simd")) {
+            force_scalar = true;
+            continue;
         } else if (std.mem.eql(u8, args[i], "--config")) {
             if (i + 1 < args.len) {
                 stage_list_or_config = args[i + 1];
@@ -59,6 +63,9 @@ pub fn main() !void {
     }
 
     command = positional_args.items[0];
+    
+    // Apply global SIMD control
+    @import("simd_ops").force_scalar = force_scalar;
 
     if (std.mem.eql(u8, command, "bamstats")) {
         if (positional_args.items.len < 2) return;
