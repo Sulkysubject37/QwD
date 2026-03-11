@@ -32,12 +32,12 @@ pub const QcStage = struct {
         }
     }
 
-    pub fn report(ptr: *anyopaque) void {
+    pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        std.debug.print("QC Report:\n", .{});
-        std.debug.print("  Total reads: {d}\n", .{self.total_reads});
-        std.debug.print("  Total bases: {d}\n", .{self.total_bases});
-        std.debug.print("  Mean quality: {d:.2}\n", .{self.mean_quality});
+        writer.print("QC Report:\n", .{}) catch {};
+        writer.print("  Total reads: {d}\n", .{self.total_reads}) catch {};
+        writer.print("  Total bases: {d}\n", .{self.total_bases}) catch {};
+        writer.print("  Mean quality: {d:.2}\n", .{self.mean_quality}) catch {};
     }
 
     pub fn stage(self: *@This()) stage_mod.Stage {

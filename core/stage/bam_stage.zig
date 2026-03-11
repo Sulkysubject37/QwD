@@ -8,7 +8,7 @@ pub const BamStage = struct {
     pub const VTable = struct {
         process: *const fn (ptr: *anyopaque, record: *bam_reader.AlignmentRecord) anyerror!bool,
         finalize: *const fn (ptr: *anyopaque) anyerror!void,
-        report: *const fn (ptr: *anyopaque) void,
+        report: *const fn (ptr: *anyopaque, writer: std.io.AnyWriter) void,
     };
 
     pub fn process(self: BamStage, record: *bam_reader.AlignmentRecord) !bool {
@@ -19,7 +19,7 @@ pub const BamStage = struct {
         return self.vtable.finalize(self.ptr);
     }
 
-    pub fn report(self: BamStage) void {
-        return self.vtable.report(self.ptr);
+    pub fn report(self: BamStage, writer: std.io.AnyWriter) void {
+        return self.vtable.report(self.ptr, writer);
     }
 };

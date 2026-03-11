@@ -30,11 +30,11 @@ pub const CoverageStage = struct {
         }
     }
 
-    pub fn report(ptr: *anyopaque) void {
+    pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        std.debug.print("Coverage Report:\n", .{});
-        std.debug.print("  Aligned bases:     {d}\n", .{self.total_aligned_bases});
-        std.debug.print("  Est. Coverage:     {d:.2}x\n", .{self.coverage_estimate});
+        writer.print("Coverage Report:\n", .{}) catch {};
+        writer.print("  Aligned bases:     {d}\n", .{self.total_aligned_bases}) catch {};
+        writer.print("  Est. Coverage:     {d:.2}x\n", .{self.coverage_estimate}) catch {};
     }
 
     pub fn stage(self: *@This()) bam_stage.BamStage {

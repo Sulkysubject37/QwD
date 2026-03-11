@@ -31,11 +31,11 @@ pub const TrimStage = struct {
         _ = ptr;
     }
 
-    pub fn report(ptr: *anyopaque) void {
+    pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        std.debug.print("Trim Report (adapter={s}):\n", .{self.adapter_sequence});
-        std.debug.print("  Reads seen:    {d}\n", .{self.reads_seen});
-        std.debug.print("  Reads trimmed: {d}\n", .{self.reads_trimmed});
+        writer.print("Trim Report (adapter={s}):\n", .{self.adapter_sequence}) catch {};
+        writer.print("  Reads seen:    {d}\n", .{self.reads_seen}) catch {};
+        writer.print("  Reads trimmed: {d}\n", .{self.reads_trimmed}) catch {};
     }
 
     pub fn stage(self: *@This()) stage_mod.Stage {

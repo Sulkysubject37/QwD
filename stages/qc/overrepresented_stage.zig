@@ -51,10 +51,10 @@ pub const OverrepresentedStage = struct {
         _ = ptr;
     }
 
-    pub fn report(ptr: *anyopaque) void {
+    pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        std.debug.print("Overrepresented Sequences Report:\n", .{});
-        std.debug.print("  Total unique sequences tracked: {d}\n", .{self.map.count()});
+        writer.print("Overrepresented Sequences Report:\n", .{}) catch {};
+        writer.print("  Total unique sequences tracked: {d}\n", .{self.map.count()}) catch {};
         
         // Find top sequence
         var top_seq: []const u8 = "";
@@ -67,7 +67,7 @@ pub const OverrepresentedStage = struct {
             }
         }
         if (top_count > 1) {
-            std.debug.print("  Most frequent sequence (count={d}): {s}\n", .{ top_count, top_seq });
+            writer.print("  Most frequent sequence (count={d}): {s}\n", .{ top_count, top_seq }) catch {};
         }
     }
 

@@ -47,13 +47,13 @@ pub const DuplicationStage = struct {
         _ = ptr;
     }
 
-    pub fn report(ptr: *anyopaque) void {
+    pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        std.debug.print("Duplication Rate Report:\n", .{});
-        std.debug.print("  Total reads:     {d}\n", .{self.total_reads});
-        std.debug.print("  Duplicate reads: {d}\n", .{self.duplicate_reads});
+        writer.print("Duplication Rate Report:\n", .{}) catch {};
+        writer.print("  Total reads:     {d}\n", .{self.total_reads}) catch {};
+        writer.print("  Duplicate reads: {d}\n", .{self.duplicate_reads}) catch {};
         const ratio = if (self.total_reads > 0) @as(f64, @floatFromInt(self.duplicate_reads)) / @as(f64, @floatFromInt(self.total_reads)) else 0.0;
-        std.debug.print("  Duplication ratio: {d:.2}%\n", .{ratio * 100.0});
+        writer.print("  Duplication ratio: {d:.2}%\n", .{ratio * 100.0}) catch {};
     }
 
     pub fn stage(self: *@This()) stage_mod.Stage {

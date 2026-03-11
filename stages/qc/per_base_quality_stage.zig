@@ -31,13 +31,13 @@ pub const PerBaseQualityStage = struct {
         }
     }
 
-    pub fn report(ptr: *anyopaque) void {
+    pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        std.debug.print("Per-base Quality Report (first 10 positions):\n", .{});
+        writer.print("Per-base Quality Report (first 10 positions):\n", .{}) catch {};
         const limit = if (MAX_POS > 10) 10 else MAX_POS;
         for (0..limit) |pos| {
             if (self.base_count[pos] > 0) {
-                std.debug.print("  Pos {d}: {d:.2}\n", .{ pos, self.mean_quality[pos] });
+                writer.print("  Pos {d}: {d:.2}\n", .{ pos, self.mean_quality[pos] }) catch {};
             }
         }
     }

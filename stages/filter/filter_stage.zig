@@ -39,12 +39,12 @@ pub const FilterStage = struct {
         _ = ptr;
     }
 
-    pub fn report(ptr: *anyopaque) void {
+    pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        std.debug.print("Filter Report (min_qual={d:.2}):\n", .{self.min_quality});
-        std.debug.print("  Reads seen:     {d}\n", .{self.reads_seen});
-        std.debug.print("  Reads passed:   {d}\n", .{self.reads_passed});
-        std.debug.print("  Reads filtered: {d}\n", .{self.reads_filtered});
+        writer.print("Filter Report (min_qual={d:.2}):\n", .{self.min_quality}) catch {};
+        writer.print("  Reads seen:     {d}\n", .{self.reads_seen}) catch {};
+        writer.print("  Reads passed:   {d}\n", .{self.reads_passed}) catch {};
+        writer.print("  Reads filtered: {d}\n", .{self.reads_filtered}) catch {};
     }
 
     pub fn stage(self: *@This()) stage_mod.Stage {

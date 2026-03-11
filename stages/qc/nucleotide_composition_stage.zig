@@ -28,18 +28,18 @@ pub const NucleotideCompositionStage = struct {
         _ = ptr;
     }
 
-    pub fn report(ptr: *anyopaque) void {
+    pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        std.debug.print("Nucleotide Composition Report (first 5 positions):\n", .{});
+        writer.print("Nucleotide Composition Report (first 5 positions):\n", .{}) catch {};
         const limit = if (MAX_POS > 5) 5 else MAX_POS;
         for (0..limit) |pos| {
-            std.debug.print("  Pos {d}: A={d}, C={d}, G={d}, T={d}\n", .{
+            writer.print("  Pos {d}: A={d}, C={d}, G={d}, T={d}\n", .{
                 pos,
                 self.base_counts[pos][0],
                 self.base_counts[pos][1],
                 self.base_counts[pos][2],
                 self.base_counts[pos][3],
-            });
+            }) catch {};
         }
     }
 

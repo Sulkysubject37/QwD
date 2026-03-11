@@ -61,12 +61,12 @@ pub const KmerSpectrumStage = struct {
         _ = ptr;
     }
 
-    pub fn report(ptr: *anyopaque) void {
+    pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        std.debug.print("K-mer Spectrum Report (k={d}):\n", .{self.k});
+        writer.print("K-mer Spectrum Report (k={d}):\n", .{self.k}) catch {};
         var total: u64 = 0;
         for (self.counts) |c| total += c;
-        std.debug.print("  Total {d}-mers: {d}\n", .{self.k, total});
+        writer.print("  Total {d}-mers: {d}\n", .{self.k, total}) catch {};
     }
 
     pub fn stage(self: *@This()) stage_mod.Stage {

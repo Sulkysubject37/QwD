@@ -28,12 +28,12 @@ pub const LengthStage = struct {
         }
     }
 
-    pub fn report(ptr: *anyopaque) void {
+    pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        std.debug.print("Read Length Report:\n", .{});
-        std.debug.print("  Mean length: {d:.2}\n", .{self.mean_length});
-        std.debug.print("  Min length: {d}\n", .{self.min_length});
-        std.debug.print("  Max length: {d}\n", .{self.max_length});
+        writer.print("Read Length Report:\n", .{}) catch {};
+        writer.print("  Mean length: {d:.2}\n", .{self.mean_length}) catch {};
+        writer.print("  Min length: {d}\n", .{self.min_length}) catch {};
+        writer.print("  Max length: {d}\n", .{self.max_length}) catch {};
     }
 
     pub fn stage(self: *@This()) stage_mod.Stage {

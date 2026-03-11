@@ -23,11 +23,11 @@ pub const SoftClipStage = struct {
         _ = ptr;
     }
 
-    pub fn report(ptr: *anyopaque) void {
+    pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        std.debug.print("Soft Clipping Report:\n", .{});
-        std.debug.print("  Soft-clipped reads: {d}\n", .{self.soft_clipped_reads});
-        std.debug.print("  Soft-clipped bases: {d}\n", .{self.soft_clipped_bases});
+        writer.print("Soft Clipping Report:\n", .{}) catch {};
+        writer.print("  Soft-clipped reads: {d}\n", .{self.soft_clipped_reads}) catch {};
+        writer.print("  Soft-clipped bases: {d}\n", .{self.soft_clipped_bases}) catch {};
     }
 
     pub fn stage(self: *@This()) bam_stage.BamStage {

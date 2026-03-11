@@ -25,10 +25,10 @@ pub const GcContentStage = struct {
         }
     }
 
-    pub fn report(ptr: *anyopaque) void {
+    pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        std.debug.print("Global GC Content Report:\n", .{});
-        std.debug.print("  GC Content: {d:.2}%\n", .{self.gc_ratio * 100.0});
+        writer.print("Global GC Content Report:\n", .{}) catch {};
+        writer.print("  GC Content: {d:.2}%\n", .{self.gc_ratio * 100.0}) catch {};
     }
 
     pub fn stage(self: *@This()) stage_mod.Stage {

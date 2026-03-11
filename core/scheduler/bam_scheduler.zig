@@ -34,9 +34,9 @@ pub const BamScheduler = struct {
         }
     }
 
-    pub fn report(self: *BamScheduler) void {
+    pub fn report(self: *BamScheduler, writer: std.io.AnyWriter) void {
         for (self.stages.items) |stage| {
-            stage.report();
+            stage.report(writer);
         }
     }
 };

@@ -65,10 +65,10 @@ pub const AdapterDetectStage = struct {
         _ = ptr;
     }
 
-    pub fn report(ptr: *anyopaque) void {
+    pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        std.debug.print("Adapter Detection Report:\n", .{});
-        std.debug.print("  Total suffix k-mers: {d}\n", .{self.total_suffix_kmers});
+        writer.print("Adapter Detection Report:\n", .{}) catch {};
+        writer.print("  Total suffix k-mers analyzed: {d}\n", .{self.total_suffix_kmers}) catch {};
         
         if (self.total_suffix_kmers == 0) return;
 
@@ -82,8 +82,9 @@ pub const AdapterDetectStage = struct {
             }
         }
 
-        if (max_count > (self.total_suffix_kmers / 10)) { // 10% threshold
-            std.debug.print("  Potential adapter detected! Most frequent suffix k-mer (count={d}): ", .{max_count});
+        // 10% threshold for detection
+        if (max_count > (self.total_suffix_kmers / 10)) { 
+            writer.print("  Potential adapter detected! Most frequent suffix k-mer (count={d}): ", .{max_count}) catch {};
             var i: usize = 0;
             const idx_copy = max_idx;
             var kmer_buf: [8]u8 = undefined;
@@ -96,9 +97,9 @@ pub const AdapterDetectStage = struct {
                     3 => 'T',
                 };
             }
-            std.debug.print("{s}\n", .{kmer_buf});
+            writer.print("{s}\n", .{kmer_buf}) catch {};
         } else {
-            std.debug.print("  No frequent adapter k-mer detected.\n", .{});
+            writer.print("  No frequent adapter k-mer detected.\n", .{}) catch {};
         }
     }
 
