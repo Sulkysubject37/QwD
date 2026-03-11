@@ -1,6 +1,7 @@
 const std = @import("std");
 const parser = @import("parser");
 const stage_mod = @import("stage");
+const simd = @import("simd_ops");
 
 pub const GcStage = struct {
     gc_bases: usize = 0,
@@ -9,10 +10,15 @@ pub const GcStage = struct {
 
     pub fn process(ptr: *anyopaque, read: *parser.Read) !bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        for (read.seq) |base| {
-            self.total_bases += 1;
-            if (base == 'G' or base == 'C' or base == 'g' or base == 'c') {
-                self.gc_bases += 1;
+        self.total_bases += read.seq.len;
+        
+        if (simd.simd_enabled()) {
+            self.gc_bases += simd.countGcSimd(read.seq);
+        } else {
+            for (read.seq) |base| {
+                if (base == 'G' or base == 'C' or base == 'g' or base == 'c') {
+                    self.gc_bases += 1;
+                }
             }
         }
         return true;

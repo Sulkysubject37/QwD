@@ -1,0 +1,9 @@
+{
+  "pipeline": [
+    "trim",
+    "filter",
+    "qc",
+    "entropy",
+    "kmer"
+  ]
+}
