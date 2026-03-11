@@ -6,3 +6,6 @@ zig-out/
 **/.DS_Store
 *.fastq
 *.bam
+test-results-*/
+run_*.txt
+bam_run*.txt
