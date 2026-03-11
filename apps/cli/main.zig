@@ -2,6 +2,7 @@ const std = @import("std");
 const parser_mod = @import("parser");
 const allocator_mod = @import("allocator");
 const pipeline_mod = @import("pipeline");
+const pipeline_config_mod = @import("pipeline_config");
 const metrics_mod = @import("metrics");
 
 const bam_reader_mod = @import("bam_reader");
@@ -20,14 +21,48 @@ pub fn main() !void {
     defer std.process.argsFree(allocator, args);
 
     if (args.len < 3) {
-        std.debug.print("Usage: {s} <qc|fastq-stats|pipeline|entropy|n50|quality-decay|adapter-detect|bamstats> [options] <file>\n", .{args[0]});
+        std.debug.print("Usage: {s} <qc|fastq-stats|pipeline|entropy|n50|quality-decay|adapter-detect|bamstats|run> [options] <file>\n", .{args[0]});
         return;
     }
 
-    const command = args[1];
+    var num_threads: usize = 1;
+    var command: []const u8 = undefined;
+    var file_path: []const u8 = undefined;
+    var stage_list_or_config: []const u8 = undefined;
+
+    // A better argument parser
+    var positional_args = std.ArrayList([]const u8).init(allocator);
+    defer positional_args.deinit();
+
+    var i: usize = 1;
+    while (i < args.len) : (i += 1) {
+        if (std.mem.eql(u8, args[i], "--threads")) {
+            if (i + 1 < args.len) {
+                num_threads = try std.fmt.parseInt(usize, args[i + 1], 10);
+                i += 1;
+                continue;
+            }
+        } else if (std.mem.eql(u8, args[i], "--config")) {
+            if (i + 1 < args.len) {
+                stage_list_or_config = args[i + 1];
+                i += 1;
+                continue;
+            }
+        } else {
+            try positional_args.append(args[i]);
+        }
+    }
+
+    if (positional_args.items.len == 0) {
+        std.debug.print("Missing command.\n", .{});
+        return;
+    }
+
+    command = positional_args.items[0];
 
     if (std.mem.eql(u8, command, "bamstats")) {
-        const file_path = args[2];
+        if (positional_args.items.len < 2) return;
+        file_path = positional_args.items[1];
         const file = try std.fs.cwd().openFile(file_path, .{});
         defer file.close();
 
@@ -51,13 +86,12 @@ pub fn main() !void {
         return;
     }
 
-    var pipeline = pipeline_mod.Pipeline.init(arena_allocator);
+    var pipeline = pipeline_mod.Pipeline.init(arena_allocator, num_threads);
     defer pipeline.deinit();
 
-    var file_path: []const u8 = undefined;
-
     if (std.mem.eql(u8, command, "qc") or std.mem.eql(u8, command, "fastq-stats")) {
-        file_path = args[2];
+        if (positional_args.items.len < 2) return;
+        file_path = positional_args.items[1];
         try pipeline.addStageByName("basic_stats");
         try pipeline.addStageByName("per_base_quality");
         try pipeline.addStageByName("nucleotide_composition");
@@ -71,28 +105,51 @@ pub fn main() !void {
         try pipeline.addStageByName("duplication");
         try pipeline.addStageByName("qc_adapter_detect");
     } else if (std.mem.eql(u8, command, "pipeline")) {
-        if (args.len < 4) {
+        if (positional_args.items.len < 3) {
             std.debug.print("Usage: {s} pipeline <stage1,stage2,...> <fastq_file>\n", .{args[0]});
             return;
         }
-        const stage_list = args[2];
-        file_path = args[3];
+        const stage_list = positional_args.items[1];
+        file_path = positional_args.items[2];
 
         var it = std.mem.split(u8, stage_list, ",");
         while (it.next()) |stage_name| {
             try pipeline.addStageByName(stage_name);
         }
+    } else if (std.mem.eql(u8, command, "run")) {
+        // e.g. qwd run --config pipeline.json reads.fastq
+        if (positional_args.items.len < 2 or stage_list_or_config.len == 0) {
+            std.debug.print("Usage: {s} run --config pipeline.json <fastq_file>\n", .{args[0]});
+            return;
+        }
+        file_path = positional_args.items[1];
+
+        const config_file = try std.fs.cwd().openFile(stage_list_or_config, .{});
+        defer config_file.close();
+        const json_data = try config_file.readToEndAlloc(allocator, 1024 * 1024);
+        defer allocator.free(json_data);
+
+        const parsed = try pipeline_config_mod.PipelineConfig.parseJson(allocator, json_data);
+        defer parsed.deinit();
+
+        for (parsed.value.pipeline) |stage_name| {
+            try pipeline.addStageByName(stage_name);
+        }
     } else if (std.mem.eql(u8, command, "entropy")) {
-        file_path = args[2];
+        if (positional_args.items.len < 2) return;
+        file_path = positional_args.items[1];
         try pipeline.addStageByName("qc_entropy");
     } else if (std.mem.eql(u8, command, "n50")) {
-        file_path = args[2];
+        if (positional_args.items.len < 2) return;
+        file_path = positional_args.items[1];
         try pipeline.addStageByName("n_statistics");
     } else if (std.mem.eql(u8, command, "quality-decay")) {
-        file_path = args[2];
+        if (positional_args.items.len < 2) return;
+        file_path = positional_args.items[1];
         try pipeline.addStageByName("per_base_quality");
     } else if (std.mem.eql(u8, command, "adapter-detect")) {
-        file_path = args[2];
+        if (positional_args.items.len < 2) return;
+        file_path = positional_args.items[1];
         try pipeline.addStageByName("qc_adapter_detect");
     } else {
         std.debug.print("Unknown command: {s}\n", .{command});
@@ -115,5 +172,5 @@ pub fn main() !void {
     }
 
     try pipeline.finalize();
-    metrics_mod.printSummary(&pipeline.scheduler);
+    pipeline.report();
 }

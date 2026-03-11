@@ -1,6 +1,7 @@
 const std = @import("std");
 const parser = @import("parser");
 const stage_mod = @import("stage");
+const simd = @import("simd_ops");
 
 pub const QcStage = struct {
     total_reads: usize = 0,
@@ -12,9 +13,13 @@ pub const QcStage = struct {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         self.total_reads += 1;
         self.total_bases += read.seq.len;
-        for (read.qual) |q| {
-            // phred = ascii_value - 33
-            self.sum_quality += (q - 33);
+        
+        if (simd.simd_enabled()) {
+            self.sum_quality += simd.sumPhredSimd(read.qual);
+        } else {
+            for (read.qual) |q| {
+                self.sum_quality += (q - 33);
+            }
         }
         return true;
     }

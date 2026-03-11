@@ -45,18 +45,38 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("core/allocator/allocator.zig"),
     });
 
+    const memory_manager_mod = b.addModule("memory_manager", .{
+        .root_source_file = b.path("core/memory/memory_manager.zig"),
+    });
+
+    const simd_ops_mod = b.addModule("simd_ops", .{
+        .root_source_file = b.path("core/simd/simd_ops.zig"),
+    });
+
+    const parallel_scheduler_mod = b.addModule("parallel_scheduler", .{
+        .root_source_file = b.path("core/parallel/parallel_scheduler.zig"),
+    });
+    parallel_scheduler_mod.addImport("parser", parser_mod);
+    parallel_scheduler_mod.addImport("stage", stage_interface_mod);
+
+    const pipeline_config_mod = b.addModule("pipeline_config", .{
+        .root_source_file = b.path("core/config/pipeline_config.zig"),
+    });
+
     // Old Fastq Modules
     const qc_mod = b.addModule("qc", .{
         .root_source_file = b.path("stages/qc/qc_stage.zig"),
     });
     qc_mod.addImport("parser", parser_mod);
     qc_mod.addImport("stage", stage_interface_mod);
+    qc_mod.addImport("simd_ops", simd_ops_mod);
 
     const gc_mod = b.addModule("gc", .{
         .root_source_file = b.path("stages/gc/gc_stage.zig"),
     });
     gc_mod.addImport("parser", parser_mod);
     gc_mod.addImport("stage", stage_interface_mod);
+    gc_mod.addImport("simd_ops", simd_ops_mod);
 
     const length_mod = b.addModule("length", .{
         .root_source_file = b.path("stages/read_length/length_stage.zig"),
@@ -234,6 +254,9 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("core/pipeline/pipeline.zig"),
     });
     pipeline_mod.addImport("scheduler", scheduler_mod);
+    pipeline_mod.addImport("parallel_scheduler", parallel_scheduler_mod);
+    pipeline_mod.addImport("simd_ops", simd_ops_mod);
+    pipeline_mod.addImport("memory_manager", memory_manager_mod);
     pipeline_mod.addImport("stage", stage_interface_mod);
     pipeline_mod.addImport("parser", parser_mod);
     pipeline_mod.addImport("qc", qc_mod);
@@ -284,8 +307,10 @@ pub fn build(b: *std.Build) void {
     });
     exe.root_module.addImport("parser", parser_mod);
     exe.root_module.addImport("scheduler", scheduler_mod);
+    exe.root_module.addImport("parallel_scheduler", parallel_scheduler_mod);
     exe.root_module.addImport("allocator", allocator_mod);
     exe.root_module.addImport("pipeline", pipeline_mod);
+    exe.root_module.addImport("pipeline_config", pipeline_config_mod);
     exe.root_module.addImport("metrics", metrics_mod);
     exe.root_module.addImport("bam_reader", bam_reader_mod);
     exe.root_module.addImport("bam_pipeline", bam_pipeline_mod);
@@ -298,6 +323,20 @@ pub fn build(b: *std.Build) void {
     }
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
+
+    // Benchmarks
+    const simd_bench = b.addExecutable(.{
+        .name = "simd_bench",
+        .root_source_file = b.path("benchmarks/simd_bench.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    simd_bench.root_module.addImport("simd_ops", simd_ops_mod);
+    b.installArtifact(simd_bench);
+
+    const run_simd_bench = b.addRunArtifact(simd_bench);
+    const bench_step = b.step("bench", "Run SIMD benchmark");
+    bench_step.dependOn(&run_simd_bench.step);
 
     const test_step = b.step("test", "Run unit tests");
 
@@ -328,6 +367,22 @@ pub fn build(b: *std.Build) void {
     bam_tests.root_module.addImport("soft_clip", soft_clip_mod);
     const run_bam_tests = b.addRunArtifact(bam_tests);
 
+    const perf_tests = b.addTest(.{
+        .root_source_file = b.path("tests/performance/perf_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const run_perf_tests = b.addRunArtifact(perf_tests);
+
+    const rep_tests = b.addTest(.{
+        .root_source_file = b.path("tests/reproducibility/rep_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const run_rep_tests = b.addRunArtifact(rep_tests);
+
     test_step.dependOn(&run_fastq_tests.step);
     test_step.dependOn(&run_bam_tests.step);
+    test_step.dependOn(&run_perf_tests.step);
+    test_step.dependOn(&run_rep_tests.step);
 }

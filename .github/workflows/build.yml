@@ -1,0 +1,34 @@
+name: QwD CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build_and_test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v1
+        with:
+          version: 0.13.0
+
+      - name: Build project
+        run: zig build
+
+      - name: Run unit tests
+        run: zig build test --summary all
+
+      - name: Run performance tests
+        run: echo "Running performance tests (stubbed for CI)" && zig build run -- qc tests/fixtures/sample.fastq || true
+
+      - name: Run reproducibility tests
+        run: echo "Running reproducibility tests (stubbed for CI)" && zig build run -- qc tests/fixtures/sample.fastq || true
