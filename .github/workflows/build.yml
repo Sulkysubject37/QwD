@@ -28,7 +28,7 @@ jobs:
         run: |
           mkdir -p tests/fixtures
           python3 -c "import random; random.seed(42); f=open('tests/fixtures/sample.fastq','w'); [f.write(f'@R_{i}\nACGT\n+\nIIII\n') for i in range(100000)]; f.close()"
-          touch tests/fixtures/sample.bam
+          python3 -c "f=open('tests/fixtures/sample.bam','w'); f.write('BAM HEADER'); f.close()"
 
       - name: Run unit tests
         run: zig build test --summary all
@@ -43,13 +43,13 @@ jobs:
         shell: bash
         run: |
           echo "--- FASTQ: Single-core, SIMD ---"
-          time ./zig-out/bin/qwd qc tests/fixtures/sample.fastq > run_s_simd.txt
+          ./zig-out/bin/qwd qc tests/fixtures/sample.fastq > run_s_simd.txt
           
           echo "--- FASTQ: Single-core, Scalar ---"
-          time ./zig-out/bin/qwd qc --no-simd tests/fixtures/sample.fastq > run_s_scalar.txt
+          ./zig-out/bin/qwd qc --no-simd tests/fixtures/sample.fastq > run_s_scalar.txt
           
           echo "--- FASTQ: Multi-core (4 threads), SIMD ---"
-          time ./zig-out/bin/qwd qc --threads 4 tests/fixtures/sample.fastq > run_m_simd.txt
+          ./zig-out/bin/qwd qc --threads 4 tests/fixtures/sample.fastq > run_m_simd.txt
           
           echo "Verifying FASTQ reproducibility..."
           diff run_s_simd.txt run_s_scalar.txt
@@ -59,8 +59,19 @@ jobs:
         shell: bash
         run: |
           echo "--- BAM: Alignment Stats ---"
-          time ./zig-out/bin/qwd bamstats tests/fixtures/sample.bam > bam_run1.txt
+          ./zig-out/bin/qwd bamstats tests/fixtures/sample.bam > bam_run1.txt
           ./zig-out/bin/qwd bamstats tests/fixtures/sample.bam > bam_run2.txt
           
           echo "Verifying BAM reproducibility..."
           diff bam_run1.txt bam_run2.txt
+
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.os }}
+          path: |
+            run_s_simd.txt
+            run_s_scalar.txt
+            run_m_simd.txt
+            bam_run1.txt
+            bam_run2.txt

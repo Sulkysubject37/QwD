@@ -18,7 +18,8 @@ pub const QcStage = struct {
             self.sum_quality += simd.sumPhredSimd(read.qual);
         } else {
             for (read.qual) |q| {
-                self.sum_quality += (q - 33);
+                const phred = if (q >= 33) q - 33 else 0;
+                self.sum_quality += phred;
             }
         }
         return true;
