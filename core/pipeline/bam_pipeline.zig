@@ -62,10 +62,10 @@ pub const BamPipeline = struct {
         try self.scheduler.finalize();
     }
 
-    pub fn report(self: *BamPipeline) void {
-        std.debug.print("\nQwD BAM Analytics Summary\n", .{});
-        std.debug.print("=========================\n", .{});
-        self.scheduler.report();
-        std.debug.print("=========================\n", .{});
+    pub fn report(self: *BamPipeline, writer: std.io.AnyWriter) !void {
+        try writer.print("\nQwD BAM Analytics Summary\n", .{});
+        try writer.print("=========================\n", .{});
+        self.scheduler.report(writer);
+        try writer.print("=========================\n", .{});
     }
 };

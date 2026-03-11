@@ -36,17 +36,16 @@ pub const InsertSizeStage = struct {
         }
     }
 
-    pub fn report(ptr: *anyopaque) void {
+    pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        std.debug.print("Insert Size Report:\n", .{});
-        std.debug.print("  Pairs analyzed: {d}\n", .{self.count});
-        std.debug.print("  Min insert:     {d}\n", .{self.min_insert_size});
-        std.debug.print("  Max insert:     {d}\n", .{self.max_insert_size});
-        std.debug.print("  Mean insert:    {d:.2}\n", .{self.mean_insert_size});
+        writer.print("Insert Size Report:\n", .{}) catch {};
+        writer.print("  Pairs analyzed: {d}\n", .{self.count}) catch {};
+        writer.print("  Min insert:     {d}\n", .{self.min_insert_size}) catch {};
+        writer.print("  Max insert:     {d}\n", .{self.max_insert_size}) catch {};
+        writer.print("  Mean insert:    {d:.2}\n", .{self.mean_insert_size}) catch {};
         
         if (self.count > 0) {
-            std.debug.print("  Histogram (Condensed):\n", .{});
-            // Print bins in 100bp increments
+            writer.print("  Histogram (Condensed):\n", .{}) catch {};
             var i: usize = 0;
             while (i < MAX_INSERT) : (i += 500) {
                 var bin_sum: usize = 0;
@@ -55,7 +54,7 @@ pub const InsertSizeStage = struct {
                     bin_sum += self.insert_size_histogram[i + j];
                 }
                 if (bin_sum > 0) {
-                    std.debug.print("    {d}-{d} bp: {d}\n", .{ i, i + 500, bin_sum });
+                    writer.print("    {d}-{d} bp: {d}\n", .{ i, i + 500, bin_sum }) catch {};
                 }
             }
         }

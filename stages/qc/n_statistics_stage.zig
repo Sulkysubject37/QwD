@@ -48,14 +48,14 @@ pub const NStatisticsStage = struct {
         }
     }
 
-    pub fn report(ptr: *anyopaque) void {
+    pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        std.debug.print("N-Statistics Report:\n", .{});
-        std.debug.print("  N10: {d}\n", .{self.n10});
-        std.debug.print("  N25: {d}\n", .{self.n25});
-        std.debug.print("  N50: {d}\n", .{self.n50});
-        std.debug.print("  N75: {d}\n", .{self.n75});
-        std.debug.print("  N90: {d}\n", .{self.n90});
+        writer.print("N-Statistics Report:\n", .{}) catch {};
+        writer.print("  N10: {d}\n", .{self.n10}) catch {};
+        writer.print("  N25: {d}\n", .{self.n25}) catch {};
+        writer.print("  N50: {d}\n", .{self.n50}) catch {};
+        writer.print("  N75: {d}\n", .{self.n75}) catch {};
+        writer.print("  N90: {d}\n", .{self.n90}) catch {};
     }
 
     pub fn stage(self: *@This()) stage_mod.Stage {

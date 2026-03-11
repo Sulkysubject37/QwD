@@ -36,11 +36,11 @@ pub const N50Stage = struct {
         }
     }
 
-    pub fn report(ptr: *anyopaque) void {
+    pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        std.debug.print("N50 Report:\n", .{});
-        std.debug.print("  Total bases: {d}\n", .{self.total_bases});
-        std.debug.print("  N50:         {d}\n", .{self.n50});
+        writer.print("N50 Report:\n", .{}) catch {};
+        writer.print("  Total bases: {d}\n", .{self.total_bases}) catch {};
+        writer.print("  N50:         {d}\n", .{self.n50}) catch {};
     }
 
     pub fn stage(self: *@This()) stage_mod.Stage {

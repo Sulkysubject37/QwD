@@ -30,14 +30,14 @@ pub const BasicStatsStage = struct {
         }
     }
 
-    pub fn report(ptr: *anyopaque) void {
+    pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        std.debug.print("Basic Statistics:\n", .{});
-        std.debug.print("  Total reads: {d}\n", .{self.total_reads});
-        std.debug.print("  Total bases: {d}\n", .{self.total_bases});
-        std.debug.print("  Min length:  {d}\n", .{self.min_read_length});
-        std.debug.print("  Max length:  {d}\n", .{self.max_read_length});
-        std.debug.print("  Mean length: {d:.2}\n", .{self.mean_read_length});
+        writer.print("Basic Statistics:\n", .{}) catch {};
+        writer.print("  Total reads: {d}\n", .{self.total_reads}) catch {};
+        writer.print("  Total bases: {d}\n", .{self.total_bases}) catch {};
+        writer.print("  Min length:  {d}\n", .{self.min_read_length}) catch {};
+        writer.print("  Max length:  {d}\n", .{self.max_read_length}) catch {};
+        writer.print("  Mean length: {d:.2}\n", .{self.mean_read_length}) catch {};
     }
 
     pub fn stage(self: *@This()) stage_mod.Stage {

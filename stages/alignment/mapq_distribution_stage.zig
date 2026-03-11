@@ -18,12 +18,12 @@ pub const MapqDistributionStage = struct {
         _ = ptr;
     }
 
-    pub fn report(ptr: *anyopaque) void {
+    pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        std.debug.print("MAPQ Distribution Report:\n", .{});
+        writer.print("MAPQ Distribution Report:\n", .{}) catch {};
         for (0..61) |i| {
             if (self.histogram[i] > 0) {
-                std.debug.print("  MAPQ {d}: {d}\n", .{ i, self.histogram[i] });
+                writer.print("  MAPQ {d}: {d}\n", .{ i, self.histogram[i] }) catch {};
             }
         }
     }

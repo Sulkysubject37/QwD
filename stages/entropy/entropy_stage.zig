@@ -50,11 +50,11 @@ pub const EntropyStage = struct {
         }
     }
 
-    pub fn report(ptr: *anyopaque) void {
+    pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        std.debug.print("Sequence Entropy Report:\n", .{});
-        std.debug.print("  Mean entropy:      {d:.4}\n", .{self.mean_entropy});
-        std.debug.print("  Low complexity:    {d}\n", .{self.low_complexity_reads});
+        writer.print("Sequence Entropy Report:\n", .{}) catch {};
+        writer.print("  Mean entropy:      {d:.4}\n", .{self.mean_entropy}) catch {};
+        writer.print("  Low complexity:    {d}\n", .{self.low_complexity_reads}) catch {};
     }
 
     pub fn stage(self: *@This()) stage_mod.Stage {

@@ -181,12 +181,11 @@ pub const Pipeline = struct {
         }
     }
 
-    pub fn report(self: *Pipeline) void {
+    pub fn report(self: *Pipeline, writer: std.io.AnyWriter) void {
         if (self.scheduler) |*s| {
-            s.report();
+            s.report(writer);
         } else if (self.parallel_scheduler) |*ps| {
-            ps.report();
+            ps.report(writer);
         }
     }
 };
-

@@ -32,15 +32,15 @@ pub const LengthDistributionStage = struct {
         _ = ptr;
     }
 
-    pub fn report(ptr: *anyopaque) void {
+    pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        std.debug.print("Length Distribution Report:\n", .{});
-        std.debug.print("  0-100:     {d}\n", .{self.read_count_per_bin[0]});
-        std.debug.print("  100-500:   {d}\n", .{self.read_count_per_bin[1]});
-        std.debug.print("  500-1000:  {d}\n", .{self.read_count_per_bin[2]});
-        std.debug.print("  1000-5000: {d}\n", .{self.read_count_per_bin[3]});
-        std.debug.print("  5000-10000:{d}\n", .{self.read_count_per_bin[4]});
-        std.debug.print("  10000+:    {d}\n", .{self.read_count_per_bin[5]});
+        writer.print("Length Distribution Report:\n", .{}) catch {};
+        writer.print("  0-100:     {d}\n", .{self.read_count_per_bin[0]}) catch {};
+        writer.print("  100-500:   {d}\n", .{self.read_count_per_bin[1]}) catch {};
+        writer.print("  500-1000:  {d}\n", .{self.read_count_per_bin[2]}) catch {};
+        writer.print("  1000-5000: {d}\n", .{self.read_count_per_bin[3]}) catch {};
+        writer.print("  5000-10000:{d}\n", .{self.read_count_per_bin[4]}) catch {};
+        writer.print("  10000+:    {d}\n", .{self.read_count_per_bin[5]}) catch {};
     }
 
     pub fn stage(self: *@This()) stage_mod.Stage {

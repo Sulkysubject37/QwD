@@ -31,11 +31,11 @@ pub const GcDistributionStage = struct {
         _ = ptr;
     }
 
-    pub fn report(ptr: *anyopaque) void {
+    pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        std.debug.print("GC Distribution Report:\n", .{});
+        writer.print("GC Distribution Report:\n", .{}) catch {};
         for (0..10) |i| {
-            std.debug.print("  {d}0-{d}0%: {d}\n", .{ i, i + 1, self.histogram[i] });
+            writer.print("  {d}0-{d}0%: {d}\n", .{ i, i + 1, self.histogram[i] }) catch {};
         }
     }
 

@@ -41,9 +41,9 @@ pub const Scheduler = struct {
     }
 
     /// Report all registered stages.
-    pub fn report(self: *Scheduler) void {
+    pub fn report(self: *Scheduler, writer: std.io.AnyWriter) void {
         for (self.stages.items) |stage| {
-            stage.report();
+            stage.report(writer);
         }
     }
 };
@@ -69,8 +69,9 @@ test "Scheduler test with dummy stage" {
             _ = ptr;
         }
 
-        pub fn report(ptr: *anyopaque) void {
+        pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
             _ = ptr;
+            _ = writer;
         }
 
         pub fn stage(self: *@This()) stage_mod.Stage {

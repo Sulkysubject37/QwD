@@ -67,6 +67,8 @@ pub fn main() !void {
     // Apply global SIMD control
     @import("simd_ops").force_scalar = force_scalar;
 
+    const stdout = std.io.getStdOut().writer().any();
+
     if (std.mem.eql(u8, command, "bamstats")) {
         if (positional_args.items.len < 2) return;
         file_path = positional_args.items[1];
@@ -89,7 +91,7 @@ pub fn main() !void {
         }
 
         try bam_pipeline.finalize();
-        bam_pipeline.report();
+        try bam_pipeline.report(stdout);
         return;
     }
 
@@ -179,5 +181,5 @@ pub fn main() !void {
     }
 
     try pipeline.finalize();
-    pipeline.report();
+    pipeline.report(stdout);
 }

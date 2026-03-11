@@ -30,13 +30,13 @@ pub const AlignmentStatsStage = struct {
         }
     }
 
-    pub fn report(ptr: *anyopaque) void {
+    pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        std.debug.print("Alignment Statistics:\n", .{});
-        std.debug.print("  Total alignments: {d}\n", .{self.total_alignments});
-        std.debug.print("  Mapped reads:     {d}\n", .{self.mapped_reads});
-        std.debug.print("  Unmapped reads:   {d}\n", .{self.unmapped_reads});
-        std.debug.print("  Mean MAPQ:        {d:.2}\n", .{self.mean_mapping_quality});
+        writer.print("Alignment Statistics:\n", .{}) catch {};
+        writer.print("  Total alignments: {d}\n", .{self.total_alignments}) catch {};
+        writer.print("  Mapped reads:     {d}\n", .{self.mapped_reads}) catch {};
+        writer.print("  Unmapped reads:   {d}\n", .{self.unmapped_reads}) catch {};
+        writer.print("  Mean MAPQ:        {d:.2}\n", .{self.mean_mapping_quality}) catch {};
     }
 
     pub fn stage(self: *@This()) bam_stage.BamStage {

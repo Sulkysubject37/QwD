@@ -12,7 +12,7 @@ pub const Stage = struct {
         /// false -> discard read
         process: *const fn (ptr: *anyopaque, read: *parser.Read) anyerror!bool,
         finalize: *const fn (ptr: *anyopaque) anyerror!void,
-        report: *const fn (ptr: *anyopaque) void,
+        report: *const fn (ptr: *anyopaque, writer: std.io.AnyWriter) void,
     };
 
     pub fn process(self: Stage, read: *parser.Read) !bool {
@@ -23,7 +23,7 @@ pub const Stage = struct {
         return self.vtable.finalize(self.ptr);
     }
 
-    pub fn report(self: Stage) void {
-        return self.vtable.report(self.ptr);
+    pub fn report(self: Stage, writer: std.io.AnyWriter) void {
+        return self.vtable.report(self.ptr, writer);
     }
 };

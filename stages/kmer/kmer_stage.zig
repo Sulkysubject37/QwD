@@ -62,14 +62,14 @@ pub const KmerStage = struct {
         _ = ptr;
     }
 
-    pub fn report(ptr: *anyopaque) void {
+    pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        std.debug.print("k-mer Report (k={d}):\n", .{self.k});
-        std.debug.print("  Total k-mers: {d}\n", .{self.total_kmers});
+        writer.print("k-mer Report (k={d}):\n", .{self.k}) catch {};
+        writer.print("  Total k-mers: {d}\n", .{self.total_kmers}) catch {};
         // For brevity, we don't print all 4^k counts unless small
         if (self.total_kmers > 0 and self.k <= 3) {
             // Print top k-mers or just first few for illustration
-            std.debug.print("  (Counts omitted for brevity in CLI report)\n", .{});
+            writer.print("  (Counts omitted for brevity in CLI report)\n", .{}) catch {};
         }
     }
 

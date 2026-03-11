@@ -28,12 +28,12 @@ pub const ErrorRateStage = struct {
         }
     }
 
-    pub fn report(ptr: *anyopaque) void {
+    pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        std.debug.print("Error Rate Report:\n", .{});
-        std.debug.print("  Aligned bases: {d}\n", .{self.aligned_bases});
-        std.debug.print("  Mismatches:    {d}\n", .{self.mismatches});
-        std.debug.print("  Error rate:    {d:.4}%\n", .{self.error_rate * 100.0});
+        writer.print("Error Rate Report:\n", .{}) catch {};
+        writer.print("  Aligned bases: {d}\n", .{self.aligned_bases}) catch {};
+        writer.print("  Mismatches:    {d}\n", .{self.mismatches}) catch {};
+        writer.print("  Error rate:    {d:.4}%\n", .{self.error_rate * 100.0}) catch {};
     }
 
     pub fn stage(self: *@This()) bam_stage.BamStage {
