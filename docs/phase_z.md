@@ -13,9 +13,11 @@ The project was initialized with the following structure:
 1. **Parser**: A streaming FASTQ reader that produces `Read` objects with zero-copy slices.
 2. **Scheduler**: Manages read distribution to various processing stages.
 3. **Allocator**: A wrapper around Zig allocators (primarily Arena) to ensure bounded, predictable memory usage.
+4. **Parallel Scheduler**: (Added in Phase U) Enables deterministic multithreaded processing.
+5. **SIMD Operations**: (Added in Phase U) Hardware-accelerated inner loops for maximum throughput.
 
 ## Architecture
 ```text
 FASTQ → Parser → Scheduler → Metrics
 ```
-The parser reads 4-line FASTQ records into a reusable buffer. The scheduler then forwards these records to registered stages. The allocator ensures that memory does not scale with dataset size.
+The parser reads 4-line FASTQ records into a reusable buffer. The scheduler then forwards these records to registered stages. The engine has since evolved to support hardware-accelerated processing and multi-core scalability.
