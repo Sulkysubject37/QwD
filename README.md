@@ -17,6 +17,8 @@ QwD focuses on:
 - **Streaming processing**: No need to load the entire dataset into memory.
 - **Deterministic memory**: Bounded memory usage regardless of dataset size.
 - **Modular analytics stages**: Composable stages for flexible analysis pipelines.
+- **Hardware Acceleration**: SIMD-optimized inner loops (GC counting, PHRED summing) providing 3x-7x speedups.
+- **Parallel Execution**: Multithreaded processing while maintaining bit-exact reproducibility.
 
 ---
 
@@ -31,21 +33,31 @@ FASTQ stream
    ↓
 Parser
    ↓
-[QC | GC | Length | k-mer]
+[QC | GC | Length | k-mer | Entropy | N50]
    ↓
 Metrics
 ```
 
 ---
 
+### CLI Usage
+- **FASTQ QC**: `qwd qc reads.fastq`
+- **BAM Stats**: `qwd bamstats alignments.bam`
+- **Custom Pipeline**: `qwd pipeline trim,filter,qc reads.fastq`
+- **JSON Config**: `qwd run --config pipeline.json reads.fastq`
+- **Parallel Mode**: Use `--threads N` with any command.
+
+---
+
 ### Repository Layout
-- `core/`: Core engine components (parser, scheduler, allocator).
-- `stages/`: Modular analytics stages (QC, GC, read length, etc.).
+- `core/`: Core engine components (parser, scheduler, allocator, SIMD, parallel).
+- `stages/`: Modular analytics stages (QC, GC, read length, alignment, etc.).
 - `io/`: Input/Output handlers for different formats (BAM, FASTQ).
 - `bindings/`: Language bindings for Python and R.
 - `apps/`: End-user applications, including a CLI and dashboard.
 - `scripts/`: Utility scripts for development and deployment.
-- `tests/`: Comprehensive test suite.
+- `benchmarks/`: Performance measurement suite.
+- `tests/`: Comprehensive test suite (unit, performance, reproducibility).
 - `docs/`: Project documentation.
 
 ---

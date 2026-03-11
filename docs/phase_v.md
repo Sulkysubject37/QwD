@@ -51,6 +51,9 @@ BamScheduler
 Metrics
 ```
 
+## Hardware Acceleration
+Critical analytical paths in both FASTQ and BAM pipelines (GC counting, Quality metrics) are SIMD-optimized, ensuring extreme throughput on modern CPU architectures (AVX2/NEON).
+
 ## CLI Usage
 FASTQ commands:
 - `qwd qc reads.fastq`
