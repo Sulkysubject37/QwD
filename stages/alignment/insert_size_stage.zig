@@ -3,7 +3,6 @@ const bam_reader = @import("bam_reader");
 const bam_stage = @import("bam_stage");
 
 pub const InsertSizeStage = struct {
-    // Bounded histogram up to 10,000 to keep memory deterministic
     const MAX_INSERT = 10000;
     insert_size_histogram: [MAX_INSERT]usize = [_]usize{0} ** MAX_INSERT,
     sum_insert_size: u64 = 0,
@@ -14,17 +13,13 @@ pub const InsertSizeStage = struct {
 
     pub fn process(ptr: *anyopaque, record: *bam_reader.AlignmentRecord) !bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        
-        // Check if paired (1) and properly mapped pair (2)
         if ((record.flag & 1) != 0 and (record.flag & 2) != 0) {
-            // template_length can be negative if mate maps to higher pos.
             const tlen = if (record.template_length < 0) -record.template_length else record.template_length;
             if (tlen > 0) {
                 if (tlen < self.min_insert_size) self.min_insert_size = tlen;
                 if (tlen > self.max_insert_size) self.max_insert_size = tlen;
                 self.sum_insert_size += @intCast(tlen);
                 self.count += 1;
-                
                 const idx: usize = if (tlen >= MAX_INSERT) MAX_INSERT - 1 else @intCast(tlen);
                 self.insert_size_histogram[idx] += 1;
             }
@@ -48,6 +43,22 @@ pub const InsertSizeStage = struct {
         std.debug.print("  Min insert:     {d}\n", .{self.min_insert_size});
         std.debug.print("  Max insert:     {d}\n", .{self.max_insert_size});
         std.debug.print("  Mean insert:    {d:.2}\n", .{self.mean_insert_size});
+        
+        if (self.count > 0) {
+            std.debug.print("  Histogram (Condensed):\n", .{});
+            // Print bins in 100bp increments
+            var i: usize = 0;
+            while (i < MAX_INSERT) : (i += 500) {
+                var bin_sum: usize = 0;
+                var j: usize = 0;
+                while (j < 500 and i + j < MAX_INSERT) : (j += 1) {
+                    bin_sum += self.insert_size_histogram[i + j];
+                }
+                if (bin_sum > 0) {
+                    std.debug.print("    {d}-{d} bp: {d}\n", .{ i, i + 500, bin_sum });
+                }
+            }
+        }
     }
 
     pub fn stage(self: *@This()) bam_stage.BamStage {

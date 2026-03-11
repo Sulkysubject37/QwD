@@ -2,3 +2,7 @@ context.md
 .zig-cache/
 zig-out/
 *.tar.xz
+.DS_Store
+**/.DS_Store
+*.fastq
+*.bam

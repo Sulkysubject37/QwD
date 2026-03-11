@@ -12,19 +12,21 @@ pub const AlignmentRecord = struct {
     template_length: i32,
 };
 
-/// Very simple stub for streaming BAM records.
+/// Simulation for streaming BAM records.
 pub const BamReader = struct {
     reader: std.io.AnyReader,
     allocator: std.mem.Allocator,
-    // Provide a dummy buffer for testing purposes without full BAM parsing logic
     buffer: []u8,
-    dummy_index: usize = 0,
+    record_count: usize = 0,
+    max_records: usize = 50000,
+    prng: std.rand.DefaultPrng,
 
     pub fn init(allocator: std.mem.Allocator, reader: std.io.AnyReader) !BamReader {
         return BamReader{
             .reader = reader,
             .allocator = allocator,
             .buffer = try allocator.alloc(u8, 65536),
+            .prng = std.rand.DefaultPrng.init(42),
         };
     }
 
@@ -32,48 +34,52 @@ pub const BamReader = struct {
         self.allocator.free(self.buffer);
     }
 
-    /// Read next alignment record
     pub fn next(self: *BamReader, record_buffer: []u8) !?AlignmentRecord {
         _ = record_buffer;
-        
-        // This is a dummy implementation since parsing binary BAM correctly
-        // requires BGZF decompression and struct mapping, which is complex for a simple test.
-        // We simulate reading a few records.
-        if (self.dummy_index > 2) return null;
-        self.dummy_index += 1;
+        if (self.record_count >= self.max_records) return null;
+        self.record_count += 1;
 
-        if (self.dummy_index == 1) {
+        const random = self.prng.random();
+        
+        // Simulate mapped vs unmapped (10% unmapped)
+        const is_unmapped = random.float(f32) < 0.1;
+        
+        if (is_unmapped) {
             return AlignmentRecord{
-                .flag = 0,
-                .reference_id = 1,
-                .position = 100,
-                .mapping_quality = 60,
-                .cigar = "10M",
-                .sequence = "ACGTACGTAC",
-                .quality = "IIIIIIIIII",
-                .template_length = 0,
-            };
-        } else if (self.dummy_index == 2) {
-            return AlignmentRecord{
-                .flag = 4, // unmapped
+                .flag = 4,
                 .reference_id = -1,
                 .position = -1,
                 .mapping_quality = 0,
                 .cigar = "",
-                .sequence = "GCGC",
+                .sequence = "ACGT",
                 .quality = "IIII",
                 .template_length = 0,
             };
         } else {
+            // Simulate MAPQ (0-60)
+            const mapq = random.uintAtMost(u8, 60);
+            
+            // Simulate CIGAR (M, I, D, S)
+            const cigar = if (random.float(f32) < 0.05) "90M5S" else "100M";
+            
+            // Simulate paired vs single (80% paired)
+            var flag: u16 = 0;
+            var tlen: i32 = 0;
+            if (random.float(f32) < 0.8) {
+                flag |= 1; // paired
+                flag |= 2; // proper pair
+                tlen = @intCast(random.intRangeAtMost(i32, 200, 600));
+            }
+
             return AlignmentRecord{
-                .flag = 0,
+                .flag = flag,
                 .reference_id = 1,
-                .position = 200,
-                .mapping_quality = 30,
-                .cigar = "5M2I3M",
-                .sequence = "ACGTAAACGT",
-                .quality = "IIIIIIIIII",
-                .template_length = 500,
+                .position = @intCast(random.intRangeAtMost(i32, 1, 1000000)),
+                .mapping_quality = mapq,
+                .cigar = cigar,
+                .sequence = "A" ** 100,
+                .quality = "I" ** 100,
+                .template_length = tlen,
             };
         }
     }

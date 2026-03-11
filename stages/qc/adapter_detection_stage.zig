@@ -68,7 +68,7 @@ pub const AdapterDetectionStage = struct {
     pub fn report(ptr: *anyopaque) void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         std.debug.print("Adapter Detection Report:\n", .{});
-        std.debug.print("  Total suffix k-mers: {d}\n", .{self.total_suffix_kmers});
+        std.debug.print("  Total suffix k-mers analyzed: {d}\n", .{self.total_suffix_kmers});
         
         if (self.total_suffix_kmers == 0) return;
 
@@ -82,7 +82,8 @@ pub const AdapterDetectionStage = struct {
             }
         }
 
-        if (max_count > (self.total_suffix_kmers / 10)) { // 10% threshold
+        // 10% threshold for detection
+        if (max_count > (self.total_suffix_kmers / 10)) { 
             std.debug.print("  Potential adapter detected! Most frequent suffix k-mer (count={d}): ", .{max_count});
             var i: usize = 0;
             const idx_copy = max_idx;
