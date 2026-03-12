@@ -4,6 +4,7 @@ const allocator_mod = @import("allocator");
 const pipeline_mod = @import("pipeline");
 const pipeline_config_mod = @import("pipeline_config");
 const metrics_mod = @import("metrics");
+const structured_output = @import("structured_output");
 
 const bam_reader_mod = @import("bam_reader");
 const bam_pipeline_mod = @import("bam_pipeline");
@@ -26,16 +27,15 @@ pub fn main() !void {
     }
 
     var num_threads: usize = 1;
-    var command: []const u8 = undefined;
-    var file_path: []const u8 = undefined;
-    var stage_list_or_config: []const u8 = undefined;
+    var force_scalar = false;
+    var output_format = structured_output.OutputFormat.text;
+    var stage_list_or_config: []const u8 = "";
 
     // A better argument parser
     var positional_args = std.ArrayList([]const u8).init(allocator);
     defer positional_args.deinit();
 
     var i: usize = 1;
-    var force_scalar = false;
     while (i < args.len) : (i += 1) {
         if (std.mem.eql(u8, args[i], "--threads")) {
             if (i + 1 < args.len) {
@@ -45,6 +45,12 @@ pub fn main() !void {
             }
         } else if (std.mem.eql(u8, args[i], "--no-simd")) {
             force_scalar = true;
+            continue;
+        } else if (std.mem.eql(u8, args[i], "--json")) {
+            output_format = .json;
+            continue;
+        } else if (std.mem.eql(u8, args[i], "--ndjson")) {
+            output_format = .ndjson;
             continue;
         } else if (std.mem.eql(u8, args[i], "--config")) {
             if (i + 1 < args.len) {
@@ -62,7 +68,7 @@ pub fn main() !void {
         return;
     }
 
-    command = positional_args.items[0];
+    const command = positional_args.items[0];
     
     // Apply global SIMD control
     @import("simd_ops").force_scalar = force_scalar;
@@ -71,7 +77,7 @@ pub fn main() !void {
 
     if (std.mem.eql(u8, command, "bamstats")) {
         if (positional_args.items.len < 2) return;
-        file_path = positional_args.items[1];
+        const file_path = positional_args.items[1];
         const file = try std.fs.cwd().openFile(file_path, .{});
         defer file.close();
 
@@ -91,12 +97,18 @@ pub fn main() !void {
         }
 
         try bam_pipeline.finalize();
-        try bam_pipeline.report(stdout);
+        if (output_format == .json) {
+            try structured_output.writeJsonReport(bam_pipeline.scheduler, stdout);
+        } else {
+            try bam_pipeline.report(stdout);
+        }
         return;
     }
 
     var pipeline = pipeline_mod.Pipeline.init(arena_allocator, num_threads);
     defer pipeline.deinit();
+
+    var file_path: []const u8 = "";
 
     if (std.mem.eql(u8, command, "qc") or std.mem.eql(u8, command, "fastq-stats")) {
         if (positional_args.items.len < 2) return;
@@ -126,7 +138,6 @@ pub fn main() !void {
             try pipeline.addStageByName(stage_name);
         }
     } else if (std.mem.eql(u8, command, "run")) {
-        // e.g. qwd run --config pipeline.json reads.fastq
         if (positional_args.items.len < 2 or stage_list_or_config.len == 0) {
             std.debug.print("Usage: {s} run --config pipeline.json <fastq_file>\n", .{args[0]});
             return;
@@ -176,10 +187,23 @@ pub fn main() !void {
 
     const record_buffer = try arena_allocator.alloc(u8, 65536);
 
+    var processed: usize = 0;
     while (try parser.next(record_buffer)) |read| {
         try pipeline.run(read);
+        processed += 1;
+        if (output_format == .ndjson and processed % 1000 == 0) {
+            try structured_output.writeNdjsonProcess(processed, stdout);
+        }
     }
 
     try pipeline.finalize();
-    pipeline.report(stdout);
+    if (output_format == .json) {
+        if (pipeline.scheduler) |s| {
+            try structured_output.writeJsonReport(s, stdout);
+        } else if (pipeline.parallel_scheduler) |ps| {
+            try structured_output.writeJsonReport(ps, stdout);
+        }
+    } else {
+        pipeline.report(stdout);
+    }
 }
