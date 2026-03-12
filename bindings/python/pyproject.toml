@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "qwd"
+version = "0.1.0"
+description = "Python bindings for QwD bioinformatics streaming engine"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "AFL-3.0"}
+authors = [
+  {name = "MD. Arshad", email = "arshad10867c@gmail.com"}
+]
+dependencies = []

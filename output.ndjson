@@ -1,0 +1,157 @@
+{"reads_processed": 1000}
+{"reads_processed": 2000}
+{"reads_processed": 3000}
+{"reads_processed": 4000}
+{"reads_processed": 5000}
+{"reads_processed": 6000}
+{"reads_processed": 7000}
+{"reads_processed": 8000}
+{"reads_processed": 9000}
+{"reads_processed": 10000}
+{"reads_processed": 11000}
+{"reads_processed": 12000}
+{"reads_processed": 13000}
+{"reads_processed": 14000}
+{"reads_processed": 15000}
+{"reads_processed": 16000}
+{"reads_processed": 17000}
+{"reads_processed": 18000}
+{"reads_processed": 19000}
+{"reads_processed": 20000}
+{"reads_processed": 21000}
+{"reads_processed": 22000}
+{"reads_processed": 23000}
+{"reads_processed": 24000}
+{"reads_processed": 25000}
+{"reads_processed": 26000}
+{"reads_processed": 27000}
+{"reads_processed": 28000}
+{"reads_processed": 29000}
+{"reads_processed": 30000}
+{"reads_processed": 31000}
+{"reads_processed": 32000}
+{"reads_processed": 33000}
+{"reads_processed": 34000}
+{"reads_processed": 35000}
+{"reads_processed": 36000}
+{"reads_processed": 37000}
+{"reads_processed": 38000}
+{"reads_processed": 39000}
+{"reads_processed": 40000}
+{"reads_processed": 41000}
+{"reads_processed": 42000}
+{"reads_processed": 43000}
+{"reads_processed": 44000}
+{"reads_processed": 45000}
+{"reads_processed": 46000}
+{"reads_processed": 47000}
+{"reads_processed": 48000}
+{"reads_processed": 49000}
+{"reads_processed": 50000}
+{"reads_processed": 51000}
+{"reads_processed": 52000}
+{"reads_processed": 53000}
+{"reads_processed": 54000}
+{"reads_processed": 55000}
+{"reads_processed": 56000}
+{"reads_processed": 57000}
+{"reads_processed": 58000}
+{"reads_processed": 59000}
+{"reads_processed": 60000}
+{"reads_processed": 61000}
+{"reads_processed": 62000}
+{"reads_processed": 63000}
+{"reads_processed": 64000}
+{"reads_processed": 65000}
+{"reads_processed": 66000}
+{"reads_processed": 67000}
+{"reads_processed": 68000}
+{"reads_processed": 69000}
+{"reads_processed": 70000}
+{"reads_processed": 71000}
+{"reads_processed": 72000}
+{"reads_processed": 73000}
+{"reads_processed": 74000}
+{"reads_processed": 75000}
+{"reads_processed": 76000}
+{"reads_processed": 77000}
+{"reads_processed": 78000}
+{"reads_processed": 79000}
+{"reads_processed": 80000}
+{"reads_processed": 81000}
+{"reads_processed": 82000}
+{"reads_processed": 83000}
+{"reads_processed": 84000}
+{"reads_processed": 85000}
+{"reads_processed": 86000}
+{"reads_processed": 87000}
+{"reads_processed": 88000}
+{"reads_processed": 89000}
+{"reads_processed": 90000}
+{"reads_processed": 91000}
+{"reads_processed": 92000}
+{"reads_processed": 93000}
+{"reads_processed": 94000}
+{"reads_processed": 95000}
+{"reads_processed": 96000}
+{"reads_processed": 97000}
+{"reads_processed": 98000}
+{"reads_processed": 99000}
+{"reads_processed": 100000}
+Basic Statistics:
+  Total reads: 100000
+  Total bases: 400000
+  Min length:  4
+  Max length:  4
+  Mean length: 4.00
+Per-base Quality Report (first 10 positions):
+  Pos 0: 40.00
+  Pos 1: 40.00
+  Pos 2: 40.00
+  Pos 3: 40.00
+Nucleotide Composition Report (first 5 positions):
+  Pos 0: A=100000, C=0, G=0, T=0
+  Pos 1: A=0, C=100000, G=0, T=0
+  Pos 2: A=0, C=0, G=100000, T=0
+  Pos 3: A=0, C=0, G=0, T=100000
+  Pos 4: A=0, C=0, G=0, T=0
+Global GC Content Report:
+  GC Content: 50.00%
+GC Distribution Report:
+  00-10%: 0
+  10-20%: 0
+  20-30%: 0
+  30-40%: 0
+  40-50%: 0
+  50-60%: 100000
+  60-70%: 0
+  70-80%: 0
+  80-90%: 0
+  90-100%: 0
+Read Length Distribution Report:
+  0-100:     100000
+  100-500:   0
+  500-1000:  0
+  1000-5000: 0
+  5000-10000:0
+  10000+:    0
+N-Statistics Report:
+  N10: 4
+  N25: 4
+  N50: 4
+  N75: 4
+  N90: 4
+Sequence Entropy Report:
+  Mean entropy:      2.0000
+  Low complexity:    0
+K-mer Spectrum Report (k=5):
+  Total 5-mers: 0
+Overrepresented Sequences Report:
+  Total unique sequences tracked: 1
+  Most frequent sequence (count=100000): ACGT
+Duplication Rate Report:
+  Total reads:     100000
+  Duplicate reads: 99999
+  Duplication ratio: 100.00%
+Adapter Detection Report:
+  Total suffix k-mers analyzed: 0

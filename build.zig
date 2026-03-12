@@ -17,6 +17,16 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("core/cigar/cigar_parser.zig"),
     });
 
+    // Output and API Modules
+    const structured_output_mod = b.addModule("structured_output", .{
+        .root_source_file = b.path("core/output/structured_output.zig"),
+    });
+
+    const metrics_stream_mod = b.addModule("metrics_stream", .{
+        .root_source_file = b.path("core/api/metrics_stream.zig"),
+    });
+    metrics_stream_mod.addImport("structured_output", structured_output_mod);
+
     // Stage interfaces
     const stage_interface_mod = b.addModule("stage", .{
         .root_source_file = b.path("core/stage/stage.zig"),
@@ -313,6 +323,7 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("pipeline", pipeline_mod);
     exe.root_module.addImport("pipeline_config", pipeline_config_mod);
     exe.root_module.addImport("metrics", metrics_mod);
+    exe.root_module.addImport("structured_output", structured_output_mod);
     exe.root_module.addImport("bam_reader", bam_reader_mod);
     exe.root_module.addImport("bam_pipeline", bam_pipeline_mod);
     b.installArtifact(exe);
@@ -324,6 +335,17 @@ pub fn build(b: *std.Build) void {
     }
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
+
+    // C ABI Shared Library
+    const lib = b.addSharedLibrary(.{
+        .name = "qwd",
+        .root_source_file = b.path("bindings/c/qwd_api.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    lib.root_module.addImport("pipeline", pipeline_mod);
+    lib.root_module.addImport("parser", parser_mod);
+    b.installArtifact(lib);
 
     // Benchmarks
     const simd_bench = b.addExecutable(.{

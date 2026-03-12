@@ -81,4 +81,7 @@ zig build
 ---
 
 ### License
-[Placeholder: MIT License]
+Academic Free License (AFL) 3.0
+
+### Author
+MD. Arshad (arshad10867c@gmail.com)

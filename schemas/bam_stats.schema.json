@@ -1,0 +1,12 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "BAM Alignment Statistics",
+  "type": "object",
+  "properties": {
+    "total_alignments": { "type": "integer", "minimum": 0 },
+    "mapped_reads": { "type": "integer", "minimum": 0 },
+    "unmapped_reads": { "type": "integer", "minimum": 0 },
+    "mean_mapq": { "type": "number", "minimum": 0, "maximum": 60 }
+  },
+  "required": ["total_alignments", "mapped_reads"]
+}
