@@ -33,16 +33,16 @@ if _lib is None:
         pass
 
 if _lib:
-    _lib.qwd_fastq_qc.restype = ctypes.c_char_p
+    _lib.qwd_fastq_qc.restype = ctypes.c_void_p
     _lib.qwd_fastq_qc.argtypes = [ctypes.c_char_p]
     
-    _lib.qwd_bam_stats.restype = ctypes.c_char_p
+    _lib.qwd_bam_stats.restype = ctypes.c_void_p
     _lib.qwd_bam_stats.argtypes = [ctypes.c_char_p]
     
-    _lib.qwd_pipeline.restype = ctypes.c_char_p
+    _lib.qwd_pipeline.restype = ctypes.c_void_p
     _lib.qwd_pipeline.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
     
-    _lib.qwd_free_string.argtypes = [ctypes.c_char_p]
+    _lib.qwd_free_string.argtypes = [ctypes.c_void_p]
 
 def qc(fastq_path):
     if not _lib: raise RuntimeError("QwD shared library not found")
