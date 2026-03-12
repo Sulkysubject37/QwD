@@ -7,7 +7,7 @@ qwd_qc <- function(fastq_path) {
   lib_file <- if (.Platform$OS.type == "windows") "qwd.dll" else if (Sys.info()["sysname"] == "Darwin") "libqwd.dylib" else "libqwd.so"
   
   # Try to find library
-  possible_paths <- c(lib_file, file.path("zig-out", "lib", lib_file))
+  possible_paths <- c(lib_file, file.path("zig-out", "lib", lib_file), file.path("zig-out", "bin", lib_file))
   path <- ""
   for (p in possible_paths) {
     if (file.exists(p)) { path <- p; break }

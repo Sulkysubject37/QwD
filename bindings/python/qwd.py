@@ -16,6 +16,7 @@ else:
 possible_paths = [
     os.path.join(os.path.dirname(__file__), lib_file),
     os.path.join(os.getcwd(), "zig-out", "lib", lib_file),
+    os.path.join(os.getcwd(), "zig-out", "bin", lib_file),
     os.path.join(os.getcwd(), lib_file),
 ]
 
