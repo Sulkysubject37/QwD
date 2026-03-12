@@ -99,6 +99,10 @@ pub fn main() !void {
         try bam_pipeline.finalize();
         if (output_format == .json) {
             try structured_output.writeJsonReport(bam_pipeline.scheduler, stdout);
+            try stdout.writeAll("\n");
+        } else if (output_format == .ndjson) {
+            try structured_output.writeJsonReport(bam_pipeline.scheduler, stdout);
+            try stdout.writeAll("\n");
         } else {
             try bam_pipeline.report(stdout);
         }
@@ -203,6 +207,14 @@ pub fn main() !void {
         } else if (pipeline.parallel_scheduler) |ps| {
             try structured_output.writeJsonReport(ps, stdout);
         }
+        try stdout.writeAll("\n");
+    } else if (output_format == .ndjson) {
+        if (pipeline.scheduler) |s| {
+            try structured_output.writeJsonReport(s, stdout);
+        } else if (pipeline.parallel_scheduler) |ps| {
+            try structured_output.writeJsonReport(ps, stdout);
+        }
+        try stdout.writeAll("\n");
     } else {
         pipeline.report(stdout);
     }
