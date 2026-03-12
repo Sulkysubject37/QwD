@@ -1,5 +1,0 @@
-pyproject.toml
-qwd.egg-info/PKG-INFO
-qwd.egg-info/SOURCES.txt
-qwd.egg-info/dependency_links.txt
-qwd.egg-info/top_level.txt

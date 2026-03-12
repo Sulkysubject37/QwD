@@ -9,3 +9,6 @@ zig-out/
 test-results-*/
 run_*.txt
 bam_run*.txt
+qwed/
+*.egg-info/
+__pycache__/
