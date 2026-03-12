@@ -343,6 +343,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    lib.linkSystemLibrary("c");
     lib.root_module.addImport("pipeline", pipeline_mod);
     lib.root_module.addImport("parser", parser_mod);
     b.installArtifact(lib);
