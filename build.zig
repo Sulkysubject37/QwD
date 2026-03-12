@@ -346,6 +346,10 @@ pub fn build(b: *std.Build) void {
     lib.linkSystemLibrary("c");
     lib.root_module.addImport("pipeline", pipeline_mod);
     lib.root_module.addImport("parser", parser_mod);
+    lib.root_module.addImport("bam_pipeline", bam_pipeline_mod);
+    lib.root_module.addImport("bam_reader", bam_reader_mod);
+    lib.root_module.addImport("allocator", allocator_mod);
+    lib.root_module.addImport("structured_output", structured_output_mod);
     b.installArtifact(lib);
 
     // Benchmarks
