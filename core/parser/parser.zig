@@ -44,20 +44,24 @@ pub const FastqParser = struct {
     /// and lines are correctly terminated. For Phase Z, we focus on clarity.
     pub fn next(self: *FastqParser, out_buffer: []u8) !?Read {
         // Line 1: @ID
-        const id_line = (try self.reader.readUntilDelimiterOrEof(out_buffer, '\n')) orelse return null;
+        var id_line = (try self.reader.readUntilDelimiterOrEof(out_buffer, '\n')) orelse return null;
+        if (id_line.len > 0 and id_line[id_line.len - 1] == '\r') id_line = id_line[0 .. id_line.len - 1];
         if (id_line.len == 0 or id_line[0] != '@') return ParserError.InvalidFormat;
         const id = id_line[1..];
 
         // Line 2: Sequence
-        const seq_line = (try self.reader.readUntilDelimiterOrEof(out_buffer[id_line.len..], '\n')) orelse return ParserError.IncompleteRecord;
+        var seq_line = (try self.reader.readUntilDelimiterOrEof(out_buffer[id_line.len..], '\n')) orelse return ParserError.IncompleteRecord;
+        if (seq_line.len > 0 and seq_line[seq_line.len - 1] == '\r') seq_line = seq_line[0 .. seq_line.len - 1];
         const seq = seq_line;
 
         // Line 3: +ID (or just +)
-        const plus_line = (try self.reader.readUntilDelimiterOrEof(out_buffer[id_line.len + seq_line.len ..], '\n')) orelse return ParserError.IncompleteRecord;
+        var plus_line = (try self.reader.readUntilDelimiterOrEof(out_buffer[id_line.len + seq_line.len ..], '\n')) orelse return ParserError.IncompleteRecord;
+        if (plus_line.len > 0 and plus_line[plus_line.len - 1] == '\r') plus_line = plus_line[0 .. plus_line.len - 1];
         if (plus_line.len == 0 or plus_line[0] != '+') return ParserError.InvalidFormat;
 
         // Line 4: Quality
-        const qual_line = (try self.reader.readUntilDelimiterOrEof(out_buffer[id_line.len + seq_line.len + plus_line.len ..], '\n')) orelse return ParserError.IncompleteRecord;
+        var qual_line = (try self.reader.readUntilDelimiterOrEof(out_buffer[id_line.len + seq_line.len + plus_line.len ..], '\n')) orelse return ParserError.IncompleteRecord;
+        if (qual_line.len > 0 and qual_line[qual_line.len - 1] == '\r') qual_line = qual_line[0 .. qual_line.len - 1];
         const qual = qual_line;
 
         const read = Read{
