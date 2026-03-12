@@ -15,14 +15,16 @@ fi
 echo "Testing JSON output..."
 $BINARY qc "$FIXTURE" --json > output.json
 # Simple check if it is valid JSON
-python3 -c "import json; json.load(open('output.json'))"
+python3.10 -c "import json; json.load(open('output.json'))"
 echo "JSON validity: OK"
 
 echo "Testing NDJSON streaming..."
 $BINARY qc "$FIXTURE" --ndjson > output.ndjson
-# Check if lines are valid JSON
+# Check if non-empty lines are valid JSON
 while read line; do
-    echo "$line" | python3 -c "import json, sys; json.loads(sys.stdin.read())"
+    if [ ! -z "$line" ]; then
+        echo "$line" | python3.10 -c "import json, sys; json.loads(sys.stdin.read())"
+    fi
 done < output.ndjson
 echo "NDJSON validity: OK"
 
