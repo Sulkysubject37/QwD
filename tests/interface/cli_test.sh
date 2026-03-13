@@ -21,11 +21,7 @@ echo "JSON validity: OK"
 echo "Testing NDJSON streaming..."
 $BINARY qc "$FIXTURE" --ndjson > output.ndjson
 # Check if non-empty lines are valid JSON
-while read line; do
-    if [ ! -z "$line" ]; then
-        echo "$line" | python3.10 -c "import json, sys; json.loads(sys.stdin.read())"
-    fi
-done < output.ndjson
+python3.10 -c "import json, sys; [json.loads(line) for line in sys.stdin if line.strip()]" < output.ndjson
 echo "NDJSON validity: OK"
 
 rm output.json output.ndjson
