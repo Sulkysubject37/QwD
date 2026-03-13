@@ -36,11 +36,13 @@ pub const Pipeline = struct {
     parallel_scheduler: ?parallel_scheduler_mod.ParallelScheduler = null,
     arena: std.heap.ArenaAllocator,
     num_threads: usize,
+    fast_mode: bool,
 
-    pub fn init(child_allocator: std.mem.Allocator, num_threads: usize) Pipeline {
+    pub fn init(child_allocator: std.mem.Allocator, num_threads: usize, fast_mode: bool) Pipeline {
         var pipe = Pipeline{
             .arena = std.heap.ArenaAllocator.init(child_allocator),
             .num_threads = num_threads,
+            .fast_mode = fast_mode,
         };
         if (num_threads > 1) {
             pipe.parallel_scheduler = parallel_scheduler_mod.ParallelScheduler.init(child_allocator, num_threads);
@@ -142,11 +144,11 @@ pub const Pipeline = struct {
             s_opt = s.stage();
         } else if (std.mem.eql(u8, name, "overrepresented")) {
             const s = try allocator.create(overrepresented_mod.OverrepresentedStage);
-            s.* = overrepresented_mod.OverrepresentedStage.init(allocator);
+            s.* = overrepresented_mod.OverrepresentedStage.init(allocator, self.fast_mode);
             s_opt = s.stage();
         } else if (std.mem.eql(u8, name, "duplication")) {
             const s = try allocator.create(duplication_mod.DuplicationStage);
-            s.* = duplication_mod.DuplicationStage.init(allocator);
+            s.* = duplication_mod.DuplicationStage.init(allocator, self.fast_mode);
             s_opt = s.stage();
         } else if (std.mem.eql(u8, name, "qc_adapter_detect")) {
             const s = try allocator.create(qc_adapter_detect_mod.AdapterDetectionStage);

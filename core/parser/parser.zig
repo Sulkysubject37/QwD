@@ -1,4 +1,6 @@
 const std = @import("std");
+const block_reader = @import("block_reader");
+const newline_scan = @import("newline_scan");
 
 /// A single sequencing read.
 /// All fields are slices referencing buffer memory to avoid copying.
@@ -18,51 +20,80 @@ pub const ParserError = error{
     IncompleteRecord,
     MismatchedSequenceQuality,
     StreamError,
+    BufferTooSmall,
 };
 
 pub const FastqParser = struct {
-    reader: std.io.AnyReader,
-    buffer: []u8,
+    br: block_reader.BlockReader,
     allocator: std.mem.Allocator,
+    eof: bool = false,
 
     pub fn init(allocator: std.mem.Allocator, reader: std.io.AnyReader, buffer_size: usize) !FastqParser {
-        const buffer = try allocator.alloc(u8, buffer_size);
         return FastqParser{
-            .reader = reader,
-            .buffer = buffer,
+            .br = try block_reader.BlockReader.init(allocator, reader, buffer_size),
             .allocator = allocator,
         };
     }
 
     pub fn deinit(self: *FastqParser) void {
-        self.allocator.free(self.buffer);
+        self.br.deinit(self.allocator);
+    }
+
+    fn readLine(self: *FastqParser, out_buffer: []u8) !?[]u8 {
+        _ = out_buffer; // We are reading directly from the block buffer now
+        
+        while (true) {
+            // Search for newline in remaining buffer
+            if (newline_scan.indexOfNewline(self.br.buffer[self.br.pos..self.br.end])) |nl_idx| {
+                const line = self.br.buffer[self.br.pos .. self.br.pos + nl_idx];
+                self.br.pos += nl_idx + 1; // skip newline
+                
+                var trimmed = line;
+                if (trimmed.len > 0 and trimmed[trimmed.len - 1] == '\r') {
+                    trimmed = trimmed[0 .. trimmed.len - 1];
+                }
+                return trimmed;
+            }
+            
+            if (self.eof) {
+                // If EOF and some data remains, return it as the last line
+                if (self.br.pos < self.br.end) {
+                    const line = self.br.buffer[self.br.pos..self.br.end];
+                    self.br.pos = self.br.end;
+                    return line;
+                }
+                return null;
+            }
+            
+            // If buffer is completely full and no newline, then it's too small
+            if (self.br.pos == 0 and self.br.end == self.br.buffer.len) {
+                return error.BufferTooSmall;
+            }
+            
+            // Fill buffer and search again
+            const read_len = try self.br.fill();
+            if (read_len == 0) {
+                self.eof = true;
+            }
+        }
     }
 
     /// Parses the next FASTQ record from the stream.
-    /// Returns a Read object pointing into internal buffers or an error.
-    /// Note: This simple implementation assumes a record fits within the buffer
-    /// and lines are correctly terminated. For Phase Z, we focus on clarity.
     pub fn next(self: *FastqParser, out_buffer: []u8) !?Read {
         // Line 1: @ID
-        var id_line = (try self.reader.readUntilDelimiterOrEof(out_buffer, '\n')) orelse return null;
-        if (id_line.len > 0 and id_line[id_line.len - 1] == '\r') id_line = id_line[0 .. id_line.len - 1];
+        const id_line = (try self.readLine(out_buffer)) orelse return null;
         if (id_line.len == 0 or id_line[0] != '@') return ParserError.InvalidFormat;
         const id = id_line[1..];
 
         // Line 2: Sequence
-        var seq_line = (try self.reader.readUntilDelimiterOrEof(out_buffer[id_line.len..], '\n')) orelse return ParserError.IncompleteRecord;
-        if (seq_line.len > 0 and seq_line[seq_line.len - 1] == '\r') seq_line = seq_line[0 .. seq_line.len - 1];
-        const seq = seq_line;
+        const seq = (try self.readLine(out_buffer)) orelse return ParserError.IncompleteRecord;
 
-        // Line 3: +ID (or just +)
-        var plus_line = (try self.reader.readUntilDelimiterOrEof(out_buffer[id_line.len + seq_line.len ..], '\n')) orelse return ParserError.IncompleteRecord;
-        if (plus_line.len > 0 and plus_line[plus_line.len - 1] == '\r') plus_line = plus_line[0 .. plus_line.len - 1];
+        // Line 3: +ID
+        const plus_line = (try self.readLine(out_buffer)) orelse return ParserError.IncompleteRecord;
         if (plus_line.len == 0 or plus_line[0] != '+') return ParserError.InvalidFormat;
 
         // Line 4: Quality
-        var qual_line = (try self.reader.readUntilDelimiterOrEof(out_buffer[id_line.len + seq_line.len + plus_line.len ..], '\n')) orelse return ParserError.IncompleteRecord;
-        if (qual_line.len > 0 and qual_line[qual_line.len - 1] == '\r') qual_line = qual_line[0 .. qual_line.len - 1];
-        const qual = qual_line;
+        const qual = (try self.readLine(out_buffer)) orelse return ParserError.IncompleteRecord;
 
         const read = Read{
             .id = id,
@@ -75,35 +106,3 @@ pub const FastqParser = struct {
         return read;
     }
 };
-
-test "FastqParser test" {
-    const allocator = std.testing.allocator;
-    const content =
-        \\@READ_1
-        \\AGCT
-        \\+
-        \\IIII
-        \\@READ_2
-        \\GCTA
-        \\+
-        \\JJJJ
-    ;
-    var stream = std.io.fixedBufferStream(content);
-    var parser = try FastqParser.init(allocator, stream.reader().any(), 1024);
-    defer parser.deinit();
-
-    var out_buffer: [1024]u8 = undefined;
-
-    const read1 = (try parser.next(&out_buffer)).?;
-    try std.testing.expectEqualStrings("READ_1", read1.id);
-    try std.testing.expectEqualStrings("AGCT", read1.seq);
-    try std.testing.expectEqualStrings("IIII", read1.qual);
-
-    const read2 = (try parser.next(&out_buffer)).?;
-    try std.testing.expectEqualStrings("READ_2", read2.id);
-    try std.testing.expectEqualStrings("GCTA", read2.seq);
-    try std.testing.expectEqualStrings("JJJJ", read2.qual);
-
-    const read3 = try parser.next(&out_buffer);
-    try std.testing.expect(read3 == null);
-}

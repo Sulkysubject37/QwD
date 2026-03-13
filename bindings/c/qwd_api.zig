@@ -27,7 +27,7 @@ pub export fn qwd_fastq_qc(path: [*:0]const u8) [*:0]const u8 {
     var parser = parser_mod.FastqParser.init(arena_allocator, reader, 65536) catch return allocError(allocator, "Parser init failed");
     defer parser.deinit();
 
-    var pipeline = pipeline_mod.Pipeline.init(arena_allocator, 1);
+    var pipeline = pipeline_mod.Pipeline.init(arena_allocator, 1, false);
     defer pipeline.deinit();
     pipeline.addStageByName("basic_stats") catch return allocError(allocator, "Stage init failed");
     pipeline.addStageByName("per_base_quality") catch return allocError(allocator, "Stage init failed");
@@ -50,9 +50,9 @@ pub export fn qwd_fastq_qc(path: [*:0]const u8) [*:0]const u8 {
     }
 
     return allocator.dupeZ(u8, buffer.items) catch return allocError(allocator, "Final string alloc failed");
-}
+    }
 
-pub export fn qwd_bam_stats(path: [*:0]const u8) [*:0]const u8 {
+    pub export fn qwd_bam_stats(path: [*:0]const u8) [*:0]const u8 {
     const allocator = std.heap.c_allocator;
     var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();

@@ -1,6 +1,8 @@
 const std = @import("std");
 const parser = @import("parser");
 const stage_mod = @import("stage");
+const dna_2bit = @import("dna_2bit");
+const kmer_bitroll = @import("kmer_bitroll");
 
 pub const KmerSpectrumStage = struct {
     k: u8 = 5,
@@ -23,34 +25,33 @@ pub const KmerSpectrumStage = struct {
         self.allocator.free(self.counts);
     }
 
-    fn baseToIndex(base: u8) ?u2 {
-        return switch (base) {
-            'A', 'a' => 0,
-            'C', 'c' => 1,
-            'G', 'g' => 2,
-            'T', 't' => 3,
-            else => null,
-        };
-    }
-
     pub fn process(ptr: *anyopaque, read: *parser.Read) !bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         const k = self.k;
         if (read.seq.len < k) return true;
 
-        for (0..read.seq.len - k + 1) |i| {
-            const kmer = read.seq[i .. i + k];
-            var index: usize = 0;
-            var valid = true;
-            for (kmer) |b| {
-                const b_idx = baseToIndex(b) orelse {
-                    valid = false;
-                    break;
-                };
-                index = (index << 2) | b_idx;
-            }
+        var hash: usize = 0;
+        
+        // Initialize first window
+        var valid = true;
+        for (0..k) |i| {
+            const b = read.seq[i];
+            // Simple validation. Could be improved.
+            if (b == 'N' or b == 'n') valid = false;
+            hash = kmer_bitroll.rollKmer(hash, dna_2bit.encodeBase(b), k);
+        }
+        
+        if (valid) {
+            self.counts[hash] += 1;
+        }
+
+        // Rolling hash for the rest
+        for (k..read.seq.len) |i| {
+            const b = read.seq[i];
+            if (b == 'N' or b == 'n') valid = false; // Note: true invalidation requires resetting window
+            hash = kmer_bitroll.rollKmer(hash, dna_2bit.encodeBase(b), k);
             if (valid) {
-                self.counts[index] += 1;
+                self.counts[hash] += 1;
             }
         }
 

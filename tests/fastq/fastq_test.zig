@@ -43,7 +43,7 @@ test "FASTQ QC - GC Distribution" {
 
 test "FASTQ QC - Duplication" {
     const allocator = std.testing.allocator;
-    var stage = duplication_mod.DuplicationStage.init(allocator);
+    var stage = duplication_mod.DuplicationStage.init(allocator, false);
     defer stage.deinit();
     
     var read1 = parser.Read{ .id = "1", .seq = "ACGT", .qual = "IIII" };

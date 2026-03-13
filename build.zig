@@ -4,10 +4,29 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    // Phase 6 Modules
+    const block_reader_mod = b.addModule("block_reader", .{
+        .root_source_file = b.path("core/io/block_reader.zig"),
+    });
+    const newline_scan_mod = b.addModule("newline_scan", .{
+        .root_source_file = b.path("core/simd/newline_scan.zig"),
+    });
+    const dna_2bit_mod = b.addModule("dna_2bit", .{
+        .root_source_file = b.path("core/encoding/dna_2bit.zig"),
+    });
+    const kmer_bitroll_mod = b.addModule("kmer_bitroll", .{
+        .root_source_file = b.path("core/simd/kmer_bitroll.zig"),
+    });
+    const entropy_lut_mod = b.addModule("entropy_lut", .{
+        .root_source_file = b.path("core/entropy/entropy_lut.zig"),
+    });
+
     // Parsers and core structures
     const parser_mod = b.addModule("parser", .{
         .root_source_file = b.path("core/parser/parser.zig"),
     });
+    parser_mod.addImport("block_reader", block_reader_mod);
+    parser_mod.addImport("newline_scan", newline_scan_mod);
     
     const bam_reader_mod = b.addModule("bam_reader", .{
         .root_source_file = b.path("io/bam/bam_reader.zig"),
@@ -190,12 +209,15 @@ pub fn build(b: *std.Build) void {
     });
     qc_entropy_mod.addImport("parser", parser_mod);
     qc_entropy_mod.addImport("stage", stage_interface_mod);
+    qc_entropy_mod.addImport("entropy_lut", entropy_lut_mod);
 
     const kmer_spectrum_mod = b.addModule("kmer_spectrum", .{
         .root_source_file = b.path("stages/qc/kmer_spectrum_stage.zig"),
     });
     kmer_spectrum_mod.addImport("parser", parser_mod);
     kmer_spectrum_mod.addImport("stage", stage_interface_mod);
+    kmer_spectrum_mod.addImport("dna_2bit", dna_2bit_mod);
+    kmer_spectrum_mod.addImport("kmer_bitroll", kmer_bitroll_mod);
 
     const overrepresented_mod = b.addModule("overrepresented", .{
         .root_source_file = b.path("stages/qc/overrepresented_stage.zig"),
@@ -260,6 +282,10 @@ pub fn build(b: *std.Build) void {
     });
     metrics_mod.addImport("scheduler", scheduler_mod);
 
+    const runtime_metrics_mod = b.addModule("runtime_metrics", .{
+        .root_source_file = b.path("core/metrics/runtime_metrics.zig"),
+    });
+
     const pipeline_mod = b.addModule("pipeline", .{
         .root_source_file = b.path("core/pipeline/pipeline.zig"),
     });
@@ -323,7 +349,9 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("pipeline", pipeline_mod);
     exe.root_module.addImport("pipeline_config", pipeline_config_mod);
     exe.root_module.addImport("metrics", metrics_mod);
+    exe.root_module.addImport("runtime_metrics", runtime_metrics_mod);
     exe.root_module.addImport("structured_output", structured_output_mod);
+    exe.root_module.addImport("entropy_lut", entropy_lut_mod);
     exe.root_module.addImport("bam_reader", bam_reader_mod);
     exe.root_module.addImport("bam_pipeline", bam_pipeline_mod);
     b.installArtifact(exe);
@@ -424,8 +452,25 @@ pub fn build(b: *std.Build) void {
     });
     const run_rep_tests = b.addRunArtifact(rep_tests);
 
+    const fuzz_tests = b.addTest(.{
+        .root_source_file = b.path("tests/fuzz/fuzz_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    fuzz_tests.root_module.addImport("parser", parser_mod);
+    const run_fuzz_tests = b.addRunArtifact(fuzz_tests);
+
+    const stress_tests = b.addTest(.{
+        .root_source_file = b.path("tests/stress/stress_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const run_stress_tests = b.addRunArtifact(stress_tests);
+
     test_step.dependOn(&run_fastq_tests.step);
     test_step.dependOn(&run_bam_tests.step);
     test_step.dependOn(&run_perf_tests.step);
     test_step.dependOn(&run_rep_tests.step);
+    test_step.dependOn(&run_fuzz_tests.step);
+    test_step.dependOn(&run_stress_tests.step);
 }
