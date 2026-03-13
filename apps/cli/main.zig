@@ -5,11 +5,16 @@ const pipeline_mod = @import("pipeline");
 const pipeline_config_mod = @import("pipeline_config");
 const metrics_mod = @import("metrics");
 const structured_output = @import("structured_output");
+const runtime_metrics = @import("runtime_metrics");
+const entropy_lut_mod = @import("qc_entropy")._entropy_lut_mod; // or we can just import it directly in main
 
 const bam_reader_mod = @import("bam_reader");
 const bam_pipeline_mod = @import("bam_pipeline");
 
 pub fn main() !void {
+    // Initialize global LUT for entropy
+    @import("entropy_lut").initGlobal();
+    
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
@@ -28,6 +33,8 @@ pub fn main() !void {
 
     var num_threads: usize = 1;
     var force_scalar = false;
+    var fast_mode = false;
+    var perf_mode = false;
     var output_format = structured_output.OutputFormat.text;
     var stage_list_or_config: []const u8 = "";
 
@@ -45,6 +52,12 @@ pub fn main() !void {
             }
         } else if (std.mem.eql(u8, args[i], "--no-simd")) {
             force_scalar = true;
+            continue;
+        } else if (std.mem.eql(u8, args[i], "--fast")) {
+            fast_mode = true;
+            continue;
+        } else if (std.mem.eql(u8, args[i], "--perf")) {
+            perf_mode = true;
             continue;
         } else if (std.mem.eql(u8, args[i], "--json")) {
             output_format = .json;
@@ -91,9 +104,12 @@ pub fn main() !void {
         defer bam_pipeline.deinit();
         try bam_pipeline.addDefaultStages();
 
+        var perf = runtime_metrics.RuntimeMetrics.start();
+
         const record_buffer = try arena_allocator.alloc(u8, 65536);
         while (try bam_reader.next(record_buffer)) |record| {
             try bam_pipeline.run(record);
+            perf.reads_processed += 1;
         }
 
         try bam_pipeline.finalize();
@@ -105,11 +121,14 @@ pub fn main() !void {
             try stdout.writeAll("\n");
         } else {
             try bam_pipeline.report(stdout);
+            if (perf_mode) {
+                perf.report(stdout);
+            }
         }
         return;
     }
 
-    var pipeline = pipeline_mod.Pipeline.init(arena_allocator, num_threads);
+    var pipeline = pipeline_mod.Pipeline.init(arena_allocator, num_threads, fast_mode);
     defer pipeline.deinit();
 
     var file_path: []const u8 = "";
@@ -186,17 +205,18 @@ pub fn main() !void {
     var buffered_reader = std.io.bufferedReader(file.reader());
     const reader = buffered_reader.reader().any();
 
-    var parser = try parser_mod.FastqParser.init(allocator, reader, 65536);
+    var parser = try parser_mod.FastqParser.init(allocator, reader, 10 * 1024 * 1024);
     defer parser.deinit();
 
-    const record_buffer = try arena_allocator.alloc(u8, 65536);
+    const record_buffer = try arena_allocator.alloc(u8, 10 * 1024 * 1024);
 
-    var processed: usize = 0;
+    var perf = runtime_metrics.RuntimeMetrics.start();
+
     while (try parser.next(record_buffer)) |read| {
         try pipeline.run(read);
-        processed += 1;
-        if (output_format == .ndjson and processed % 1000 == 0) {
-            try structured_output.writeNdjsonProcess(processed, stdout);
+        perf.reads_processed += 1;
+        if (output_format == .ndjson and perf.reads_processed % 1000 == 0) {
+            try structured_output.writeNdjsonProcess(perf.reads_processed, stdout);
         }
     }
 
@@ -217,5 +237,8 @@ pub fn main() !void {
         try stdout.writeAll("\n");
     } else {
         pipeline.report(stdout);
+        if (perf_mode) {
+            perf.report(stdout);
+        }
     }
 }

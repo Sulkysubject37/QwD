@@ -3,16 +3,16 @@ const parser = @import("parser");
 const stage_mod = @import("stage");
 
 pub const OverrepresentedStage = struct {
-    // A bounded map to track most frequent sequences
-    // Using string hash map, bounded size
     map: std.StringHashMap(u64),
     allocator: std.mem.Allocator,
     total_reads: usize = 0,
+    fast_mode: bool = false,
 
-    pub fn init(allocator: std.mem.Allocator) OverrepresentedStage {
+    pub fn init(allocator: std.mem.Allocator, fast_mode: bool) OverrepresentedStage {
         return OverrepresentedStage{
             .map = std.StringHashMap(u64).init(allocator),
             .allocator = allocator,
+            .fast_mode = fast_mode,
         };
     }
 
@@ -28,6 +28,14 @@ pub const OverrepresentedStage = struct {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         self.total_reads += 1;
         
+        // Fast mode early cutoff: stop tracking new sequences after 100k reads
+        if (self.fast_mode and self.total_reads > 100_000) {
+            if (self.map.getPtr(read.seq)) |v| {
+                v.* += 1;
+            }
+            return true;
+        }
+
         // We only track up to 100,000 distinct sequences to prevent unbounded memory growth
         if (self.map.count() < 100000) {
             const v = try self.map.getOrPut(read.seq);
@@ -53,7 +61,11 @@ pub const OverrepresentedStage = struct {
 
     pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        writer.print("Overrepresented Sequences Report:\n", .{}) catch {};
+        if (self.fast_mode) {
+            writer.print("Overrepresented Sequences Report (Fast Mode):\n", .{}) catch {};
+        } else {
+            writer.print("Overrepresented Sequences Report:\n", .{}) catch {};
+        }
         writer.print("  Total unique sequences tracked: {d}\n", .{self.map.count()}) catch {};
         
         // Find top sequence

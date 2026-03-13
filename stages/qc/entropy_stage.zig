@@ -1,13 +1,16 @@
 const std = @import("std");
 const parser = @import("parser");
 const stage_mod = @import("stage");
+const entropy_lut_mod = @import("entropy_lut");
 
 pub const EntropyStage = struct {
     total_reads: usize = 0,
     total_entropy_sum: f64 = 0.0,
     low_complexity_reads: usize = 0,
     mean_entropy: f64 = 0.0,
-
+    
+    // We will use the global LUT initialized once
+    
     pub fn process(ptr: *anyopaque, read: *parser.Read) !bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         const len = read.seq.len;
@@ -24,14 +27,7 @@ pub const EntropyStage = struct {
             }
         }
 
-        var entropy: f64 = 0.0;
-        const flen = @as(f64, @floatFromInt(len));
-        for (base_counts) |count| {
-            if (count > 0) {
-                const p = @as(f64, @floatFromInt(count)) / flen;
-                entropy -= p * std.math.log2(p);
-            }
-        }
+        const entropy = entropy_lut_mod.global_lut.getEntropy(base_counts, len);
 
         self.total_reads += 1;
         self.total_entropy_sum += entropy;
