@@ -175,6 +175,27 @@ pub const Pipeline = struct {
         }
     }
 
+    pub fn run_batches(self: *Pipeline, rb: anytype) !void {
+        if (self.parallel_scheduler) |*ps| {
+            try ps.run_batches(rb);
+        } else {
+            // Sequential fallback if run_batches is called but not parallel
+            // For true implementation we'd route it correctly
+            if (self.scheduler) |*s| {
+                while (try rb.nextBatch()) |batch| {
+                    for (0..batch.count) |i| {
+                        const r = parser_mod.Read{
+                            .id = "mock",
+                            .seq = batch.sequences[i],
+                            .qual = batch.qualities[i],
+                        };
+                        try s.process(r);
+                    }
+                }
+            }
+        }
+    }
+
     pub fn finalize(self: *Pipeline) !void {
         if (self.scheduler) |*s| {
             try s.finalize();
