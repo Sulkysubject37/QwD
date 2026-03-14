@@ -46,6 +46,14 @@ pub const EntropyStage = struct {
         }
     }
 
+    pub fn merge(ptr: *anyopaque, other_ptr: *anyopaque) !void {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        const other: *@This() = @ptrCast(@alignCast(other_ptr));
+        self.total_reads += other.total_reads;
+        self.total_entropy_sum += other.total_entropy_sum;
+        self.low_complexity_reads += other.low_complexity_reads;
+    }
+
     pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         writer.print("Sequence Entropy Report:\n", .{}) catch {};
@@ -60,6 +68,7 @@ pub const EntropyStage = struct {
                 .process = process,
                 .finalize = finalize,
                 .report = report,
+                .merge = merge,
             },
         };
     }

@@ -28,6 +28,16 @@ pub const NucleotideCompositionStage = struct {
         _ = ptr;
     }
 
+    pub fn merge(ptr: *anyopaque, other_ptr: *anyopaque) !void {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        const other: *@This() = @ptrCast(@alignCast(other_ptr));
+        for (0..MAX_POS) |i| {
+            for (0..4) |j| {
+                self.base_counts[i][j] += other.base_counts[i][j];
+            }
+        }
+    }
+
     pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         writer.print("Nucleotide Composition Report (first 5 positions):\n", .{}) catch {};
@@ -50,6 +60,7 @@ pub const NucleotideCompositionStage = struct {
                 .process = process,
                 .finalize = finalize,
                 .report = report,
+                .merge = merge,
             },
         };
     }

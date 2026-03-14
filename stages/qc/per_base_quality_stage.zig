@@ -31,6 +31,15 @@ pub const PerBaseQualityStage = struct {
         }
     }
 
+    pub fn merge(ptr: *anyopaque, other_ptr: *anyopaque) !void {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        const other: *@This() = @ptrCast(@alignCast(other_ptr));
+        for (0..MAX_POS) |i| {
+            self.quality_sum[i] += other.quality_sum[i];
+            self.base_count[i] += other.base_count[i];
+        }
+    }
+
     pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         writer.print("Per-base Quality Report (first 10 positions):\n", .{}) catch {};
@@ -49,6 +58,7 @@ pub const PerBaseQualityStage = struct {
                 .process = process,
                 .finalize = finalize,
                 .report = report,
+                .merge = merge,
             },
         };
     }

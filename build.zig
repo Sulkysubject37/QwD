@@ -309,6 +309,7 @@ pub fn build(b: *std.Build) void {
     });
     pipeline_mod.addImport("scheduler", scheduler_mod);
     pipeline_mod.addImport("parallel_scheduler", parallel_scheduler_mod);
+    pipeline_mod.addImport("read_batch", read_batch_mod);
     pipeline_mod.addImport("simd_ops", simd_ops_mod);
     pipeline_mod.addImport("base_decode", base_decode_mod);
     pipeline_mod.addImport("memory_manager", memory_manager_mod);

@@ -32,6 +32,14 @@ pub const QcStage = struct {
         }
     }
 
+    pub fn merge(ptr: *anyopaque, other_ptr: *anyopaque) !void {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        const other: *@This() = @ptrCast(@alignCast(other_ptr));
+        self.total_reads += other.total_reads;
+        self.total_bases += other.total_bases;
+        self.sum_quality += other.sum_quality;
+    }
+
     pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         writer.print("QC Report:\n", .{}) catch {};
@@ -47,6 +55,7 @@ pub const QcStage = struct {
                 .process = process,
                 .finalize = finalize,
                 .report = report,
+                .merge = merge,
             },
         };
     }
