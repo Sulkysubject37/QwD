@@ -25,6 +25,13 @@ pub const GcContentStage = struct {
         }
     }
 
+    pub fn merge(ptr: *anyopaque, other_ptr: *anyopaque) !void {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        const other: *@This() = @ptrCast(@alignCast(other_ptr));
+        self.gc_bases += other.gc_bases;
+        self.total_bases += other.total_bases;
+    }
+
     pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         writer.print("Global GC Content Report:\n", .{}) catch {};
@@ -38,6 +45,7 @@ pub const GcContentStage = struct {
                 .process = process,
                 .finalize = finalize,
                 .report = report,
+                .merge = merge,
             },
         };
     }

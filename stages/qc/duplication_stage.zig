@@ -55,6 +55,27 @@ pub const DuplicationStage = struct {
         _ = ptr;
     }
 
+    pub fn merge(ptr: *anyopaque, other_ptr: *anyopaque) !void {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        const other: *@This() = @ptrCast(@alignCast(other_ptr));
+        self.total_reads += other.total_reads;
+        
+        var it = other.map.keyIterator();
+        while (it.next()) |key_ptr| {
+            if (self.map.contains(key_ptr.*)) {
+                self.duplicate_reads += 1;
+            } else if (self.map.count() < 200000) {
+                const res = try self.map.getOrPut(key_ptr.*);
+                if (!res.found_existing) {
+                    res.key_ptr.* = try self.allocator.dupe(u8, key_ptr.*);
+                }
+            }
+        }
+        // Note: other.duplicate_reads also need to be merged?
+        // Actually, other.duplicate_reads are duplicates found WITHIN that thread's stream.
+        self.duplicate_reads += other.duplicate_reads;
+    }
+
     pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         if (self.fast_mode) {
@@ -75,6 +96,7 @@ pub const DuplicationStage = struct {
                 .process = process,
                 .finalize = finalize,
                 .report = report,
+                .merge = merge,
             },
         };
     }

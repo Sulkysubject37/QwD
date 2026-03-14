@@ -65,6 +65,15 @@ pub const AdapterDetectionStage = struct {
         _ = ptr;
     }
 
+    pub fn merge(ptr: *anyopaque, other_ptr: *anyopaque) !void {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        const other: *@This() = @ptrCast(@alignCast(other_ptr));
+        self.total_suffix_kmers += other.total_suffix_kmers;
+        for (0..self.counts.len) |i| {
+            self.counts[i] += other.counts[i];
+        }
+    }
+
     pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         writer.print("Adapter Detection Report:\n", .{}) catch {};
@@ -109,6 +118,7 @@ pub const AdapterDetectionStage = struct {
                 .process = process,
                 .finalize = finalize,
                 .report = report,
+                .merge = merge,
             },
         };
     }

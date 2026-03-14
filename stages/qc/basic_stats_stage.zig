@@ -30,6 +30,16 @@ pub const BasicStatsStage = struct {
         }
     }
 
+    pub fn merge(ptr: *anyopaque, other_ptr: *anyopaque) !void {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        const other: *@This() = @ptrCast(@alignCast(other_ptr));
+        
+        self.total_reads += other.total_reads;
+        self.total_bases += other.total_bases;
+        if (other.min_read_length < self.min_read_length) self.min_read_length = other.min_read_length;
+        if (other.max_read_length > self.max_read_length) self.max_read_length = other.max_read_length;
+    }
+
     pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         writer.print("Basic Statistics:\n", .{}) catch {};
@@ -47,6 +57,7 @@ pub const BasicStatsStage = struct {
                 .process = process,
                 .finalize = finalize,
                 .report = report,
+                .merge = merge,
             },
         };
     }

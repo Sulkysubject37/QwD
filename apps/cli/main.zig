@@ -210,7 +210,7 @@ pub fn main() !void {
 
     // Use BatchBuilder for multicore throughput architecture (Phase R)
     const batch_builder_mod = @import("batch_builder");
-    var builder = try batch_builder_mod.BatchBuilder.init(arena_allocator, &parser, 512);
+    var builder = try batch_builder_mod.BatchBuilder.init(arena_allocator, &parser);
     defer builder.deinit();
 
     var perf = runtime_metrics.RuntimeMetrics.start();

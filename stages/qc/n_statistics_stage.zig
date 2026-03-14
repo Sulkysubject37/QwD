@@ -48,6 +48,15 @@ pub const NStatisticsStage = struct {
         }
     }
 
+    pub fn merge(ptr: *anyopaque, other_ptr: *anyopaque) !void {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        const other: *@This() = @ptrCast(@alignCast(other_ptr));
+        self.total_bases += other.total_bases;
+        for (0..30000) |i| {
+            self.length_histogram[i] += other.length_histogram[i];
+        }
+    }
+
     pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         writer.print("N-Statistics Report:\n", .{}) catch {};
@@ -65,6 +74,7 @@ pub const NStatisticsStage = struct {
                 .process = process,
                 .finalize = finalize,
                 .report = report,
+                .merge = merge,
             },
         };
     }

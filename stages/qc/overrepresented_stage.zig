@@ -59,6 +59,24 @@ pub const OverrepresentedStage = struct {
         _ = ptr;
     }
 
+    pub fn merge(ptr: *anyopaque, other_ptr: *anyopaque) !void {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        const other: *@This() = @ptrCast(@alignCast(other_ptr));
+        self.total_reads += other.total_reads;
+        
+        var it = other.map.iterator();
+        while (it.next()) |entry| {
+            const res = try self.map.getOrPut(entry.key_ptr.*);
+            if (!res.found_existing) {
+                // We must dupe the key since other's allocator will be destroyed
+                res.key_ptr.* = try self.allocator.dupe(u8, entry.key_ptr.*);
+                res.value_ptr.* = entry.value_ptr.*;
+            } else {
+                res.value_ptr.* += entry.value_ptr.*;
+            }
+        }
+    }
+
     pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         if (self.fast_mode) {
@@ -90,6 +108,7 @@ pub const OverrepresentedStage = struct {
                 .process = process,
                 .finalize = finalize,
                 .report = report,
+                .merge = merge,
             },
         };
     }

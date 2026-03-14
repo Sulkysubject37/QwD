@@ -32,6 +32,15 @@ pub const LengthDistributionStage = struct {
         _ = ptr;
     }
 
+    pub fn merge(ptr: *anyopaque, other_ptr: *anyopaque) !void {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        const other: *@This() = @ptrCast(@alignCast(other_ptr));
+        self.total_reads += other.total_reads;
+        for (0..6) |i| {
+            self.read_count_per_bin[i] += other.read_count_per_bin[i];
+        }
+    }
+
     pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         writer.print("Read Length Distribution Report:\n", .{}) catch {};
@@ -50,6 +59,7 @@ pub const LengthDistributionStage = struct {
                 .process = process,
                 .finalize = finalize,
                 .report = report,
+                .merge = merge,
             },
         };
     }

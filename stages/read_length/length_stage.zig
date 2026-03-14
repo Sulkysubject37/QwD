@@ -28,6 +28,15 @@ pub const LengthStage = struct {
         }
     }
 
+    pub fn merge(ptr: *anyopaque, other_ptr: *anyopaque) !void {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        const other: *@This() = @ptrCast(@alignCast(other_ptr));
+        self.total_reads += other.total_reads;
+        self.total_length += other.total_length;
+        if (other.min_length < self.min_length) self.min_length = other.min_length;
+        if (other.max_length > self.max_length) self.max_length = other.max_length;
+    }
+
     pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         writer.print("Read Length Report:\n", .{}) catch {};
@@ -43,6 +52,7 @@ pub const LengthStage = struct {
                 .process = process,
                 .finalize = finalize,
                 .report = report,
+                .merge = merge,
             },
         };
     }
