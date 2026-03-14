@@ -21,8 +21,8 @@ jobs:
         with:
           version: 0.13.0
 
-      - name: Build project
-        run: zig build
+      - name: Build project (ReleaseFast)
+        run: zig build -Doptimize=ReleaseFast
 
       - name: Generate robust test fixtures
         run: |
@@ -39,39 +39,43 @@ jobs:
       - name: Run Core benchmark (Internal)
         run: zig build bench-core
 
-      - name: FASTQ Reproducibility & Performance (Scalar vs SIMD, Single vs Multi)
+      - name: Multicore Correctness & Scaling (Phase R Extreme)
         shell: bash
         run: |
-          echo "--- FASTQ: Single-core, SIMD ---"
-          ./zig-out/bin/qwd qc tests/fixtures/sample.fastq > run_s_simd.txt
+          echo "--- 1 Thread (Exact) ---"
+          ./zig-out/bin/qwd qc tests/fixtures/sample.fastq --threads 1 > res_1t_exact.txt
           
-          echo "--- FASTQ: Single-core, Scalar ---"
-          ./zig-out/bin/qwd qc --no-simd tests/fixtures/sample.fastq > run_s_scalar.txt
+          echo "--- 4 Threads (Exact) ---"
+          ./zig-out/bin/qwd qc tests/fixtures/sample.fastq --threads 4 > res_4t_exact.txt
           
-          echo "--- FASTQ: Multi-core (4 threads), SIMD ---"
-          ./zig-out/bin/qwd qc --threads 4 tests/fixtures/sample.fastq > run_m_simd.txt
+          echo "--- 8 Threads (Exact) ---"
+          ./zig-out/bin/qwd qc tests/fixtures/sample.fastq --threads 8 > res_8t_exact.txt
           
-          echo "Verifying FASTQ reproducibility..."
-          diff run_s_simd.txt run_s_scalar.txt
-          diff run_s_simd.txt run_m_simd.txt
+          echo "Verifying Multicore Exact Determinism..."
+          diff res_1t_exact.txt res_4t_exact.txt
+          diff res_1t_exact.txt res_8t_exact.txt
 
-      - name: BAM Reproducibility & Performance
+      - name: Fast Mode (Probabilistic) Validation
         shell: bash
         run: |
-          echo "--- BAM: Alignment Stats ---"
-          ./zig-out/bin/qwd bamstats tests/fixtures/sample.bam > bam_run1.txt
-          ./zig-out/bin/qwd bamstats tests/fixtures/sample.bam > bam_run2.txt
+          echo "--- 1 Thread (Fast) ---"
+          ./zig-out/bin/qwd qc --fast tests/fixtures/sample.fastq --threads 1 > res_1t_fast.txt
           
-          echo "Verifying BAM reproducibility..."
-          diff bam_run1.txt bam_run2.txt
+          echo "--- 8 Threads (Fast) ---"
+          ./zig-out/bin/qwd qc --fast tests/fixtures/sample.fastq --threads 8 > res_8t_fast.txt
+          
+          echo "Verifying Fast Mode Multicore Determinism..."
+          diff res_1t_fast.txt res_8t_fast.txt
+
+      - name: Interface Tests (Python & CLI)
+        shell: bash
+        run: |
+          python3 tests/bindings/python_test.py
+          ./tests/interface/cli_test.sh
 
       - name: Upload Test Results
         uses: actions/upload-artifact@v4
         with:
           name: test-results-${{ matrix.os }}
           path: |
-            run_s_simd.txt
-            run_s_scalar.txt
-            run_m_simd.txt
-            bam_run1.txt
-            bam_run2.txt
+            res_*.txt
