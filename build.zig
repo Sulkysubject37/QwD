@@ -27,6 +27,22 @@ pub fn build(b: *std.Build) void {
     });
     parser_mod.addImport("block_reader", block_reader_mod);
     parser_mod.addImport("newline_scan", newline_scan_mod);
+
+    // Phase R Modules (Depends on Parser)
+    const read_batch_mod = b.addModule("read_batch", .{
+        .root_source_file = b.path("core/batch/read_batch.zig"),
+    });
+    const batch_builder_mod = b.addModule("batch_builder", .{
+        .root_source_file = b.path("core/batch/batch_builder.zig"),
+    });
+    batch_builder_mod.addImport("parser", parser_mod);
+    batch_builder_mod.addImport("read_batch", read_batch_mod);
+    const ring_buffer_mod = b.addModule("ring_buffer", .{
+        .root_source_file = b.path("core/parallel/ring_buffer.zig"),
+    });
+    const base_decode_mod = b.addModule("base_decode", .{
+        .root_source_file = b.path("core/simd/base_decode.zig"),
+    });
     
     const bam_reader_mod = b.addModule("bam_reader", .{
         .root_source_file = b.path("io/bam/bam_reader.zig"),
@@ -87,6 +103,8 @@ pub fn build(b: *std.Build) void {
     });
     parallel_scheduler_mod.addImport("parser", parser_mod);
     parallel_scheduler_mod.addImport("stage", stage_interface_mod);
+    parallel_scheduler_mod.addImport("read_batch", read_batch_mod);
+    parallel_scheduler_mod.addImport("ring_buffer", ring_buffer_mod);
 
     const pipeline_config_mod = b.addModule("pipeline_config", .{
         .root_source_file = b.path("core/config/pipeline_config.zig"),
@@ -292,6 +310,7 @@ pub fn build(b: *std.Build) void {
     pipeline_mod.addImport("scheduler", scheduler_mod);
     pipeline_mod.addImport("parallel_scheduler", parallel_scheduler_mod);
     pipeline_mod.addImport("simd_ops", simd_ops_mod);
+    pipeline_mod.addImport("base_decode", base_decode_mod);
     pipeline_mod.addImport("memory_manager", memory_manager_mod);
     pipeline_mod.addImport("stage", stage_interface_mod);
     pipeline_mod.addImport("parser", parser_mod);
@@ -346,6 +365,7 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("parallel_scheduler", parallel_scheduler_mod);
     exe.root_module.addImport("simd_ops", simd_ops_mod);
     exe.root_module.addImport("allocator", allocator_mod);
+    exe.root_module.addImport("batch_builder", batch_builder_mod);
     exe.root_module.addImport("pipeline", pipeline_mod);
     exe.root_module.addImport("pipeline_config", pipeline_config_mod);
     exe.root_module.addImport("metrics", metrics_mod);
