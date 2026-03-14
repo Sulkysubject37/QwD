@@ -26,8 +26,8 @@ jobs:
         with:
           version: 0.13.0
 
-      - name: Build QwD Shared Library
-        run: zig build
+      - name: Build QwD Shared Library (ReleaseFast)
+        run: zig build -Doptimize=ReleaseFast
 
       - name: Run Python Tests
         run: |
