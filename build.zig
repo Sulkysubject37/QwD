@@ -20,6 +20,9 @@ pub fn build(b: *std.Build) void {
     const entropy_lut_mod = b.addModule("entropy_lut", .{
         .root_source_file = b.path("core/entropy/entropy_lut.zig"),
     });
+    const bloom_filter_mod = b.addModule("bloom_filter", .{
+        .root_source_file = b.path("core/analytics/bloom_filter.zig"),
+    });
 
     // Parsers and core structures
     const parser_mod = b.addModule("parser", .{
@@ -248,6 +251,7 @@ pub fn build(b: *std.Build) void {
     });
     duplication_mod.addImport("parser", parser_mod);
     duplication_mod.addImport("stage", stage_interface_mod);
+    duplication_mod.addImport("bloom_filter", bloom_filter_mod);
 
     const qc_adapter_detect_mod = b.addModule("qc_adapter_detect", .{
         .root_source_file = b.path("stages/qc/adapter_detection_stage.zig"),
@@ -362,6 +366,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     exe.root_module.addImport("parser", parser_mod);
+    exe.root_module.addImport("block_reader", block_reader_mod);
     exe.root_module.addImport("scheduler", scheduler_mod);
     exe.root_module.addImport("parallel_scheduler", parallel_scheduler_mod);
     exe.root_module.addImport("simd_ops", simd_ops_mod);

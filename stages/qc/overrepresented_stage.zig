@@ -28,26 +28,20 @@ pub const OverrepresentedStage = struct {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         self.total_reads += 1;
         
-        // Fast mode early cutoff: stop tracking new sequences after 100k reads
-        if (self.fast_mode and self.total_reads > 100_000) {
-            if (self.map.getPtr(read.seq)) |v| {
-                v.* += 1;
-            }
+        // Extreme fast mode: only profile first 50k reads
+        if (self.fast_mode and self.total_reads > 50_000) {
             return true;
         }
 
-        // We only track up to 100,000 distinct sequences to prevent unbounded memory growth
         if (self.map.count() < 100000) {
             const v = try self.map.getOrPut(read.seq);
             if (!v.found_existing) {
-                // Must duplicate the string since the read buffer will be overwritten
                 v.key_ptr.* = try self.allocator.dupe(u8, read.seq);
                 v.value_ptr.* = 1;
             } else {
                 v.value_ptr.* += 1;
             }
         } else {
-            // If already full, just update existing ones
             if (self.map.getPtr(read.seq)) |v| {
                 v.* += 1;
             }
@@ -68,7 +62,6 @@ pub const OverrepresentedStage = struct {
         while (it.next()) |entry| {
             const res = try self.map.getOrPut(entry.key_ptr.*);
             if (!res.found_existing) {
-                // We must dupe the key since other's allocator will be destroyed
                 res.key_ptr.* = try self.allocator.dupe(u8, entry.key_ptr.*);
                 res.value_ptr.* = entry.value_ptr.*;
             } else {
@@ -79,14 +72,9 @@ pub const OverrepresentedStage = struct {
 
     pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        if (self.fast_mode) {
-            writer.print("Overrepresented Sequences Report (Fast Mode):\n", .{}) catch {};
-        } else {
-            writer.print("Overrepresented Sequences Report:\n", .{}) catch {};
-        }
-        writer.print("  Total unique sequences tracked: {d}\n", .{self.map.count()}) catch {};
+        writer.print("Overrepresented Sequences Report:\n", .{}) catch {};
+        writer.print("  Unique sequences: {d}\n", .{self.map.count()}) catch {};
         
-        // Find top sequence
         var top_seq: []const u8 = "";
         var top_count: u64 = 0;
         var it = self.map.iterator();
@@ -97,7 +85,7 @@ pub const OverrepresentedStage = struct {
             }
         }
         if (top_count > 1) {
-            writer.print("  Most frequent sequence (count={d}): {s}\n", .{ top_count, top_seq }) catch {};
+            writer.print("  Most frequent: {s} (count={d})\n", .{ top_seq, top_count }) catch {};
         }
     }
 

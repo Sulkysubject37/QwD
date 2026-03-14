@@ -90,7 +90,7 @@ pub const ParallelScheduler = struct {
     pub fn run_batches(self: *ParallelScheduler, batch_builder: anytype, pipeline_ptr: anytype) !void {
         if (self.num_threads <= 1) {
             // Use a local batch for sequential processing
-            var batch = try read_batch_mod.ReadBatch.init(self.allocator, 512);
+            var batch = try read_batch_mod.ReadBatch.init(self.allocator, 4096);
             defer batch.deinit(self.allocator);
 
             while (try batch_builder.fillBatch(&batch)) {
@@ -116,7 +116,7 @@ pub const ParallelScheduler = struct {
         var batches = try self.allocator.alloc(read_batch_mod.ReadBatch, queue_depth);
         defer self.allocator.free(batches);
         for (0..queue_depth) |i| {
-            batches[i] = try read_batch_mod.ReadBatch.init(self.allocator, 512);
+            batches[i] = try read_batch_mod.ReadBatch.init(self.allocator, 4096);
             _ = free_queue.push(&batches[i]);
         }
         defer {

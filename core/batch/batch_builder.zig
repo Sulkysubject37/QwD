@@ -5,25 +5,26 @@ const read_batch_mod = @import("read_batch");
 pub const BatchBuilder = struct {
     allocator: std.mem.Allocator,
     parser: *parser_mod.FastqParser,
-    buffer: []u8, 
 
     pub fn init(allocator: std.mem.Allocator, parser: *parser_mod.FastqParser) !BatchBuilder {
         return BatchBuilder{
             .allocator = allocator,
             .parser = parser,
-            .buffer = try allocator.alloc(u8, 65536), 
         };
     }
 
     pub fn deinit(self: *BatchBuilder) void {
-        self.allocator.free(self.buffer);
+        _ = self;
     }
 
     pub fn fillBatch(self: *BatchBuilder, batch: *read_batch_mod.ReadBatch) !bool {
         batch.clear();
         
+        // Use a dummy buffer for parser.next signature compliance if not mmap
+        var dummy: [1]u8 = undefined;
+
         while (batch.count < batch.capacity) {
-            if (try self.parser.next(self.buffer)) |read| {
+            if (try self.parser.next(&dummy)) |read| {
                 _ = batch.add(read.seq, read.qual, read.id.len);
             } else {
                 break; // EOF
