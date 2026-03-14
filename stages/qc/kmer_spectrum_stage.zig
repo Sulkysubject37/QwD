@@ -33,26 +33,15 @@ pub const KmerSpectrumStage = struct {
         var hash: usize = 0;
         
         // Initialize first window
-        var valid = true;
         for (0..k) |i| {
-            const b = read.seq[i];
-            // Simple validation. Could be improved.
-            if (b == 'N' or b == 'n') valid = false;
-            hash = kmer_bitroll.rollKmer(hash, dna_2bit.encodeBase(b), k);
+            hash = kmer_bitroll.rollKmer(hash, dna_2bit.encodeBase(read.seq[i]), k);
         }
-        
-        if (valid) {
-            self.counts[hash] += 1;
-        }
+        self.counts[hash] += 1;
 
         // Rolling hash for the rest
         for (k..read.seq.len) |i| {
-            const b = read.seq[i];
-            if (b == 'N' or b == 'n') valid = false; // Note: true invalidation requires resetting window
-            hash = kmer_bitroll.rollKmer(hash, dna_2bit.encodeBase(b), k);
-            if (valid) {
-                self.counts[hash] += 1;
-            }
+            hash = kmer_bitroll.rollKmer(hash, dna_2bit.encodeBase(read.seq[i]), k);
+            self.counts[hash] += 1;
         }
 
         return true;

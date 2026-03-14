@@ -23,16 +23,6 @@ pub const AdapterDetectionStage = struct {
         self.allocator.free(self.counts);
     }
 
-    fn baseToIndex(base: u8) ?u2 {
-        return switch (base) {
-            'A', 'a' => 0,
-            'C', 'c' => 1,
-            'G', 'g' => 2,
-            'T', 't' => 3,
-            else => null,
-        };
-    }
-
     pub fn process(ptr: *anyopaque, read: *parser.Read) !bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         const k = self.k;
@@ -41,21 +31,35 @@ pub const AdapterDetectionStage = struct {
 
         const suffix = seq[seq.len - self.suffix_length ..];
         
-        for (0..self.suffix_length - k + 1) |i| {
-            const kmer = suffix[i .. i + k];
-            var index: usize = 0;
-            var valid = true;
-            for (kmer) |b| {
-                const b_idx = baseToIndex(b) orelse {
-                    valid = false;
-                    break;
-                };
-                index = (index << 2) | b_idx;
-            }
-            if (valid) {
-                self.counts[index] += 1;
-                self.total_suffix_kmers += 1;
-            }
+        // Fast base to index
+        // Use rolling hash logic here too
+        var hash: usize = 0;
+        for (0..k) |i| {
+            const b = suffix[i];
+            const idx: usize = switch (b) {
+                'A', 'a' => 0,
+                'C', 'c' => 1,
+                'G', 'g' => 2,
+                'T', 't' => 3,
+                else => 0,
+            };
+            hash = (hash << 2) | idx;
+        }
+        self.counts[hash & 0xFFFF] += 1; // 4^8 = 65536
+        self.total_suffix_kmers += 1;
+
+        for (k..self.suffix_length) |i| {
+            const b = suffix[i];
+            const idx: usize = switch (b) {
+                'A', 'a' => 0,
+                'C', 'c' => 1,
+                'G', 'g' => 2,
+                'T', 't' => 3,
+                else => 0,
+            };
+            hash = ((hash << 2) | idx) & 0xFFFF;
+            self.counts[hash] += 1;
+            self.total_suffix_kmers += 1;
         }
 
         return true;
@@ -81,7 +85,6 @@ pub const AdapterDetectionStage = struct {
         
         if (self.total_suffix_kmers == 0) return;
 
-        // Find top k-mer
         var max_count: u64 = 0;
         var max_idx: usize = 0;
         for (self.counts, 0..) |count, idx| {
@@ -91,21 +94,8 @@ pub const AdapterDetectionStage = struct {
             }
         }
 
-        if (max_count > (self.total_suffix_kmers / 10)) { // 10% threshold
-            writer.print("  Potential adapter detected! Most frequent suffix k-mer (count={d}): ", .{max_count}) catch {};
-            var i: usize = 0;
-            const idx_copy = max_idx;
-            var kmer_buf: [8]u8 = undefined;
-            while (i < 8) : (i += 1) {
-                const b = @as(u2, @truncate(idx_copy >> @as(u6, @intCast(2 * (7 - i)))));
-                kmer_buf[i] = switch (b) {
-                    0 => 'A',
-                    1 => 'C',
-                    2 => 'G',
-                    3 => 'T',
-                };
-            }
-            writer.print("{s}\n", .{kmer_buf}) catch {};
+        if (max_count > (self.total_suffix_kmers / 10)) {
+            writer.print("  Potential adapter detected! Most frequent suffix k-mer (count={d})\n", .{max_count}) catch {};
         } else {
             writer.print("  No frequent adapter k-mer detected.\n", .{}) catch {};
         }

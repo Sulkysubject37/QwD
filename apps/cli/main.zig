@@ -202,10 +202,17 @@ pub fn main() !void {
     const file = try std.fs.cwd().openFile(file_path, .{});
     defer file.close();
 
-    var buffered_reader = std.io.bufferedReader(file.reader());
-    const reader = buffered_reader.reader().any();
-
-    var parser = try parser_mod.FastqParser.init(allocator, reader, 10 * 1024 * 1024);
+    // Use mmap for extreme performance if it's a regular file
+    var parser = if (file.getEndPos() catch null) |size| blk: {
+        if (size > 0) {
+            const br = try @import("block_reader").BlockReader.initMmap(file);
+            break :blk parser_mod.FastqParser{
+                .br = br,
+                .allocator = allocator,
+            };
+        }
+        break :blk try parser_mod.FastqParser.init(allocator, file.reader().any(), 10 * 1024 * 1024);
+    } else try parser_mod.FastqParser.init(allocator, file.reader().any(), 10 * 1024 * 1024);
     defer parser.deinit();
 
     // Use BatchBuilder for multicore throughput architecture (Phase R)
