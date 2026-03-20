@@ -94,10 +94,10 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libcurl4-openssl-dev libssl-dev libxml2-dev
+          sudo apt-get install -y libcurl4-openssl-dev libssl-dev libxml2-dev r-cran-jsonlite
 
-      - name: Install R packages
-        if: matrix.os != 'windows-latest'
+      - name: Install R packages (macOS)
+        if: matrix.os == 'macos-latest'
         run: |
           Rscript -e "install.packages(c('jsonlite', 'rcmdcheck'), repos='https://cloud.r-project.org')"
 
