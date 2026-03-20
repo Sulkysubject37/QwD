@@ -49,7 +49,7 @@ pub const AdapterDetectionStage = struct {
         return true;
     }
 
-    pub fn processBitplanes(ptr: *anyopaque, bp: *const @import("bitplanes").Bitplanes, block: *const @import("fastq_block").FastqColumnBlock) !bool {
+    pub fn processBitplanes(ptr: *anyopaque, bp: *const @import("bitplanes").BitplaneCore, block: *const @import("fastq_block").FastqColumnBlock) !bool {
         _ = bp;
         return processBlock(ptr, block);
     }

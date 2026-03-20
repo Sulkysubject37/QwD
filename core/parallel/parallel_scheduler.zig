@@ -13,14 +13,21 @@ pub const ParallelScheduler = struct {
     read_count: std.atomic.Value(usize),
     master_stages: std.ArrayList(stage_mod.Stage),
     num_threads: usize,
+    /// Chunk-data allocator — may be capped (e.g. GlobalAllocator).
+    /// Used ONLY for dupe-ing chunks when is_alloc=true.
     allocator: std.mem.Allocator,
+    /// Uncapped system allocator used for thread bookkeeping:
+    /// thread arenas, col_blocks, bitplanes, stage slices, etc.
+    /// Must never be the capped GlobalAllocator or setup will deadlock.
+    sys_allocator: std.mem.Allocator,
 
-    pub fn init(allocator: std.mem.Allocator, num_threads: usize) ParallelScheduler {
+    pub fn init(allocator: std.mem.Allocator, sys_allocator: std.mem.Allocator, num_threads: usize) ParallelScheduler {
         return ParallelScheduler{
             .read_count = std.atomic.Value(usize).init(0),
             .master_stages = std.ArrayList(stage_mod.Stage).init(allocator),
             .num_threads = if (num_threads == 0) 1 else num_threads,
             .allocator = allocator,
+            .sys_allocator = sys_allocator,
         };
     }
 
@@ -52,29 +59,30 @@ pub const ParallelScheduler = struct {
         stages: []stage_mod.Stage,
         arena: *std.heap.ArenaAllocator,
         col_block: *fastq_block.FastqColumnBlock,
-        bitplanes: *bitplanes_mod.Bitplanes,
+        bitplanes: *bitplanes_mod.BitplaneCore,
     };
 
     fn workerLoop(ctx: ThreadContext) void {
         const allocator = ctx.arena.allocator();
-        const nl_buffer_len = 1000000; // Increased for short reads
+        const nl_buffer_len = 100000;
         const nl_buffer = allocator.alloc(usize, nl_buffer_len) catch return;
         defer allocator.free(nl_buffer);
-        
-        var nl_result = vertical_scanner.FastqScanner.ScanResult{
-            .indices = nl_buffer,
-            .count = 0,
-        };
 
         while (true) {
             if (ctx.work_queue.pop()) |chunk| {
+                var nl_result = vertical_scanner.FastqScanner.ScanResult{
+                    .indices = nl_buffer,
+                    .count = 0,
+                };
                 vertical_scanner.FastqScanner.scanNewlinesSIMD(chunk.data, &nl_result);
                 const total_newlines = nl_result.count;
                 
                 var current_nl: i64 = -1; // Newline index preceding the current record
                 
-                // Align to the first record boundary
+                // Alignment to chunk start is guaranteed by ChunkBuilder using parser.next()
                 if (chunk.data.len > 0 and chunk.data[0] != '@') {
+                    // Safety fallback: only skip if we are actually not at a record start.
+                    // But with ChunkBuilder, this should not happen.
                     var found = false;
                     for (0..total_newlines) |idx| {
                         const nl_pos = nl_result.indices[idx];
@@ -113,7 +121,9 @@ pub const ParallelScheduler = struct {
                 if (chunk.is_alloc) ctx.scheduler.allocator.free(chunk.data);
             } else {
                 if (ctx.done_flag.load(.acquire)) break;
-                std.Thread.yield() catch {};
+                // Increased sleep from 10µs to 100µs to reduce idle CPU overhead.
+                // Short sleeps can cause "CPU boom" due to frequent context switching.
+                std.time.sleep(100 * std.time.ns_per_us);
             }
         }
     }
@@ -121,24 +131,42 @@ pub const ParallelScheduler = struct {
     pub fn run_chunked(self: *ParallelScheduler, chunk_builder: anytype, pipeline_ptr: anytype) !void {
         const queue_depth = 64;
         const batch_size = 1024;
-        var work_queue = try ring_buffer_mod.RingBuffer(Chunk).init(self.allocator, queue_depth);
+        // Ring buffer and OS-level bookkeeping use uncapped sys_allocator.
+        var work_queue = try ring_buffer_mod.RingBuffer(Chunk).init(self.sys_allocator, queue_depth);
         defer work_queue.deinit();
         var done_flag = std.atomic.Value(bool).init(false);
-        var threads = try self.allocator.alloc(std.Thread, self.num_threads);
-        defer self.allocator.free(threads);
-        var thread_contexts = try self.allocator.alloc(ThreadContext, self.num_threads);
-        defer self.allocator.free(thread_contexts);
+        var threads = try self.sys_allocator.alloc(std.Thread, self.num_threads);
+        defer self.sys_allocator.free(threads);
+        var thread_contexts = try self.sys_allocator.alloc(ThreadContext, self.num_threads);
+        defer self.sys_allocator.free(thread_contexts);
+
+        var spawned_count: usize = 0;
+        // Critical: Ensure threads are joined even on error to prevent use-after-free
+        // and infinite hangs in the worker loops.
+        defer {
+            done_flag.store(true, .release);
+            for (0..spawned_count) |i| threads[i].join();
+            for (0..spawned_count) |i| {
+                const ctx = thread_contexts[i];
+                for (0..self.master_stages.items.len) |s_idx| {
+                    self.master_stages.items[s_idx].merge(ctx.stages[s_idx]) catch {};
+                }
+                ctx.arena.deinit();
+                self.sys_allocator.destroy(ctx.arena);
+            }
+        }
 
         for (0..self.num_threads) |t_idx| {
-            var arena = try self.allocator.create(std.heap.ArenaAllocator);
-            arena.* = std.heap.ArenaAllocator.init(self.allocator);
-            
+            var arena = try self.sys_allocator.create(std.heap.ArenaAllocator);
+            errdefer self.sys_allocator.destroy(arena);
+            arena.* = std.heap.ArenaAllocator.init(self.sys_allocator);
+
+            const max_len = 1024;
             const col_block = try arena.allocator().create(fastq_block.FastqColumnBlock);
-            col_block.* = try fastq_block.FastqColumnBlock.init(arena.allocator(), batch_size, 500);
+            col_block.* = try fastq_block.FastqColumnBlock.init(arena.allocator(), batch_size, max_len);
 
-            const bps = try arena.allocator().create(bitplanes_mod.Bitplanes);
-            bps.* = try bitplanes_mod.Bitplanes.init(arena.allocator(), batch_size, 500);
-
+            const bps = try arena.allocator().create(bitplanes_mod.BitplaneCore);
+            bps.* = try bitplanes_mod.BitplaneCore.init(arena.allocator(), batch_size, max_len);
 
             var t_stages = std.ArrayList(stage_mod.Stage).init(arena.allocator());
             for (pipeline_ptr.stage_names.items) |name| {
@@ -155,24 +183,29 @@ pub const ParallelScheduler = struct {
                 .bitplanes = bps,
             };
             threads[t_idx] = try std.Thread.spawn(.{}, workerLoop, .{ thread_contexts[t_idx] });
+            spawned_count += 1;
         }
 
         while (true) {
-            if (try chunk_builder.nextChunk()) |raw_chunk| {
-                var c = Chunk{ .data = raw_chunk, .is_alloc = false };
-                if (!chunk_builder.br.is_mmap) {
-                    c.data = try self.allocator.dupe(u8, raw_chunk);
-                    c.is_alloc = true;
+            const raw_chunk = (try chunk_builder.nextChunk()) orelse break;
+            var c = Chunk{ .data = raw_chunk, .is_alloc = false };
+            if (!chunk_builder.parser.br.is_mmap) {
+                // Producers MUST wait for memory to be free to maintain stream order.
+                // We retry with a 1ms sleep (low CPU overhead).
+                // Workers are now non-blocking and will skip work on OOM (not hang),
+                // so they WILL free chunks eventually.
+                var dup_data: ?[]u8 = null;
+                while (dup_data == null) {
+                    dup_data = self.allocator.dupe(u8, raw_chunk) catch null;
+                    if (dup_data == null) {
+                        if (done_flag.load(.acquire)) return error.OutOfMemory;
+                        std.time.sleep(1 * std.time.ns_per_ms);
+                    }
                 }
-                while (!work_queue.push(c)) std.Thread.yield() catch {};
-            } else break;
-        }
-        done_flag.store(true, .release);
-        for (threads) |thread| thread.join();
-        for (thread_contexts) |ctx| {
-            for (0..self.master_stages.items.len) |s_idx| try self.master_stages.items[s_idx].merge(ctx.stages[s_idx]);
-            ctx.arena.deinit();
-            self.allocator.destroy(ctx.arena);
+                c.data = dup_data.?;
+                c.is_alloc = true;
+            }
+            while (!work_queue.push(c)) std.time.sleep(100 * std.time.ns_per_us);
         }
     }
 

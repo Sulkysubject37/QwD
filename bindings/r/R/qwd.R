@@ -17,7 +17,13 @@ qwd_qc <- function(fastq_path) {
   
   dyn.load(path)
   sym <- getNativeSymbolInfo("qwd_fastq_qc_r")
-  res <- .C(sym, path = as.character(fastq_path), result = character(1))
-  # Note: This is a simplified call pattern for R
-  return(jsonlite::fromJSON(res$result))
+  
+  # Allocate 2MB buffer managed by R's garbage collector
+  max_len <- 2 * 1024 * 1024
+  res_buf <- raw(max_len)
+  
+  res <- .C(sym, path = as.character(fastq_path), out = res_buf, max_len = as.integer(max_len))
+  json_str <- rawToChar(res$out[res$out != as.raw(0)])
+  
+  return(jsonlite::fromJSON(json_str))
 }

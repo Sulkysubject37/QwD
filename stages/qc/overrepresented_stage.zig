@@ -1,18 +1,19 @@
 const std = @import("std");
 const parser = @import("parser");
 const stage_mod = @import("stage");
+const mode_mod = @import("mode");
 
 pub const OverrepresentedStage = struct {
     map: std.StringHashMap(u64),
     allocator: std.mem.Allocator,
     total_reads: usize = 0,
-    fast_mode: bool = false,
+    mode: mode_mod.Mode = .EXACT,
 
-    pub fn init(allocator: std.mem.Allocator, fast_mode: bool) OverrepresentedStage {
+    pub fn init(allocator: std.mem.Allocator, is_fast: bool) OverrepresentedStage {
         return OverrepresentedStage{
             .map = std.StringHashMap(u64).init(allocator),
             .allocator = allocator,
-            .fast_mode = fast_mode,
+            .mode = if (is_fast) .FAST else .EXACT,
         };
     }
 
@@ -28,15 +29,24 @@ pub const OverrepresentedStage = struct {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         self.total_reads += 1;
         
-        if (self.fast_mode and self.total_reads > 50_000) return true;
+        if (self.mode == .FAST and self.total_reads > 50_000) return true;
 
-        if (self.map.count() < 100000) {
-            const v = try self.map.getOrPut(read.seq);
-            if (!v.found_existing) {
-                v.key_ptr.* = try self.allocator.dupe(u8, read.seq);
-                v.value_ptr.* = 1;
+        if (self.mode == .EXACT or self.map.count() < 100000) {
+            if (self.map.getPtr(read.seq)) |v| {
+                v.* += 1;
             } else {
-                v.value_ptr.* += 1;
+                const duped_seq = try self.allocator.dupe(u8, read.seq);
+                errdefer self.allocator.free(duped_seq);
+                const v = self.map.getOrPut(duped_seq) catch {
+                    self.allocator.free(duped_seq);
+                    return true; // Skip on OOM
+                };
+                if (v.found_existing) {
+                    self.allocator.free(duped_seq);
+                    v.value_ptr.* += 1;
+                } else {
+                    v.value_ptr.* = 1;
+                }
             }
         } else {
             if (self.map.getPtr(read.seq)) |v| {
@@ -46,7 +56,7 @@ pub const OverrepresentedStage = struct {
         return true;
     }
 
-    pub fn processBitplanes(ptr: *anyopaque, bp: *const @import("bitplanes").Bitplanes, block: *const @import("fastq_block").FastqColumnBlock) !bool {
+    pub fn processBitplanes(ptr: *anyopaque, bp: *const @import("bitplanes").BitplaneCore, block: *const @import("fastq_block").FastqColumnBlock) !bool {
         _ = bp;
         return processBlock(ptr, block);
     }
@@ -57,19 +67,27 @@ pub const OverrepresentedStage = struct {
 
         for (0..block.read_count) |read_idx| {
             self.total_reads += 1;
-            if (self.fast_mode and self.total_reads > 50_000) continue;
+            if (self.mode == .FAST and self.total_reads > 50_000) continue;
 
             const len = block.read_lengths[read_idx];
             for (0..len) |i| seq_buf[i] = block.bases[i][read_idx];
             const seq = seq_buf[0..len];
 
-            if (self.map.count() < 100000) {
-                const v = try self.map.getOrPut(seq);
-                if (!v.found_existing) {
-                    v.key_ptr.* = try self.allocator.dupe(u8, seq);
-                    v.value_ptr.* = 1;
+            if (self.mode == .EXACT or self.map.count() < 100000) {
+                if (self.map.getPtr(seq)) |v| {
+                    v.* += 1;
                 } else {
-                    v.value_ptr.* += 1;
+                    const duped_seq = self.allocator.dupe(u8, seq) catch continue;
+                    const v = self.map.getOrPut(duped_seq) catch {
+                        self.allocator.free(duped_seq);
+                        continue;
+                    };
+                    if (v.found_existing) {
+                        self.allocator.free(duped_seq);
+                        v.value_ptr.* += 1;
+                    } else {
+                        v.value_ptr.* = 1;
+                    }
                 }
             } else {
                 if (self.map.getPtr(seq)) |v| {
@@ -84,15 +102,23 @@ pub const OverrepresentedStage = struct {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         for (reads) |read| {
             self.total_reads += 1;
-            if (self.fast_mode and self.total_reads > 50_000) continue;
+            if (self.mode == .FAST and self.total_reads > 50_000) continue;
 
-            if (self.map.count() < 100000) {
-                const v = try self.map.getOrPut(read.seq);
-                if (!v.found_existing) {
-                    v.key_ptr.* = try self.allocator.dupe(u8, read.seq);
-                    v.value_ptr.* = 1;
+            if (self.mode == .EXACT or self.map.count() < 100000) {
+                if (self.map.getPtr(read.seq)) |v| {
+                    v.* += 1;
                 } else {
-                    v.value_ptr.* += 1;
+                    const duped_seq = self.allocator.dupe(u8, read.seq) catch continue;
+                    const v = self.map.getOrPut(duped_seq) catch {
+                        self.allocator.free(duped_seq);
+                        continue;
+                    };
+                    if (v.found_existing) {
+                        self.allocator.free(duped_seq);
+                        v.value_ptr.* += 1;
+                    } else {
+                        v.value_ptr.* = 1;
+                    }
                 }
             } else {
                 if (self.map.getPtr(read.seq)) |v| {
@@ -114,12 +140,20 @@ pub const OverrepresentedStage = struct {
         
         var it = other.map.iterator();
         while (it.next()) |entry| {
-            const res = try self.map.getOrPut(entry.key_ptr.*);
-            if (!res.found_existing) {
-                res.key_ptr.* = try self.allocator.dupe(u8, entry.key_ptr.*);
-                res.value_ptr.* = entry.value_ptr.*;
+            if (self.map.getPtr(entry.key_ptr.*)) |v| {
+                v.* += entry.value_ptr.*;
             } else {
-                res.value_ptr.* += entry.value_ptr.*;
+                const duped_seq = self.allocator.dupe(u8, entry.key_ptr.*) catch continue;
+                const v = self.map.getOrPut(duped_seq) catch {
+                    self.allocator.free(duped_seq);
+                    continue;
+                };
+                if (v.found_existing) {
+                    self.allocator.free(duped_seq);
+                    v.value_ptr.* += entry.value_ptr.*;
+                } else {
+                    v.value_ptr.* = entry.value_ptr.*;
+                }
             }
         }
     }

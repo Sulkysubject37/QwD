@@ -29,7 +29,7 @@ pub fn main() !void {
     const t_single = timer.read();
 
     // Multi-core (using ParallelScheduler framework)
-    var p_scheduler = parallel_scheduler_mod.ParallelScheduler.init(allocator, 4);
+    var p_scheduler = parallel_scheduler_mod.ParallelScheduler.init(allocator, allocator, 4);
     defer p_scheduler.deinit();
     
     timer.reset();

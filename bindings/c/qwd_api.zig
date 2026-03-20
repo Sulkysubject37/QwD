@@ -85,14 +85,30 @@ pub export fn qwd_free_string(ptr: [*:0]const u8) void {
     allocator.free(ptr[0..len + 1]);
 }
 
-pub export fn qwd_fastq_qc_r(path: [*c]const [*c]const u8, out: [*c][*c]const u8) void {
+pub export fn qwd_fastq_qc_r(path: [*c]const [*c]const u8, out: [*c]u8, max_len: [*c]const c_int) void {
     const p = path[0];
     const res = qwd_fastq_qc(p);
-    out[0] = res;
+    defer qwd_free_string(res);
+
+    const len = std.mem.indexOfSentinel(u8, 0, res);
+    const m_len: usize = @intCast(max_len[0]);
+    if (m_len > 0) {
+        const copy_len = @min(len, m_len - 1);
+        @memcpy(out[0..copy_len], res[0..copy_len]);
+        out[copy_len] = 0;
+    }
 }
 
-pub export fn qwd_bam_stats_r(path: [*c]const [*c]const u8, out: [*c][*c]const u8) void {
+pub export fn qwd_bam_stats_r(path: [*c]const [*c]const u8, out: [*c]u8, max_len: [*c]const c_int) void {
     const p = path[0];
     const res = qwd_bam_stats(p);
-    out[0] = res;
+    defer qwd_free_string(res);
+
+    const len = std.mem.indexOfSentinel(u8, 0, res);
+    const m_len: usize = @intCast(max_len[0]);
+    if (m_len > 0) {
+        const copy_len = @min(len, m_len - 1);
+        @memcpy(out[0..copy_len], res[0..copy_len]);
+        out[copy_len] = 0;
+    }
 }

@@ -10,7 +10,7 @@ pub const Stage = struct {
         process: *const fn (ptr: *anyopaque, read: *const parser.Read) anyerror!bool,
         processRawBatch: ?*const fn (ptr: *anyopaque, reads: []const parser.Read) anyerror!bool = null,
         processBlock: ?*const fn (ptr: *anyopaque, block: *const @import("fastq_block").FastqColumnBlock) anyerror!bool = null,
-        processBitplanes: ?*const fn (ptr: *anyopaque, bitplanes: *const @import("bitplanes").Bitplanes, block: *const @import("fastq_block").FastqColumnBlock) anyerror!bool = null,
+        processBitplanes: ?*const fn (ptr: *anyopaque, bitplanes: *const @import("bitplanes").BitplaneCore, block: *const @import("fastq_block").FastqColumnBlock) anyerror!bool = null,
         finalize: *const fn (ptr: *anyopaque) anyerror!void,
         report: *const fn (ptr: *anyopaque, writer: std.io.AnyWriter) void,
         merge: ?*const fn (ptr: *anyopaque, other: *anyopaque) anyerror!void = null,
@@ -42,7 +42,7 @@ pub const Stage = struct {
         }
     }
 
-    pub fn processBitplanes(self: Stage, bitplanes: *const @import("bitplanes").Bitplanes, block: *const @import("fastq_block").FastqColumnBlock) !bool {
+    pub fn processBitplanes(self: Stage, bitplanes: *const @import("bitplanes").BitplaneCore, block: *const @import("fastq_block").FastqColumnBlock) !bool {
         if (self.vtable.processBitplanes) |pb| {
             return pb(self.ptr, bitplanes, block);
         } else {

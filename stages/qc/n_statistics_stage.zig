@@ -22,7 +22,7 @@ pub const NStatisticsStage = struct {
         return true;
     }
 
-    pub fn processBitplanes(ptr: *anyopaque, bitplanes: *const @import("bitplanes").Bitplanes, block: *const @import("fastq_block").FastqColumnBlock) anyerror!bool {
+    pub fn processBitplanes(ptr: *anyopaque, bitplanes: *const @import("bitplanes").BitplaneCore, block: *const @import("fastq_block").FastqColumnBlock) anyerror!bool {
         _ = bitplanes;
         return processBlock(ptr, block);
     }

@@ -13,6 +13,7 @@ const chunk_builder = @import("chunk_builder");
 const read_graph = @import("read_graph");
 const prefetch = @import("prefetch");
 const pipeline_config = @import("pipeline_config");
+const mode_mod = @import("mode");
 
 pub const Pipeline = struct {
     arena: std.heap.ArenaAllocator,
@@ -20,12 +21,14 @@ pub const Pipeline = struct {
     parallel_scheduler: ?parallel_scheduler.ParallelScheduler = null,
     stage_names: std.ArrayList([]const u8),
     config: ?pipeline_config.PipelineConfig = null,
+    mode: mode_mod.Mode = .EXACT,
 
     pub fn init(allocator: std.mem.Allocator, config: ?pipeline_config.PipelineConfig) Pipeline {
         return Pipeline{
             .arena = std.heap.ArenaAllocator.init(allocator),
             .stage_names = std.ArrayList([]const u8).init(allocator),
             .config = config,
+            .mode = if (config) |c| c.mode else .EXACT,
         };
     }
 
@@ -41,23 +44,25 @@ pub const Pipeline = struct {
     }
 
     pub fn setupSchedulers(self: *Pipeline, num_threads: usize) !void {
-        if (num_threads > 1) {
-            self.parallel_scheduler = parallel_scheduler.ParallelScheduler.init(self.arena.allocator(), num_threads);
+        if (num_threads >= 1) {
+            // Pass arena.child_allocator as sys_allocator so thread-local arenas
+            // and bookkeeping use the raw, uncapped allocator (GPA), not the
+            // GlobalAllocator with its memory cap. This prevents setup deadlock.
+            self.parallel_scheduler = parallel_scheduler.ParallelScheduler.init(
+                self.arena.allocator(),
+                self.arena.child_allocator,
+                num_threads,
+            );
             for (self.stage_names.items) |name| {
                 const stage = try self.createStageInstance(self.arena.allocator(), name);
                 try self.parallel_scheduler.?.registerStage(stage);
             }
         } else {
-            self.scheduler = scheduler_mod.Scheduler.init(self.arena.allocator());
-            for (self.stage_names.items) |name| {
-                const stage = try self.createStageInstance(self.arena.allocator(), name);
-                try self.scheduler.?.registerStage(stage);
-            }
+            @panic("num_threads must be at least 1");
         }
     }
 
     pub fn createStageInstance(self: *Pipeline, allocator: std.mem.Allocator, name: []const u8) !stage_interface.Stage {
-        _ = self;
         if (std.mem.eql(u8, name, "qc")) {
             const qc = try allocator.create(@import("qc").QcStage);
             qc.* = @import("qc").QcStage{};
@@ -100,11 +105,11 @@ pub const Pipeline = struct {
             return stage.stage();
         } else if (std.mem.eql(u8, name, "overrepresented")) {
             const stage = try allocator.create(@import("overrepresented").OverrepresentedStage);
-            stage.* = @import("overrepresented").OverrepresentedStage.init(allocator, false);
+            stage.* = @import("overrepresented").OverrepresentedStage.init(allocator, self.mode == .FAST);
             return stage.stage();
         } else if (std.mem.eql(u8, name, "duplication")) {
             const stage = try allocator.create(@import("duplication").DuplicationStage);
-            stage.* = @import("duplication").DuplicationStage.init(allocator, false);
+            stage.* = @import("duplication").DuplicationStage.init(allocator, self.mode == .FAST);
             return stage.stage();
         } else if (std.mem.eql(u8, name, "adapter-detect")) {
             const stage = try allocator.create(@import("qc_adapter_detect").AdapterDetectionStage);

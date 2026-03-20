@@ -24,7 +24,7 @@ pub const GcContentStage = struct {
         return true;
     }
 
-    pub fn processBitplanes(ptr: *anyopaque, bp: *const @import("bitplanes").Bitplanes, block: *const @import("fastq_block").FastqColumnBlock) !bool {
+    pub fn processBitplanes(ptr: *anyopaque, bp: *const @import("bitplanes").BitplaneCore, block: *const @import("fastq_block").FastqColumnBlock) !bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         const res = bp.computeFused(block.read_count);
         self.gc_bases += res.gc_count;
@@ -34,7 +34,7 @@ pub const GcContentStage = struct {
 
     pub fn processBlock(ptr: *anyopaque, block: *const @import("fastq_block").FastqColumnBlock) !bool {
         const bitplanes = @import("bitplanes");
-        var bp = try bitplanes.Bitplanes.init(block.allocator, block.capacity, block.max_read_len);
+        var bp = try bitplanes.BitplaneCore.init(block.allocator, block.capacity, block.max_read_len);
         defer bp.deinit();
         bp.fromColumnBlock(block);
         return processBitplanes(ptr, &bp, block);

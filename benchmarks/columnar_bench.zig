@@ -38,7 +38,7 @@ pub fn main() !void {
     std.debug.print("Column GC (SIMD): {d} ns\n", .{gc_time / 1000});
 
     // 2. Bitplane GC Count (Fused)
-    var bp = try bitplanes.Bitplanes.init(allocator, read_count, max_len);
+    var bp = try bitplanes.BitplaneCore.init(allocator, read_count, max_len);
     defer bp.deinit();
     
     timer = try std.time.Timer.start();

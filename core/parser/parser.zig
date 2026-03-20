@@ -88,8 +88,12 @@ pub const FastqParser = struct {
     /// Parses the next FASTQ record from the stream.
     pub fn next(self: *FastqParser, out_buffer: []u8) !?Read {
         // Line 1: @ID
-        const id_line = (try self.readLine(out_buffer)) orelse return null;
-        if (id_line.len == 0 or id_line[0] != '@') return ParserError.InvalidFormat;
+        var id_line: []const u8 = undefined;
+        while (true) {
+            id_line = (try self.readLine(out_buffer)) orelse return null;
+            if (id_line.len > 0) break;
+        }
+        if (id_line[0] != '@') return ParserError.InvalidFormat;
         const id = id_line[1..];
 
         // Line 2: Sequence

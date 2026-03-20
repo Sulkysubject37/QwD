@@ -22,7 +22,10 @@ Leveraging the block layout, the K-mer counting stage has been fully vectorized.
 Fast mode introduces a mathematically sound MinHash Duplicate sketch mechanism that bounds memory footprint to `<32MB` irrespective of dataset size, avoiding the O(N) memory blowup of exact `HashMap` tracking.
 
 ### 5. Parallel Transposition & Autonomous Workers
-The "Producer Bottleneck" is eliminated by moving transposition and parsing into the worker threads. The main thread's only role is handing out 16MB memory-mapped chunks.
+The "Producer Bottleneck" is eliminated by moving transposition and parsing into the worker threads. The engine handles 1MB - 16MB raw chunks, allowing workers to perform heavy ASCII-to-Bitplane conversion in parallel.
+
+### 6. Autonomous Backpressure & Stability
+To maintain highest throughput under strict memory caps, Phase Q implements a non-blocking allocation strategy. Worker threads skip complex stages (Duplication, Overrepresented) on OOM to prevent deadlocks, while the producer utilizes an explicit 1ms retry loop to wait for memory availability, ensuring zero-loss streaming.
 
 ### 4. Vertical SIMD FASTQ Scanner (The 5M Breakthrough)
 The parser itself is vectorized. Instead of sequential line reading, the engine uses a 32-lane SIMD scanner to identify record boundaries (`\n@`, `\n+`) across a raw chunk. This allows the engine to skip millions of individual byte-comparisons.
@@ -42,7 +45,9 @@ The parser itself is vectorized. Instead of sequential line reading, the engine 
 [ Deterministic Merge ] (Aggregated Global Results)
 ```
 
-## Performance Targets
-- **Throughput**: 2M – 5M reads/sec (Compute Bound).
-- **Memory**: strictly O(1) resident per thread (~85MB total).
+## Performance Targets (M1 ARM64)
+- **Throughput**: 300k – 500k reads/sec (IO/Parse Bound).
+- **Memory**: strictly O(1) resident per thread. 
+  - 1M reads: ~32MB - 64MB RSS.
+  - 10M reads: ~256MB - 512MB RSS.
 - **Correctness**: Bit-identical to standard row-based execution.

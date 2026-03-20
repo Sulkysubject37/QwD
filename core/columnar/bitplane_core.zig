@@ -1,6 +1,6 @@
 const std = @import("std");
 
-pub const Bitplanes = struct {
+pub const BitplaneCore = struct {
     plane_a: []u64,
     plane_c: []u64,
     plane_g: []u64,
@@ -12,11 +12,11 @@ pub const Bitplanes = struct {
     u64_per_col: usize,
     allocator: std.mem.Allocator,
 
-    pub fn init(allocator: std.mem.Allocator, capacity: usize, max_read_len: usize) !Bitplanes {
+    pub fn init(allocator: std.mem.Allocator, capacity: usize, max_read_len: usize) !BitplaneCore {
         const u64_per_col = (capacity + 63) / 64;
         const total_u64s = u64_per_col * max_read_len;
         
-        return Bitplanes{
+        return BitplaneCore{
             .plane_a = try allocator.alloc(u64, total_u64s),
             .plane_c = try allocator.alloc(u64, total_u64s),
             .plane_g = try allocator.alloc(u64, total_u64s),
@@ -30,7 +30,7 @@ pub const Bitplanes = struct {
         };
     }
 
-    pub fn deinit(self: *Bitplanes) void {
+    pub fn deinit(self: *BitplaneCore) void {
         self.allocator.free(self.plane_a);
         self.allocator.free(self.plane_c);
         self.allocator.free(self.plane_g);
@@ -39,7 +39,7 @@ pub const Bitplanes = struct {
         self.allocator.free(self.plane_mask);
     }
 
-    pub fn fromColumnBlock(self: *Bitplanes, block: anytype) void {
+    pub fn fromColumnBlock(self: *BitplaneCore, block: anytype) void {
         const count = block.read_count;
         self.clear(count);
         
@@ -109,7 +109,7 @@ pub const Bitplanes = struct {
         }
     }
 
-    pub fn clear(self: *Bitplanes, count: usize) void {
+    pub fn clear(self: *BitplaneCore, count: usize) void {
         const u64_count = (count + 63) / 64;
         for (0..self.max_read_len) |col| {
             const offset = col * self.u64_per_col;
@@ -133,7 +133,7 @@ pub const Bitplanes = struct {
         total_bases: usize,
     };
 
-    pub fn computeFused(self: *const Bitplanes, read_count: usize) FusedResults {
+    pub fn computeFused(self: *const BitplaneCore, read_count: usize) FusedResults {
         var res = FusedResults{ 
             .gc_count = 0, .a_count = 0, .c_count = 0, 
             .g_count = 0, .t_count = 0, .n_count = 0,

@@ -119,10 +119,26 @@ pub const FastqColumnBlock = struct {
                 const seq_end = indices[@intCast(current_nl + 2)];
                 const qual_start = indices[@intCast(current_nl + 3)] + 1;
                 const qual_end = indices[@intCast(current_nl + 4)];
-                
-                b_ptrs[i] = data[seq_start..seq_end];
-                q_ptrs[i] = data[qual_start..qual_end];
-                self.read_lengths[read_idx + i] = @intCast(seq_end - seq_start);
+            
+                const seq_len = @as(i64, @intCast(seq_end)) - @as(i64, @intCast(seq_start));
+                const qual_len = @as(i64, @intCast(qual_end)) - @as(i64, @intCast(qual_start));
+
+                if (seq_len > 0 and qual_len > 0) {
+                    b_ptrs[i] = data[seq_start..seq_end];
+                    q_ptrs[i] = data[qual_start..qual_end];
+                    self.read_lengths[read_idx + i] = @intCast(seq_len);
+                } else {
+                    b_ptrs[i] = &[_]u8{};
+                    q_ptrs[i] = &[_]u8{};
+                    self.read_lengths[read_idx + i] = 0;
+                }
+
+                // Zero out tails for the current 8 reads in the block
+                const biological_len = if (seq_len > 0) @as(usize, @intCast(seq_len)) else 0;
+                for (biological_len..self.max_read_len) |pos| {
+                   self.bases[pos][read_idx + i] = 0;
+                   self.qualities[pos][read_idx + i] = 0;
+                }
             }
             
             var pos: usize = 0;
@@ -166,7 +182,12 @@ pub const FastqColumnBlock = struct {
                 self.bases[pos][read_idx] = seq[pos];
                 self.qualities[pos][read_idx] = qual[pos];
             }
-            self.read_lengths[read_idx] = @intCast(seq_end - seq_start);
+            // Zero out remainder of columns for this read to prevent leakage
+            for (len..self.max_read_len) |pos| {
+                self.bases[pos][read_idx] = 0;
+                self.qualities[pos][read_idx] = 0;
+            }
+            self.read_lengths[read_idx] = @intCast(len);
         }
     }
 };

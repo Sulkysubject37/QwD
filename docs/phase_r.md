@@ -37,4 +37,5 @@ In `--fast` mode, heavy stages are replaced with constant-time bitwise operation
 Ultimate Throughput Flow
 [ mmap File ] → [ Slices (Zero-Copy) ] → [ Workers ] → [ Bloom/LUT Stages ]
 ```
-Throughput Target: **1.1M - 1.5M reads/sec**.
+Throughput Target: **300k - 1M reads/sec** (Hardware Dependent).
+- Goal: Maintain >1.1M reads/sec on multi-node clusters with sustained memory capping.
