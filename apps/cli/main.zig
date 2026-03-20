@@ -33,7 +33,7 @@ pub fn main() !void {
     var perf_mode = false;
     var mem_mb: usize = 16;
     var max_memory_mb: usize = 1024;
-    var output_format: enum { text, json } = .text;
+    var output_format: structured_output.OutputFormat = .text;
 
     var positional_args = std.ArrayList([]const u8).init(allocator);
     defer positional_args.deinit();
@@ -66,6 +66,8 @@ pub fn main() !void {
             if (i < args.len) max_memory_mb = try std.fmt.parseInt(usize, args[i], 10);
         } else if (std.mem.eql(u8, args[i], "--json")) {
             output_format = .json;
+        } else if (std.mem.eql(u8, args[i], "--ndjson")) {
+            output_format = .ndjson;
         } else {
             try positional_args.append(args[i]);
         }
@@ -188,14 +190,21 @@ pub fn main() !void {
 
     try pipeline.finalize();
 
-    if (output_format == .json) {
-        try structured_output.writeJsonReport(pipeline.parallel_scheduler.?, stdout);
-        try stdout.writeAll("\n");
-    } else {
-        try stdout.print("\n--- QwD Execution Mode: {s} ---\n", .{@tagName(mode)});
-        pipeline.report(stdout);
-        if (perf_mode) {
-            perf.report(stdout);
-        }
+    switch (output_format) {
+        .json => {
+            try structured_output.writeJsonReport(pipeline.parallel_scheduler.?, stdout);
+            try stdout.writeAll("\n");
+        },
+        .ndjson => {
+            const count = pipeline.parallel_scheduler.?.read_count.load(.monotonic);
+            try structured_output.writeNdjsonProcess(count, stdout);
+        },
+        .text => {
+            try stdout.print("\n--- QwD Execution Mode: {s} ---\n", .{@tagName(mode)});
+            pipeline.report(stdout);
+            if (perf_mode) {
+                perf.report(stdout);
+            }
+        },
     }
 }

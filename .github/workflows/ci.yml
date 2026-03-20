@@ -90,16 +90,15 @@ jobs:
         with:
           use-public-rspm: true
 
-      - name: Install R system dependencies (Ubuntu)
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libcurl4-openssl-dev libssl-dev libxml2-dev r-cran-jsonlite
+      - name: Setup pak
+        if: matrix.os != 'windows-latest'
+        uses: r-lib/actions/setup-pak@v1
 
-      - name: Install R packages (macOS)
-        if: matrix.os == 'macos-latest'
+      - name: Install R dependencies
+        if: matrix.os != 'windows-latest'
         run: |
-          Rscript -e "install.packages(c('jsonlite', 'rcmdcheck'), repos='https://cloud.r-project.org')"
+          Rscript -e 'pak::local_install_dev_deps("bindings/r")'
+          Rscript -e 'pak::pkg_install(c("jsonlite", "rcmdcheck"))'
 
       - name: R Package Build and Check
         if: matrix.os != 'windows-latest'
