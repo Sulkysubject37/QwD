@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 pub const BlockReader = struct {
     reader: ?std.io.AnyReader = null,
@@ -17,7 +18,12 @@ pub const BlockReader = struct {
         };
     }
 
-    pub fn initMmap(file: std.fs.File) !BlockReader {
+    pub fn initMmap(allocator: std.mem.Allocator, file: std.fs.File) !BlockReader {
+        if (builtin.os.tag == .windows) {
+            // Fallback for Windows where posix mmap is not natively available via target libc
+            return BlockReader.init(allocator, file.reader().any(), 1024 * 1024);
+        }
+
         const size_u64 = try file.getEndPos();
         if (size_u64 == 0) return error.EmptyFile;
         const size = std.math.cast(usize, size_u64) orelse return error.FileTooLarge;
@@ -41,9 +47,11 @@ pub const BlockReader = struct {
 
     pub fn deinit(self: *BlockReader, allocator: std.mem.Allocator) void {
         if (self.is_mmap) {
-            const ptr = self.mmap_handle.?;
-            const aligned_ptr = @as([]align(std.mem.page_size) const u8, @alignCast(ptr));
-            std.posix.munmap(aligned_ptr);
+            if (builtin.os.tag != .windows) {
+                const ptr = self.mmap_handle.?;
+                const aligned_ptr = @as([]align(std.mem.page_size) const u8, @alignCast(ptr));
+                std.posix.munmap(aligned_ptr);
+            }
         } else {
             allocator.free(self.buffer);
         }

@@ -1,32 +1,28 @@
 const std = @import("std");
-const block_reader = @import("block_reader");
-const newline_scan = @import("newline_scan");
+const block_reader = @import("../io/block_reader.zig");
 
-/// A single sequencing read.
-/// All fields are slices referencing buffer memory to avoid copying.
 pub const Read = struct {
-    id: []const u8,
-    seq: []const u8,
-    qual: []const u8,
-
-    /// Validates that the sequence and quality strings have the same length.
-    pub fn validate(self: Read) bool {
-        return self.seq.len == self.qual.len;
+    header: []const u8,
+    sequence: []const u8,
+    qualities: []const u8,
+    
+    pub fn isValid(self: *const Read) bool {
+        return self.sequence.len == self.qualities.len and self.sequence.len > 0;
     }
-};
-
-pub const ParserError = error{
-    InvalidFormat,
-    IncompleteRecord,
-    MismatchedSequenceQuality,
-    StreamError,
-    BufferTooSmall,
 };
 
 pub const FastqParser = struct {
     br: block_reader.BlockReader,
     allocator: std.mem.Allocator,
-    eof: bool = false,
+    
+    // State machine for parsing
+    state: enum { Header, Sequence, Plus, Quality } = .Header,
+    current_read: Read = undefined,
+    
+    // Buffers for current entry to handle items that span blocks
+    header_buf: std.ArrayListUnmanaged(u8) = .{},
+    seq_buf: std.ArrayListUnmanaged(u8) = .{},
+    qual_buf: std.ArrayListUnmanaged(u8) = .{},
 
     pub fn init(allocator: std.mem.Allocator, reader: std.io.AnyReader, buffer_size: usize) !FastqParser {
         return FastqParser{
@@ -37,83 +33,115 @@ pub const FastqParser = struct {
 
     pub fn initMmap(allocator: std.mem.Allocator, file: std.fs.File) !FastqParser {
         return FastqParser{
-            .br = try block_reader.BlockReader.initMmap(file),
+            .br = try block_reader.BlockReader.initMmap(allocator, file),
             .allocator = allocator,
         };
     }
 
     pub fn deinit(self: *FastqParser) void {
         self.br.deinit(self.allocator);
+        self.header_buf.deinit(self.allocator);
+        self.seq_buf.deinit(self.allocator);
+        self.qual_buf.deinit(self.allocator);
     }
 
-    fn readLine(self: *FastqParser, out_buffer: []u8) !?[]u8 {
-        _ = out_buffer; // We are reading directly from the block buffer now
+    pub fn next(self: *FastqParser, scratch: []u8) !?Read {
+        var scratch_pos: usize = 0;
         
         while (true) {
-            // Search for newline in remaining buffer
-            if (newline_scan.indexOfNewline(self.br.buffer[self.br.pos..self.br.end])) |nl_idx| {
-                const line = self.br.buffer[self.br.pos .. self.br.pos + nl_idx];
-                self.br.pos += nl_idx + 1; // skip newline
-                
-                var trimmed = line;
-                if (trimmed.len > 0 and trimmed[trimmed.len - 1] == '\r') {
-                    trimmed = trimmed[0 .. trimmed.len - 1];
+            if (self.br.pos >= self.br.end) {
+                const read_len = try self.br.fill();
+                if (read_len == 0) {
+                    if (self.br.pos >= self.br.end) return null; // EOF
                 }
-                return trimmed;
             }
-            
-            if (self.eof) {
-                // If EOF and some data remains, return it as the last line
-                if (self.br.pos < self.br.end) {
-                    const line = self.br.buffer[self.br.pos..self.br.end];
-                    self.br.pos = self.br.end;
-                    return line;
+
+            const chunk = self.br.buffer[self.br.pos..self.br.end];
+            if (chunk.len == 0) return null;
+
+            var i: usize = 0;
+            switch (self.state) {
+                .Header => {
+                    if (chunk[i] != '@') {
+                        // Skip until we find a header
+                        while (i < chunk.len and chunk[i] != '@') i += 1;
+                        if (i == chunk.len) {
+                            self.br.pos += i;
+                            continue;
+                        }
+                    }
+                    
+                    const start = i;
+                    while (i < chunk.len and chunk[i] != '\n') i += 1;
+                    
+                    if (i < chunk.len) { // Found newline
+                        const len = i - start;
+                        if (scratch_pos + len > scratch.len) return error.BufferTooSmall;
+                        std.mem.copyForwards(u8, scratch[scratch_pos..], chunk[start..i]);
+                        // Trim trailing \r if present (Windows line endings)
+                        var actual_len = len;
+                        if (actual_len > 0 and scratch[scratch_pos + actual_len - 1] == '\r') {
+                            actual_len -= 1;
+                        }
+                        self.current_read.header = scratch[scratch_pos..scratch_pos + actual_len];
+                        scratch_pos += actual_len;
+                        self.state = .Sequence;
+                        i += 1; // Skip newline
+                    } else { // Need more data
+                        return error.NotImplemented; // Spans block - simplifying for now
+                    }
+                    self.br.pos += i;
+                },
+                .Sequence => {
+                    const start = i;
+                    while (i < chunk.len and chunk[i] != '\n') i += 1;
+                    
+                    if (i < chunk.len) {
+                        const len = i - start;
+                        if (scratch_pos + len > scratch.len) return error.BufferTooSmall;
+                        std.mem.copyForwards(u8, scratch[scratch_pos..], chunk[start..i]);
+                        var actual_len = len;
+                        if (actual_len > 0 and scratch[scratch_pos + actual_len - 1] == '\r') {
+                            actual_len -= 1;
+                        }
+                        self.current_read.sequence = scratch[scratch_pos..scratch_pos + actual_len];
+                        scratch_pos += actual_len;
+                        self.state = .Plus;
+                        i += 1;
+                    }
+                    self.br.pos += i;
+                },
+                .Plus => {
+                    while (i < chunk.len and chunk[i] != '\n') i += 1;
+                    if (i < chunk.len) {
+                        self.state = .Quality;
+                        i += 1;
+                    }
+                    self.br.pos += i;
+                },
+                .Quality => {
+                    const start = i;
+                    while (i < chunk.len and chunk[i] != '\n') i += 1;
+                    
+                    if (i < chunk.len) {
+                        const len = i - start;
+                        if (scratch_pos + len > scratch.len) return error.BufferTooSmall;
+                        std.mem.copyForwards(u8, scratch[scratch_pos..], chunk[start..i]);
+                        var actual_len = len;
+                        if (actual_len > 0 and scratch[scratch_pos + actual_len - 1] == '\r') {
+                            actual_len -= 1;
+                        }
+                        self.current_read.qualities = scratch[scratch_pos..scratch_pos + actual_len];
+                        self.state = .Header;
+                        i += 1;
+                        self.br.pos += i;
+                        
+                        if (!self.current_read.isValid()) return error.InvalidFastq;
+                        return self.current_read;
+                    }
+                    self.br.pos += i;
                 }
-                return null;
-            }
-            
-            // If buffer is completely full and no newline, then it's too small
-            if (self.br.pos == 0 and self.br.end == self.br.buffer.len) {
-                return error.BufferTooSmall;
-            }
-            
-            // Fill buffer and search again
-            const read_len = try self.br.fill();
-            if (read_len == 0) {
-                self.eof = true;
             }
         }
-    }
-
-    /// Parses the next FASTQ record from the stream.
-    pub fn next(self: *FastqParser, out_buffer: []u8) !?Read {
-        // Line 1: @ID
-        var id_line: []const u8 = undefined;
-        while (true) {
-            id_line = (try self.readLine(out_buffer)) orelse return null;
-            if (id_line.len > 0) break;
-        }
-        if (id_line[0] != '@') return ParserError.InvalidFormat;
-        const id = id_line[1..];
-
-        // Line 2: Sequence
-        const seq = (try self.readLine(out_buffer)) orelse return ParserError.IncompleteRecord;
-
-        // Line 3: +ID
-        const plus_line = (try self.readLine(out_buffer)) orelse return ParserError.IncompleteRecord;
-        if (plus_line.len == 0 or plus_line[0] != '+') return ParserError.InvalidFormat;
-
-        // Line 4: Quality
-        const qual = (try self.readLine(out_buffer)) orelse return ParserError.IncompleteRecord;
-
-        const read = Read{
-            .id = id,
-            .seq = seq,
-            .qual = qual,
-        };
-
-        if (!read.validate()) return ParserError.MismatchedSequenceQuality;
-
-        return read;
     }
 };
