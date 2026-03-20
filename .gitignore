@@ -12,3 +12,5 @@ bam_run*.txt
 qwed/
 *.egg-info/
 __pycache__/
+generate_development_graph.py
+generate_qwd_logo.py
