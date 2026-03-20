@@ -2,25 +2,44 @@ const std = @import("std");
 const parser = @import("parser");
 const stage_mod = @import("stage");
 const simd = @import("simd_ops");
+const fastq_block = @import("fastq_block");
+const column_ops = @import("column_ops");
+const bitplanes = @import("bitplanes");
 
 pub const GcStage = struct {
     gc_bases: usize = 0,
     total_bases: usize = 0,
     gc_ratio: f64 = 0.0,
+    cached_bp: ?bitplanes.Bitplanes = null,
 
-    pub fn process(ptr: *anyopaque, read: *parser.Read) !bool {
+    pub fn process(ptr: *anyopaque, read: *const parser.Read) !bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         self.total_bases += read.seq.len;
-        
         if (simd.simd_enabled()) {
             self.gc_bases += simd.countGcSimd(read.seq);
         } else {
             for (read.seq) |base| {
-                if (base == 'G' or base == 'C' or base == 'g' or base == 'c') {
-                    self.gc_bases += 1;
-                }
+                if (base == 'G' or base == 'C' or base == 'g' or base == 'c') self.gc_bases += 1;
             }
         }
+        return true;
+    }
+
+    pub fn processBlock(ptr: *anyopaque, block: *const fastq_block.FastqColumnBlock) !bool {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        for (0..block.read_count) |i| self.total_bases += block.read_lengths[i];
+
+        if (self.cached_bp == null) {
+            self.cached_bp = try bitplanes.Bitplanes.init(block.allocator, block.capacity, block.max_read_len);
+        }
+        
+        var bp = &self.cached_bp.?;
+        bp.fromColumnBlock(block);
+        
+        // FUSED: Get GC and more if needed
+        const results = bp.computeFused(block.read_count);
+        self.gc_bases += results.gc_count;
+
         return true;
     }
 
@@ -28,6 +47,10 @@ pub const GcStage = struct {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         if (self.total_bases > 0) {
             self.gc_ratio = @as(f64, @floatFromInt(self.gc_bases)) / @as(f64, @floatFromInt(self.total_bases));
+        }
+        if (self.cached_bp) |*bp| {
+            bp.deinit();
+            self.cached_bp = null;
         }
     }
 
@@ -49,6 +72,7 @@ pub const GcStage = struct {
             .ptr = self,
             .vtable = &.{
                 .process = process,
+                .processBlock = processBlock,
                 .finalize = finalize,
                 .report = report,
                 .merge = merge,

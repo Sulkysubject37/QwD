@@ -18,8 +18,9 @@ pub const BlockReader = struct {
     }
 
     pub fn initMmap(file: std.fs.File) !BlockReader {
-        const size = try file.getEndPos();
-        if (size == 0) return error.EmptyFile;
+        const size_u64 = try file.getEndPos();
+        if (size_u64 == 0) return error.EmptyFile;
+        const size = std.math.cast(usize, size_u64) orelse return error.FileTooLarge;
         
         const ptr = try std.posix.mmap(
             null,

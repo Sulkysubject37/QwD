@@ -4,7 +4,7 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    // Phase 6 Modules
+    // Core Modules
     const block_reader_mod = b.addModule("block_reader", .{
         .root_source_file = b.path("core/io/block_reader.zig"),
     });
@@ -24,6 +24,15 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("core/analytics/bloom_filter.zig"),
     });
 
+    const simd_transpose_mod = b.addModule("simd_transpose", .{
+        .root_source_file = b.path("core/simd/simd_transpose.zig"),
+    });
+
+    const fastq_block_mod = b.addModule("fastq_block", .{
+        .root_source_file = b.path("core/columnar/fastq_block.zig"),
+    });
+    fastq_block_mod.addImport("simd_transpose", simd_transpose_mod);
+
     // Parsers and core structures
     const parser_mod = b.addModule("parser", .{
         .root_source_file = b.path("core/parser/parser.zig"),
@@ -31,7 +40,33 @@ pub fn build(b: *std.Build) void {
     parser_mod.addImport("block_reader", block_reader_mod);
     parser_mod.addImport("newline_scan", newline_scan_mod);
 
-    // Phase R Modules (Depends on Parser)
+    // Phase Q Hyperscale Modules
+    const chunk_builder_mod = b.addModule("chunk_builder", .{
+        .root_source_file = b.path("core/batch/chunk_builder.zig"),
+    });
+    chunk_builder_mod.addImport("block_reader", block_reader_mod);
+
+    const raw_batch_mod = b.addModule("raw_batch", .{
+        .root_source_file = b.path("core/batch/raw_batch.zig"),
+    });
+
+    const column_ops_mod = b.addModule("column_ops", .{
+        .root_source_file = b.path("core/vector/column_ops.zig"),
+    });
+    const bitplanes_mod = b.addModule("bitplanes", .{
+        .root_source_file = b.path("core/columnar/dna_bitplanes.zig"),
+    });
+    const kmer_columnar_mod = b.addModule("kmer_columnar", .{
+        .root_source_file = b.path("core/vector/kmer_columnar.zig"),
+    });
+    const read_graph_mod = b.addModule("read_graph", .{
+        .root_source_file = b.path("core/sketch/read_graph.zig"),
+    });
+    const prefetch_mod = b.addModule("prefetch", .{
+        .root_source_file = b.path("core/vector/prefetch.zig"),
+    });
+
+    // Batching and row-based fallback modules
     const read_batch_mod = b.addModule("read_batch", .{
         .root_source_file = b.path("core/batch/read_batch.zig"),
     });
@@ -70,6 +105,8 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("core/stage/stage.zig"),
     });
     stage_interface_mod.addImport("parser", parser_mod);
+    stage_interface_mod.addImport("fastq_block", fastq_block_mod);
+    stage_interface_mod.addImport("bitplanes", bitplanes_mod);
 
     const bam_stage_interface_mod = b.addModule("bam_stage", .{
         .root_source_file = b.path("core/stage/bam_stage.zig"),
@@ -101,25 +138,40 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("core/simd/simd_ops.zig"),
     });
 
+    const vertical_scanner_mod = b.addModule("vertical_scanner", .{
+        .root_source_file = b.path("core/simd/vertical_scanner.zig"),
+    });
+
+    const kmer_direct_mod = b.addModule("kmer_direct", .{
+        .root_source_file = b.path("core/vector/kmer_direct.zig"),
+    });
+
     const parallel_scheduler_mod = b.addModule("parallel_scheduler", .{
         .root_source_file = b.path("core/parallel/parallel_scheduler.zig"),
     });
     parallel_scheduler_mod.addImport("parser", parser_mod);
     parallel_scheduler_mod.addImport("stage", stage_interface_mod);
-    parallel_scheduler_mod.addImport("read_batch", read_batch_mod);
     parallel_scheduler_mod.addImport("ring_buffer", ring_buffer_mod);
+    parallel_scheduler_mod.addImport("block_reader", block_reader_mod);
+    parallel_scheduler_mod.addImport("vertical_scanner", vertical_scanner_mod);
+    parallel_scheduler_mod.addImport("kmer_direct", kmer_direct_mod);
+    parallel_scheduler_mod.addImport("fastq_block", fastq_block_mod);
+    parallel_scheduler_mod.addImport("simd_transpose", simd_transpose_mod);
+    parallel_scheduler_mod.addImport("bitplanes", bitplanes_mod);
 
     const pipeline_config_mod = b.addModule("pipeline_config", .{
         .root_source_file = b.path("core/config/pipeline_config.zig"),
     });
 
-    // Old Fastq Modules
+    // Fastq Modules
     const qc_mod = b.addModule("qc", .{
         .root_source_file = b.path("stages/qc/qc_stage.zig"),
     });
     qc_mod.addImport("parser", parser_mod);
     qc_mod.addImport("stage", stage_interface_mod);
     qc_mod.addImport("simd_ops", simd_ops_mod);
+    qc_mod.addImport("column_ops", column_ops_mod);
+    qc_mod.addImport("fastq_block", fastq_block_mod);
 
     const gc_mod = b.addModule("gc", .{
         .root_source_file = b.path("stages/gc/gc_stage.zig"),
@@ -127,6 +179,9 @@ pub fn build(b: *std.Build) void {
     gc_mod.addImport("parser", parser_mod);
     gc_mod.addImport("stage", stage_interface_mod);
     gc_mod.addImport("simd_ops", simd_ops_mod);
+    gc_mod.addImport("column_ops", column_ops_mod);
+    gc_mod.addImport("bitplanes", bitplanes_mod);
+    gc_mod.addImport("fastq_block", fastq_block_mod);
 
     const length_mod = b.addModule("length", .{
         .root_source_file = b.path("stages/read_length/length_stage.zig"),
@@ -151,6 +206,10 @@ pub fn build(b: *std.Build) void {
     });
     kmer_mod.addImport("parser", parser_mod);
     kmer_mod.addImport("stage", stage_interface_mod);
+    kmer_mod.addImport("dna_2bit", dna_2bit_mod);
+    kmer_mod.addImport("kmer_columnar", kmer_columnar_mod);
+    kmer_mod.addImport("fastq_block", fastq_block_mod);
+    kmer_mod.addImport("bitplanes", bitplanes_mod);
 
     const length_dist_mod = b.addModule("length_dist", .{
         .root_source_file = b.path("stages/length_distribution/length_distribution_stage.zig"),
@@ -182,48 +241,59 @@ pub fn build(b: *std.Build) void {
     adapter_detect_mod.addImport("parser", parser_mod);
     adapter_detect_mod.addImport("stage", stage_interface_mod);
 
-    // New Fastq Modules (Phase V)
+    // New Fastq Modules
     const basic_stats_mod = b.addModule("basic_stats", .{
         .root_source_file = b.path("stages/qc/basic_stats_stage.zig"),
     });
     basic_stats_mod.addImport("parser", parser_mod);
     basic_stats_mod.addImport("stage", stage_interface_mod);
+    basic_stats_mod.addImport("fastq_block", fastq_block_mod);
 
     const per_base_quality_mod = b.addModule("per_base_quality", .{
         .root_source_file = b.path("stages/qc/per_base_quality_stage.zig"),
     });
     per_base_quality_mod.addImport("parser", parser_mod);
     per_base_quality_mod.addImport("stage", stage_interface_mod);
+    per_base_quality_mod.addImport("column_ops", column_ops_mod);
+    per_base_quality_mod.addImport("fastq_block", fastq_block_mod);
 
     const nucleotide_composition_mod = b.addModule("nucleotide_composition", .{
         .root_source_file = b.path("stages/qc/nucleotide_composition_stage.zig"),
     });
     nucleotide_composition_mod.addImport("parser", parser_mod);
     nucleotide_composition_mod.addImport("stage", stage_interface_mod);
+    nucleotide_composition_mod.addImport("bitplanes", bitplanes_mod);
+    nucleotide_composition_mod.addImport("fastq_block", fastq_block_mod);
 
     const gc_content_mod = b.addModule("gc_content", .{
         .root_source_file = b.path("stages/qc/gc_content_stage.zig"),
     });
     gc_content_mod.addImport("parser", parser_mod);
     gc_content_mod.addImport("stage", stage_interface_mod);
+    gc_content_mod.addImport("fastq_block", fastq_block_mod);
 
     const gc_distribution_mod = b.addModule("gc_distribution", .{
         .root_source_file = b.path("stages/qc/gc_distribution_stage.zig"),
     });
     gc_distribution_mod.addImport("parser", parser_mod);
     gc_distribution_mod.addImport("stage", stage_interface_mod);
+    gc_distribution_mod.addImport("fastq_block", fastq_block_mod);
+    gc_distribution_mod.addImport("bitplanes", bitplanes_mod);
 
     const qc_length_dist_mod = b.addModule("qc_length_dist", .{
         .root_source_file = b.path("stages/qc/length_distribution_stage.zig"),
     });
     qc_length_dist_mod.addImport("parser", parser_mod);
     qc_length_dist_mod.addImport("stage", stage_interface_mod);
+    qc_length_dist_mod.addImport("fastq_block", fastq_block_mod);
 
     const n_statistics_mod = b.addModule("n_statistics", .{
         .root_source_file = b.path("stages/qc/n_statistics_stage.zig"),
     });
     n_statistics_mod.addImport("parser", parser_mod);
     n_statistics_mod.addImport("stage", stage_interface_mod);
+    n_statistics_mod.addImport("fastq_block", fastq_block_mod);
+    n_statistics_mod.addImport("bitplanes", bitplanes_mod);
 
     const qc_entropy_mod = b.addModule("qc_entropy", .{
         .root_source_file = b.path("stages/qc/entropy_stage.zig"),
@@ -231,6 +301,8 @@ pub fn build(b: *std.Build) void {
     qc_entropy_mod.addImport("parser", parser_mod);
     qc_entropy_mod.addImport("stage", stage_interface_mod);
     qc_entropy_mod.addImport("entropy_lut", entropy_lut_mod);
+    qc_entropy_mod.addImport("fastq_block", fastq_block_mod);
+    qc_entropy_mod.addImport("bitplanes", bitplanes_mod);
 
     const kmer_spectrum_mod = b.addModule("kmer_spectrum", .{
         .root_source_file = b.path("stages/qc/kmer_spectrum_stage.zig"),
@@ -239,12 +311,17 @@ pub fn build(b: *std.Build) void {
     kmer_spectrum_mod.addImport("stage", stage_interface_mod);
     kmer_spectrum_mod.addImport("dna_2bit", dna_2bit_mod);
     kmer_spectrum_mod.addImport("kmer_bitroll", kmer_bitroll_mod);
+    kmer_spectrum_mod.addImport("kmer_columnar", kmer_columnar_mod);
+    kmer_spectrum_mod.addImport("fastq_block", fastq_block_mod);
+    kmer_spectrum_mod.addImport("bitplanes", bitplanes_mod);
 
     const overrepresented_mod = b.addModule("overrepresented", .{
         .root_source_file = b.path("stages/qc/overrepresented_stage.zig"),
     });
     overrepresented_mod.addImport("parser", parser_mod);
     overrepresented_mod.addImport("stage", stage_interface_mod);
+    overrepresented_mod.addImport("fastq_block", fastq_block_mod);
+    overrepresented_mod.addImport("bitplanes", bitplanes_mod);
 
     const duplication_mod = b.addModule("duplication", .{
         .root_source_file = b.path("stages/qc/duplication_stage.zig"),
@@ -252,12 +329,15 @@ pub fn build(b: *std.Build) void {
     duplication_mod.addImport("parser", parser_mod);
     duplication_mod.addImport("stage", stage_interface_mod);
     duplication_mod.addImport("bloom_filter", bloom_filter_mod);
+    duplication_mod.addImport("fastq_block", fastq_block_mod);
+    duplication_mod.addImport("bitplanes", bitplanes_mod);
 
     const qc_adapter_detect_mod = b.addModule("qc_adapter_detect", .{
         .root_source_file = b.path("stages/qc/adapter_detection_stage.zig"),
     });
     qc_adapter_detect_mod.addImport("parser", parser_mod);
     qc_adapter_detect_mod.addImport("stage", stage_interface_mod);
+    qc_adapter_detect_mod.addImport("fastq_block", fastq_block_mod);
 
     // BAM Analytics Modules
     const alignment_stats_mod = b.addModule("alignment_stats", .{
@@ -319,6 +399,11 @@ pub fn build(b: *std.Build) void {
     pipeline_mod.addImport("memory_manager", memory_manager_mod);
     pipeline_mod.addImport("stage", stage_interface_mod);
     pipeline_mod.addImport("parser", parser_mod);
+    pipeline_mod.addImport("block_reader", block_reader_mod);
+    pipeline_mod.addImport("raw_batch", raw_batch_mod);
+    pipeline_mod.addImport("chunk_builder", chunk_builder_mod);
+    pipeline_mod.addImport("read_graph", read_graph_mod);
+    pipeline_mod.addImport("prefetch", prefetch_mod);
     pipeline_mod.addImport("qc", qc_mod);
     pipeline_mod.addImport("gc", gc_mod);
     pipeline_mod.addImport("length", length_mod);
@@ -330,8 +415,9 @@ pub fn build(b: *std.Build) void {
     pipeline_mod.addImport("qual_decay", qual_decay_mod);
     pipeline_mod.addImport("entropy", entropy_mod);
     pipeline_mod.addImport("adapter_detect", adapter_detect_mod);
+    pipeline_mod.addImport("pipeline_config", pipeline_config_mod);
     
-    // Add all new fastq modules to pipeline
+    // Add all QC modules to pipeline
     pipeline_mod.addImport("basic_stats", basic_stats_mod);
     pipeline_mod.addImport("per_base_quality", per_base_quality_mod);
     pipeline_mod.addImport("nucleotide_composition", nucleotide_composition_mod);
@@ -372,6 +458,9 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("simd_ops", simd_ops_mod);
     exe.root_module.addImport("allocator", allocator_mod);
     exe.root_module.addImport("batch_builder", batch_builder_mod);
+    exe.root_module.addImport("chunk_builder", chunk_builder_mod);
+    exe.root_module.addImport("read_graph", read_graph_mod);
+    exe.root_module.addImport("prefetch", prefetch_mod);
     exe.root_module.addImport("pipeline", pipeline_mod);
     exe.root_module.addImport("pipeline_config", pipeline_config_mod);
     exe.root_module.addImport("metrics", metrics_mod);

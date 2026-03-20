@@ -29,4 +29,5 @@ jobs:
 
       - name: Run R Tests
         run: |
-          Rscript tests/bindings/r_test.R
+          R CMD build bindings/r
+          R CMD check qwd_*.tar.gz

@@ -8,17 +8,50 @@ pub const PerBaseQualityStage = struct {
     base_count: [MAX_POS]u64 = [_]u64{0} ** MAX_POS,
     mean_quality: [MAX_POS]f64 = [_]f64{0.0} ** MAX_POS,
 
-    pub fn process(ptr: *anyopaque, read: *parser.Read) !bool {
+    pub fn process(ptr: *anyopaque, read: *const parser.Read) !bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         const limit = if (read.qual.len > MAX_POS) MAX_POS else read.qual.len;
-
         for (0..limit) |pos| {
             const q = read.qual[pos];
             const phred = if (q >= 33) q - 33 else 0;
             self.quality_sum[pos] += phred;
             self.base_count[pos] += 1;
         }
+        return true;
+    }
 
+    pub fn processBlock(ptr: *anyopaque, block: *const @import("fastq_block").FastqColumnBlock) !bool {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        const column_ops = @import("column_ops");
+        
+        for (0..block.max_read_len) |col| {
+            if (col >= MAX_POS) break;
+            
+            // Count how many reads actually cover this position
+            var coverage: usize = 0;
+            for (0..block.read_count) |i| {
+                if (block.read_lengths[i] > col) coverage += 1;
+            }
+            
+            if (coverage > 0) {
+                self.quality_sum[col] += column_ops.sumQualityColumn(block.qualities[col], block.read_count);
+                self.base_count[col] += coverage;
+            }
+        }
+        return true;
+    }
+
+    pub fn processRawBatch(ptr: *anyopaque, reads: []const parser.Read) !bool {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        for (reads) |read| {
+            const limit = if (read.qual.len > MAX_POS) MAX_POS else read.qual.len;
+            for (0..limit) |pos| {
+                const q = read.qual[pos];
+                const phred = if (q >= 33) q - 33 else 0;
+                self.quality_sum[pos] += phred;
+                self.base_count[pos] += 1;
+            }
+        }
         return true;
     }
 
@@ -56,6 +89,8 @@ pub const PerBaseQualityStage = struct {
             .ptr = self,
             .vtable = &.{
                 .process = process,
+                .processRawBatch = processRawBatch,
+                .processBlock = processBlock,
                 .finalize = finalize,
                 .report = report,
                 .merge = merge,

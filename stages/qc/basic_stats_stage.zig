@@ -9,15 +9,37 @@ pub const BasicStatsStage = struct {
     max_read_length: usize = 0,
     mean_read_length: f64 = 0.0,
 
-    pub fn process(ptr: *anyopaque, read: *parser.Read) !bool {
+    pub fn process(ptr: *anyopaque, read: *const parser.Read) !bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         const len = read.seq.len;
-        
         self.total_reads += 1;
         self.total_bases += len;
         if (len < self.min_read_length) self.min_read_length = len;
         if (len > self.max_read_length) self.max_read_length = len;
-        
+        return true;
+    }
+
+    pub fn processBlock(ptr: *anyopaque, block: *const @import("fastq_block").FastqColumnBlock) !bool {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        self.total_reads += block.read_count;
+        for (0..block.read_count) |i| {
+            const len = block.read_lengths[i];
+            self.total_bases += len;
+            if (len < self.min_read_length) self.min_read_length = len;
+            if (len > self.max_read_length) self.max_read_length = len;
+        }
+        return true;
+    }
+
+    pub fn processRawBatch(ptr: *anyopaque, reads: []const parser.Read) !bool {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        for (reads) |read| {
+            const len = read.seq.len;
+            self.total_reads += 1;
+            self.total_bases += len;
+            if (len < self.min_read_length) self.min_read_length = len;
+            if (len > self.max_read_length) self.max_read_length = len;
+        }
         return true;
     }
 
@@ -33,7 +55,6 @@ pub const BasicStatsStage = struct {
     pub fn merge(ptr: *anyopaque, other_ptr: *anyopaque) !void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         const other: *@This() = @ptrCast(@alignCast(other_ptr));
-        
         self.total_reads += other.total_reads;
         self.total_bases += other.total_bases;
         if (other.min_read_length < self.min_read_length) self.min_read_length = other.min_read_length;
@@ -55,6 +76,8 @@ pub const BasicStatsStage = struct {
             .ptr = self,
             .vtable = &.{
                 .process = process,
+                .processRawBatch = processRawBatch,
+                .processBlock = processBlock,
                 .finalize = finalize,
                 .report = report,
                 .merge = merge,

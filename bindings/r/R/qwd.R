@@ -16,7 +16,8 @@ qwd_qc <- function(fastq_path) {
   if (path == "") stop("QwD shared library not found")
   
   dyn.load(path)
-  res <- .C("qwd_fastq_qc", path = as.character(fastq_path), result = character(1))
+  sym <- getNativeSymbolInfo("qwd_fastq_qc_r")
+  res <- .C(sym, path = as.character(fastq_path), result = character(1))
   # Note: This is a simplified call pattern for R
   return(jsonlite::fromJSON(res$result))
 }

@@ -1,18 +1,57 @@
 const std = @import("std");
 const parser = @import("parser");
 const stage_mod = @import("stage");
+const simd = @import("simd_ops");
 
 pub const GcContentStage = struct {
     gc_bases: usize = 0,
     total_bases: usize = 0,
     gc_ratio: f64 = 0.0,
 
-    pub fn process(ptr: *anyopaque, read: *parser.Read) !bool {
+    pub fn process(ptr: *anyopaque, read: *const parser.Read) !bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        for (read.seq) |base| {
-            self.total_bases += 1;
-            if (base == 'G' or base == 'C' or base == 'g' or base == 'c') {
-                self.gc_bases += 1;
+        self.total_bases += read.seq.len;
+        
+        if (simd.simd_enabled()) {
+            self.gc_bases += simd.countGcSimd(read.seq);
+        } else {
+            for (read.seq) |base| {
+                if (base == 'G' or base == 'C' or base == 'g' or base == 'c') {
+                    self.gc_bases += 1;
+                }
+            }
+        }
+        return true;
+    }
+
+    pub fn processBitplanes(ptr: *anyopaque, bp: *const @import("bitplanes").Bitplanes, block: *const @import("fastq_block").FastqColumnBlock) !bool {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        const res = bp.computeFused(block.read_count);
+        self.gc_bases += res.gc_count;
+        self.total_bases += res.total_bases;
+        return true;
+    }
+
+    pub fn processBlock(ptr: *anyopaque, block: *const @import("fastq_block").FastqColumnBlock) !bool {
+        const bitplanes = @import("bitplanes");
+        var bp = try bitplanes.Bitplanes.init(block.allocator, block.capacity, block.max_read_len);
+        defer bp.deinit();
+        bp.fromColumnBlock(block);
+        return processBitplanes(ptr, &bp, block);
+    }
+
+    pub fn processRawBatch(ptr: *anyopaque, reads: []const parser.Read) !bool {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        for (reads) |read| {
+            self.total_bases += read.seq.len;
+            if (simd.simd_enabled()) {
+                self.gc_bases += simd.countGcSimd(read.seq);
+            } else {
+                for (read.seq) |base| {
+                    if (base == 'G' or base == 'C' or base == 'g' or base == 'c') {
+                        self.gc_bases += 1;
+                    }
+                }
             }
         }
         return true;
@@ -34,8 +73,10 @@ pub const GcContentStage = struct {
 
     pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        writer.print("Global GC Content Report:\n", .{}) catch {};
-        writer.print("  GC Content: {d:.2}%\n", .{self.gc_ratio * 100.0}) catch {};
+        writer.print("Global GC Content Report:
+", .{}) catch {};
+        writer.print("  GC Content: {d:.2}%
+", .{self.gc_ratio * 100.0}) catch {};
     }
 
     pub fn stage(self: *@This()) stage_mod.Stage {
@@ -43,6 +84,9 @@ pub const GcContentStage = struct {
             .ptr = self,
             .vtable = &.{
                 .process = process,
+                .processRawBatch = processRawBatch,
+                .processBlock = processBlock,
+                .processBitplanes = processBitplanes,
                 .finalize = finalize,
                 .report = report,
                 .merge = merge,

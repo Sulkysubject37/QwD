@@ -25,25 +25,70 @@ pub const KmerSpectrumStage = struct {
         self.allocator.free(self.counts);
     }
 
-    pub fn process(ptr: *anyopaque, read: *parser.Read) !bool {
+    pub fn process(ptr: *anyopaque, read: *const parser.Read) !bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         const k = self.k;
         if (read.seq.len < k) return true;
 
         var hash: usize = 0;
-        
-        // Initialize first window
         for (0..k) |i| {
             hash = kmer_bitroll.rollKmer(hash, dna_2bit.encodeBase(read.seq[i]), k);
         }
         self.counts[hash] += 1;
 
-        // Rolling hash for the rest
         for (k..read.seq.len) |i| {
             hash = kmer_bitroll.rollKmer(hash, dna_2bit.encodeBase(read.seq[i]), k);
             self.counts[hash] += 1;
         }
 
+        return true;
+    }
+
+    pub fn processBitplanes(ptr: *anyopaque, bp: *const @import("bitplanes").Bitplanes, block: *const @import("fastq_block").FastqColumnBlock) !bool {
+        _ = bp;
+        return processBlock(ptr, block);
+    }
+
+    pub fn processBlock(ptr: *anyopaque, block: *const @import("fastq_block").FastqColumnBlock) !bool {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        const k = self.k;
+
+        for (0..block.read_count) |read_idx| {
+            const len = block.read_lengths[read_idx];
+            if (len < k) continue;
+
+            var hash: usize = 0;
+            for (0..k) |i| {
+                hash = kmer_bitroll.rollKmer(hash, dna_2bit.encodeBase(block.bases[i][read_idx]), k);
+            }
+            self.counts[hash] += 1;
+
+            for (k..len) |i| {
+                hash = kmer_bitroll.rollKmer(hash, dna_2bit.encodeBase(block.bases[i][read_idx]), k);
+                self.counts[hash] += 1;
+            }
+        }
+
+        return true;
+    }
+
+    pub fn processRawBatch(ptr: *anyopaque, reads: []const parser.Read) !bool {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        const k = self.k;
+        for (reads) |read| {
+            if (read.seq.len < k) continue;
+
+            var hash: usize = 0;
+            for (0..k) |i| {
+                hash = kmer_bitroll.rollKmer(hash, dna_2bit.encodeBase(read.seq[i]), k);
+            }
+            self.counts[hash] += 1;
+
+            for (k..read.seq.len) |i| {
+                hash = kmer_bitroll.rollKmer(hash, dna_2bit.encodeBase(read.seq[i]), k);
+                self.counts[hash] += 1;
+            }
+        }
         return true;
     }
 
@@ -72,6 +117,9 @@ pub const KmerSpectrumStage = struct {
             .ptr = self,
             .vtable = &.{
                 .process = process,
+                .processRawBatch = processRawBatch,
+                .processBlock = processBlock,
+                .processBitplanes = processBitplanes,
                 .finalize = finalize,
                 .report = report,
                 .merge = merge,
