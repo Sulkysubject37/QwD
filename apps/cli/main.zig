@@ -19,8 +19,6 @@ pub fn main() !void {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-
-
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
 
@@ -189,9 +187,10 @@ pub fn main() !void {
     try pipeline.run_chunked(&chunk_builder);
 
     try pipeline.finalize();
+
     if (output_format == .json) {
-        // try structured_output.writeJsonReport(pipeline.parallel_scheduler.?, stdout);
-        // try stdout.writeAll("\n");
+        try structured_output.writeJsonReport(pipeline.parallel_scheduler.?, stdout);
+        try stdout.writeAll("\n");
     } else {
         try stdout.print("\n--- QwD Execution Mode: {s} ---\n", .{@tagName(mode)});
         pipeline.report(stdout);
