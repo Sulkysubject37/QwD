@@ -63,7 +63,6 @@ jobs:
           
           echo "--- 8 Threads (Fast) ---"
           ./zig-out/bin/qwd qc --fast tests/fixtures/sample.fastq --threads 8 > res_8t_fast.txt
-          
 
       - name: Phase Q Memory Bounding
         shell: bash
@@ -78,6 +77,15 @@ jobs:
         run: |
           python3 tests/bindings/python_test.py
           ./tests/interface/cli_test.sh
+
+      - name: R Package Build and Check
+        shell: bash
+        run: |
+          if [ "${{ matrix.os }}" != "windows-latest" ]; then
+            Rscript -e "install.packages('jsonlite', repos='https://cloud.r-project.org')"
+            R CMD build bindings/r
+            R CMD check qwd_*.tar.gz --no-manual --no-build-vignettes
+          fi
 
       - name: Upload Test Results
         uses: actions/upload-artifact@v4
