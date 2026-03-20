@@ -68,8 +68,8 @@ jobs:
       - name: Phase Q Memory Bounding
         shell: bash
         run: |
-          echo "--- Testing 8 Threads with 64MB Hard Memory Cap ---"
-          ./zig-out/bin/qwd qc tests/fixtures/sample.fastq --threads 8 --max-memory 64 > res_mem_bounded.txt
+          echo "--- Testing 4 Threads with 16MB Hard Memory Cap ---"
+          ./zig-out/bin/qwd qc tests/fixtures/sample.fastq --threads 4 --max-memory 16 > res_mem_bounded.txt
           echo "Verifying memory bounded exact determinism against unconstrained execution..."
           diff res_mem_bounded.txt res_1t_exact.txt
 
@@ -90,19 +90,23 @@ jobs:
         with:
           use-public-rspm: true
 
-      - name: Setup R dependencies
-        if: matrix.os != 'windows-latest'
-        uses: r-lib/actions/setup-r-dependencies@v2
-        with:
-          working-directory: bindings/r
+      - name: Install R system dependencies (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcurl4-openssl-dev libssl-dev libxml2-dev
 
-      - name: Check R Package
+      - name: Install R packages
         if: matrix.os != 'windows-latest'
-        uses: r-lib/actions/check-r-package@v2
-        with:
-          working-directory: bindings/r
-          args: 'c("--no-manual", "--no-build-vignettes")'
-          build_args: 'c("--no-manual", "--no-build-vignettes")'
+        run: |
+          Rscript -e "install.packages(c('jsonlite', 'rcmdcheck'), repos='https://cloud.r-project.org')"
+
+      - name: R Package Build and Check
+        if: matrix.os != 'windows-latest'
+        shell: bash
+        run: |
+          R CMD build bindings/r
+          R CMD check qwd_*.tar.gz --no-manual --no-build-vignettes
 
       - name: Upload Test Results
         uses: actions/upload-artifact@v4
