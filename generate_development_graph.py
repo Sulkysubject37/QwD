@@ -2,8 +2,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # Development Phases and Data
-phases = ["Phase Z", "Phase Y", "Phase X", "Phase W", "Phase V", "Phase U", "Phase T", "Phase 6", "Phase R"]
-throughput = [5, 10, 20, 25, 30, 147, 150, 218, 1150] # Reads per second (in thousands)
+phases = ["Phase Z", "Phase Y", "Phase X", "Phase W", "Phase V", "Phase U", "Phase T", "Phase 6", "Phase R", "Phase Q.4"]
+throughput = [5, 10, 20, 25, 30, 147, 150, 218, 1150, 1250] # Reads per second (in thousands)
 
 # Milestone Details
 milestones = [
@@ -15,7 +15,8 @@ milestones = [
     "SIMD & Scaling\n(Vectorized Kernels)",
     "Binding Layer\n(C ABI, Python, R)",
     "Extreme I/O\n(Block I/O, LUTs)",
-    "Multicore Zero-Copy\n(mmap, Bloom, 8-Threads)"
+    "Multicore Zero-Copy\n(mmap, Bloom, 8-Threads)",
+    "Dual Mode (Exact + Fast)\n(Bit-Exact Determinism)"
 ]
 
 plt.figure(figsize=(16, 10), dpi=140)
@@ -29,7 +30,7 @@ plt.fill_between(x, throughput, color='#00FFCC', alpha=0.1)
 # Annotate Phases and Milestones with Alternating Heights to avoid overlap
 for i, txt in enumerate(milestones):
     # Alternate position: higher for even, lower for odd (relative to the point)
-    offset = 60 if i % 2 == 0 else -80
+    offset = 60 if i % 2 == 1 else -80 # Flipped to ensure Phase Q.4 is visible
     color = '#00FFCC' if i == len(milestones)-1 else 'white'
     
     plt.annotate(txt, (x[i], throughput[i]), 
@@ -58,7 +59,7 @@ plt.figtext(0.5, 0.02, standards_text, ha='center', fontsize=11, color='#00FFCC'
             bbox=dict(boxstyle='round,pad=1.0', fc='#121212', ec='#00FFCC', alpha=1.0))
 
 # Set y-axis limit to give room for annotations
-plt.ylim(-150, 1400)
+plt.ylim(-150, 1500)
 
 plt.tight_layout(rect=[0, 0.05, 1, 0.95])
 plt.savefig("QwD_Development_Proof.png")

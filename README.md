@@ -1,4 +1,4 @@
-# QwD
+# QwD ![QwD Logo](qwd_logo.png)
 
 ### Meaning
 QwD derives from Arabic:
