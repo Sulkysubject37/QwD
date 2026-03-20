@@ -37,21 +37,13 @@ pub export fn qwd_fastq_qc(path: [*:0]const u8) [*:0]const u8 {
     const record_buffer = arena_allocator.alloc(u8, 65536) catch return allocError(allocator, "Buffer alloc failed");
 
     while (true) {
-        var reads_array: [1024]parser_mod.Read = undefined;
-        var rc: usize = 0;
-        while (rc < 1024) {
-            if (parser.next(record_buffer) catch null) |read| {
-                reads_array[rc] = read;
-                rc += 1;
-            } else break;
-        }
-        if (rc == 0) break;
-        
-        if (pipeline.scheduler) |*s| {
-            for (s.stages.items) |stage| {
-                _ = stage.processRawBatch(reads_array[0..rc]) catch return allocError(allocator, "Processing error");
+        if (parser.next(record_buffer) catch null) |read| {
+            if (pipeline.parallel_scheduler) |*ps| {
+                ps.process(read) catch return allocError(allocator, "Processing error");
+            } else if (pipeline.scheduler) |*s| {
+                s.process(read) catch return allocError(allocator, "Processing error");
             }
-        }
+        } else break;
     }
 
     pipeline.finalize() catch return allocError(allocator, "Pipeline finalize error");
@@ -59,7 +51,9 @@ pub export fn qwd_fastq_qc(path: [*:0]const u8) [*:0]const u8 {
     var buffer = std.ArrayList(u8).init(allocator);
     defer buffer.deinit();
     
-    if (pipeline.scheduler) |*s| {
+    if (pipeline.parallel_scheduler) |*ps| {
+        structured_output.writeJsonReport(ps, buffer.writer().any()) catch return allocError(allocator, "JSON report failed");
+    } else if (pipeline.scheduler) |*s| {
         structured_output.writeJsonReport(s, buffer.writer().any()) catch return allocError(allocator, "JSON report failed");
     }
 
@@ -67,9 +61,33 @@ pub export fn qwd_fastq_qc(path: [*:0]const u8) [*:0]const u8 {
 }
 
 pub export fn qwd_bam_stats(path: [*:0]const u8) [*:0]const u8 {
-    _ = path;
     const allocator = std.heap.c_allocator;
-    return allocError(allocator, "qwd_bam_stats not fully implemented in C API yet");
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
+
+    const file_path = std.mem.span(path);
+    var file = std.fs.cwd().openFile(file_path, .{}) catch return allocError(allocator, "File not found");
+    defer file.close();
+
+    var bam_pipeline = bam_pipeline_mod.BamPipeline.init(arena_allocator);
+    defer bam_pipeline.deinit();
+    bam_pipeline.addDefaultStages() catch return allocError(allocator, "BAM stage init failed");
+
+    var bam_reader = bam_reader_mod.BamReader.init(arena_allocator, file.reader().any()) catch return allocError(allocator, "BAM parser failed");
+    
+    var record_buf: [4096]u8 = undefined;
+    while (bam_reader.next(&record_buf) catch null) |record| {
+        bam_pipeline.run(record) catch break;
+    }
+    bam_pipeline.finalize() catch {};
+
+    var buffer = std.ArrayList(u8).init(allocator);
+    defer buffer.deinit();
+    
+    structured_output.writeJsonReport(&bam_pipeline.scheduler, buffer.writer().any()) catch return allocError(allocator, "JSON report failed");
+
+    return std.fmt.allocPrintZ(allocator, "{s}", .{buffer.items}) catch return "{\"error\":\"final alloc failure\"}";
 }
 
 pub export fn qwd_pipeline(config_json_path: [*:0]const u8, input_path: [*:0]const u8) [*:0]const u8 {
