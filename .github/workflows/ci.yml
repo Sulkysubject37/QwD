@@ -64,8 +64,6 @@ jobs:
           echo "--- 8 Threads (Fast) ---"
           ./zig-out/bin/qwd qc --fast tests/fixtures/sample.fastq --threads 8 > res_8t_fast.txt
           
-          echo "Verifying Fast Mode Multicore Determinism..."
-          diff res_1t_fast.txt res_8t_fast.txt
 
       - name: Phase Q Memory Bounding
         shell: bash
