@@ -11,15 +11,41 @@ pub const NStatisticsStage = struct {
     n75: usize = 0,
     n90: usize = 0,
 
-    pub fn process(ptr: *anyopaque, read: *parser.Read) !bool {
+    pub fn process(ptr: *anyopaque, read: *const parser.Read) !bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         const len = read.seq.len;
         self.total_bases += len;
         
-        // Cap length at 29,999 to fit in histogram
         const idx = if (len >= 30000) 29999 else len;
         self.length_histogram[idx] += 1;
 
+        return true;
+    }
+
+    pub fn processBitplanes(ptr: *anyopaque, bitplanes: *const @import("bitplanes").Bitplanes, block: *const @import("fastq_block").FastqColumnBlock) anyerror!bool {
+        _ = bitplanes;
+        return processBlock(ptr, block);
+    }
+
+    pub fn processBlock(ptr: *anyopaque, block: *const @import("fastq_block").FastqColumnBlock) !bool {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        for (0..block.read_count) |i| {
+            const len = block.read_lengths[i];
+            self.total_bases += len;
+            const idx = if (len >= 30000) 29999 else len;
+            self.length_histogram[idx] += 1;
+        }
+        return true;
+    }
+
+    pub fn processRawBatch(ptr: *anyopaque, reads: []const parser.Read) !bool {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        for (reads) |read| {
+            const len = read.seq.len;
+            self.total_bases += len;
+            const idx = if (len >= 30000) 29999 else len;
+            self.length_histogram[idx] += 1;
+        }
         return true;
     }
 
@@ -72,6 +98,9 @@ pub const NStatisticsStage = struct {
             .ptr = self,
             .vtable = &.{
                 .process = process,
+                .processRawBatch = processRawBatch,
+                .processBlock = processBlock,
+                .processBitplanes = processBitplanes,
                 .finalize = finalize,
                 .report = report,
                 .merge = merge,

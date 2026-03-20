@@ -24,14 +24,11 @@ pub const OverrepresentedStage = struct {
         self.map.deinit();
     }
 
-    pub fn process(ptr: *anyopaque, read: *parser.Read) !bool {
+    pub fn process(ptr: *anyopaque, read: *const parser.Read) !bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         self.total_reads += 1;
         
-        // Extreme fast mode: only profile first 50k reads
-        if (self.fast_mode and self.total_reads > 50_000) {
-            return true;
-        }
+        if (self.fast_mode and self.total_reads > 50_000) return true;
 
         if (self.map.count() < 100000) {
             const v = try self.map.getOrPut(read.seq);
@@ -44,6 +41,63 @@ pub const OverrepresentedStage = struct {
         } else {
             if (self.map.getPtr(read.seq)) |v| {
                 v.* += 1;
+            }
+        }
+        return true;
+    }
+
+    pub fn processBitplanes(ptr: *anyopaque, bp: *const @import("bitplanes").Bitplanes, block: *const @import("fastq_block").FastqColumnBlock) !bool {
+        _ = bp;
+        return processBlock(ptr, block);
+    }
+
+    pub fn processBlock(ptr: *anyopaque, block: *const @import("fastq_block").FastqColumnBlock) !bool {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        var seq_buf: [1024]u8 = undefined;
+
+        for (0..block.read_count) |read_idx| {
+            self.total_reads += 1;
+            if (self.fast_mode and self.total_reads > 50_000) continue;
+
+            const len = block.read_lengths[read_idx];
+            for (0..len) |i| seq_buf[i] = block.bases[i][read_idx];
+            const seq = seq_buf[0..len];
+
+            if (self.map.count() < 100000) {
+                const v = try self.map.getOrPut(seq);
+                if (!v.found_existing) {
+                    v.key_ptr.* = try self.allocator.dupe(u8, seq);
+                    v.value_ptr.* = 1;
+                } else {
+                    v.value_ptr.* += 1;
+                }
+            } else {
+                if (self.map.getPtr(seq)) |v| {
+                    v.* += 1;
+                }
+            }
+        }
+        return true;
+    }
+
+    pub fn processRawBatch(ptr: *anyopaque, reads: []const parser.Read) !bool {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        for (reads) |read| {
+            self.total_reads += 1;
+            if (self.fast_mode and self.total_reads > 50_000) continue;
+
+            if (self.map.count() < 100000) {
+                const v = try self.map.getOrPut(read.seq);
+                if (!v.found_existing) {
+                    v.key_ptr.* = try self.allocator.dupe(u8, read.seq);
+                    v.value_ptr.* = 1;
+                } else {
+                    v.value_ptr.* += 1;
+                }
+            } else {
+                if (self.map.getPtr(read.seq)) |v| {
+                    v.* += 1;
+                }
             }
         }
         return true;
@@ -94,6 +148,9 @@ pub const OverrepresentedStage = struct {
             .ptr = self,
             .vtable = &.{
                 .process = process,
+                .processRawBatch = processRawBatch,
+                .processBlock = processBlock,
+                .processBitplanes = processBitplanes,
                 .finalize = finalize,
                 .report = report,
                 .merge = merge,

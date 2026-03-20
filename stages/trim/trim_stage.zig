@@ -13,14 +13,15 @@ pub const TrimStage = struct {
         };
     }
 
-    pub fn process(ptr: *anyopaque, read: *parser.Read) !bool {
+    pub fn process(ptr: *anyopaque, read: *const parser.Read) !bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         self.reads_seen += 1;
 
         if (std.mem.endsWith(u8, read.seq, self.adapter_sequence)) {
             const new_len = read.seq.len - self.adapter_sequence.len;
-            read.seq = read.seq[0..new_len];
-            read.qual = read.qual[0..new_len];
+            var mut_read = @constCast(read);
+            mut_read.seq = mut_read.seq[0..new_len];
+            mut_read.qual = mut_read.qual[0..new_len];
             self.reads_trimmed += 1;
         }
 

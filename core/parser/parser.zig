@@ -35,6 +35,13 @@ pub const FastqParser = struct {
         };
     }
 
+    pub fn initMmap(allocator: std.mem.Allocator, file: std.fs.File) !FastqParser {
+        return FastqParser{
+            .br = try block_reader.BlockReader.initMmap(file),
+            .allocator = allocator,
+        };
+    }
+
     pub fn deinit(self: *FastqParser) void {
         self.br.deinit(self.allocator);
     }

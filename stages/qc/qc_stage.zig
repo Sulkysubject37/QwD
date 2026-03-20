@@ -2,6 +2,8 @@ const std = @import("std");
 const parser = @import("parser");
 const stage_mod = @import("stage");
 const simd = @import("simd_ops");
+const fastq_block = @import("fastq_block");
+const column_ops = @import("column_ops");
 
 pub const QcStage = struct {
     total_reads: usize = 0,
@@ -9,7 +11,7 @@ pub const QcStage = struct {
     sum_quality: u64 = 0,
     mean_quality: f64 = 0.0,
 
-    pub fn process(ptr: *anyopaque, read: *parser.Read) !bool {
+    pub fn process(ptr: *anyopaque, read: *const parser.Read) !bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         self.total_reads += 1;
         self.total_bases += read.seq.len;
@@ -22,6 +24,24 @@ pub const QcStage = struct {
                 self.sum_quality += phred;
             }
         }
+        return true;
+    }
+
+    pub fn processBlock(ptr: *anyopaque, block: *const fastq_block.FastqColumnBlock) !bool {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        self.total_reads += block.read_count;
+        
+        for (0..block.read_count) |i| {
+            self.total_bases += block.read_lengths[i];
+        }
+
+        // Columnar quality summation
+        for (0..block.max_read_len) |col| {
+            // Only process column if at least one read has data here
+            // But we can just use the count and assume shorter reads have 0/dummy qualities
+            self.sum_quality += column_ops.sumQualityColumn(block.qualities[col], block.read_count);
+        }
+
         return true;
     }
 
@@ -53,6 +73,7 @@ pub const QcStage = struct {
             .ptr = self,
             .vtable = &.{
                 .process = process,
+                .processBlock = processBlock,
                 .finalize = finalize,
                 .report = report,
                 .merge = merge,

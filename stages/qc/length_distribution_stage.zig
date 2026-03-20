@@ -6,7 +6,7 @@ pub const LengthDistributionStage = struct {
     read_count_per_bin: [6]usize = [_]usize{0} ** 6,
     total_reads: usize = 0,
 
-    pub fn process(ptr: *anyopaque, read: *parser.Read) !bool {
+    pub fn process(ptr: *anyopaque, read: *const parser.Read) !bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         const len = read.seq.len;
         self.total_reads += 1;
@@ -25,6 +25,52 @@ pub const LengthDistributionStage = struct {
             self.read_count_per_bin[5] += 1;
         }
 
+        return true;
+    }
+
+    pub fn processBlock(ptr: *anyopaque, block: *const @import("fastq_block").FastqColumnBlock) !bool {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        self.total_reads += block.read_count;
+
+        for (0..block.read_count) |i| {
+            const len = block.read_lengths[i];
+            if (len < 100) {
+                self.read_count_per_bin[0] += 1;
+            } else if (len < 500) {
+                self.read_count_per_bin[1] += 1;
+            } else if (len < 1000) {
+                self.read_count_per_bin[2] += 1;
+            } else if (len < 5000) {
+                self.read_count_per_bin[3] += 1;
+            } else if (len < 10000) {
+                self.read_count_per_bin[4] += 1;
+            } else {
+                self.read_count_per_bin[5] += 1;
+            }
+        }
+
+        return true;
+    }
+
+    pub fn processRawBatch(ptr: *anyopaque, reads: []const parser.Read) !bool {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        for (reads) |read| {
+            const len = read.seq.len;
+            self.total_reads += 1;
+            if (len < 100) {
+                self.read_count_per_bin[0] += 1;
+            } else if (len < 500) {
+                self.read_count_per_bin[1] += 1;
+            } else if (len < 1000) {
+                self.read_count_per_bin[2] += 1;
+            } else if (len < 5000) {
+                self.read_count_per_bin[3] += 1;
+            } else if (len < 10000) {
+                self.read_count_per_bin[4] += 1;
+            } else {
+                self.read_count_per_bin[5] += 1;
+            }
+        }
         return true;
     }
 
@@ -57,6 +103,8 @@ pub const LengthDistributionStage = struct {
             .ptr = self,
             .vtable = &.{
                 .process = process,
+                .processRawBatch = processRawBatch,
+                .processBlock = processBlock,
                 .finalize = finalize,
                 .report = report,
                 .merge = merge,

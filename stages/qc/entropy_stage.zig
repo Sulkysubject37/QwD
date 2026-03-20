@@ -9,9 +9,7 @@ pub const EntropyStage = struct {
     low_complexity_reads: usize = 0,
     mean_entropy: f64 = 0.0,
     
-    // We will use the global LUT initialized once
-    
-    pub fn process(ptr: *anyopaque, read: *parser.Read) !bool {
+    pub fn process(ptr: *anyopaque, read: *const parser.Read) !bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         const len = read.seq.len;
         if (len == 0) return true;
@@ -36,6 +34,72 @@ pub const EntropyStage = struct {
             self.low_complexity_reads += 1;
         }
 
+        return true;
+    }
+
+    pub fn processBitplanes(ptr: *anyopaque, bp: *const @import("bitplanes").Bitplanes, block: *const @import("fastq_block").FastqColumnBlock) !bool {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+
+        for (0..block.read_count) |read_idx| {
+            var base_counts = [_]usize{0} ** 4;
+            const word_idx = read_idx >> 6;
+            const bit_mask = @as(u64, 1) << @as(u6, @intCast(read_idx & 63));
+
+            for (0..block.read_lengths[read_idx]) |col| {
+                const col_offset = col * bp.u64_per_col;
+                if (bp.plane_a[col_offset + word_idx] & bit_mask != 0) {
+                    base_counts[0] += 1;
+                } else if (bp.plane_c[col_offset + word_idx] & bit_mask != 0) {
+                    base_counts[1] += 1;
+                } else if (bp.plane_g[col_offset + word_idx] & bit_mask != 0) {
+                    base_counts[2] += 1;
+                } else if (bp.plane_t[col_offset + word_idx] & bit_mask != 0) {
+                    base_counts[3] += 1;
+                }
+            }
+
+            const len = block.read_lengths[read_idx];
+            if (len > 0) {
+                const entropy = entropy_lut_mod.global_lut.getEntropy(base_counts, len);
+                self.total_reads += 1;
+                self.total_entropy_sum += entropy;
+                if (entropy < 1.5) self.low_complexity_reads += 1;
+            }
+        }
+
+        return true;
+    }
+
+    pub fn processBlock(ptr: *anyopaque, block: *const @import("fastq_block").FastqColumnBlock) !bool {
+        const bitplanes = @import("bitplanes");
+        var bp = try bitplanes.Bitplanes.init(block.allocator, block.capacity, block.max_read_len);
+        defer bp.deinit();
+        bp.fromColumnBlock(block);
+        return processBitplanes(ptr, &bp, block);
+    }
+
+    pub fn processRawBatch(ptr: *anyopaque, reads: []const parser.Read) !bool {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        for (reads) |read| {
+            const len = read.seq.len;
+            if (len == 0) continue;
+
+            var base_counts = [_]usize{0} ** 4;
+            for (read.seq) |base| {
+                switch (base) {
+                    'A', 'a' => base_counts[0] += 1,
+                    'C', 'c' => base_counts[1] += 1,
+                    'G', 'g' => base_counts[2] += 1,
+                    'T', 't' => base_counts[3] += 1,
+                    else => {},
+                }
+            }
+
+            const entropy = entropy_lut_mod.global_lut.getEntropy(base_counts, len);
+            self.total_reads += 1;
+            self.total_entropy_sum += entropy;
+            if (entropy < 1.5) self.low_complexity_reads += 1;
+        }
         return true;
     }
 
@@ -66,6 +130,9 @@ pub const EntropyStage = struct {
             .ptr = self,
             .vtable = &.{
                 .process = process,
+                .processRawBatch = processRawBatch,
+                .processBlock = processBlock,
+                .processBitplanes = processBitplanes,
                 .finalize = finalize,
                 .report = report,
                 .merge = merge,

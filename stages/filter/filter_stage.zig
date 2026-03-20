@@ -14,7 +14,7 @@ pub const FilterStage = struct {
         };
     }
 
-    pub fn process(ptr: *anyopaque, read: *parser.Read) !bool {
+    pub fn process(ptr: *anyopaque, read: *const parser.Read) !bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         self.reads_seen += 1;
 

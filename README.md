@@ -19,6 +19,8 @@ QwD focuses on:
 - **Modular analytics stages**: Composable stages for flexible analysis pipelines.
 - **Hardware Acceleration**: SIMD-optimized inner loops (GC counting, PHRED summing) providing 3x-7x speedups.
 - **Parallel Execution**: Multithreaded processing while maintaining bit-exact reproducibility.
+- **Phase Q Columnar Engine**: Fully vectorized k-mer counting and fused bitplane analytics over 32-lane column chunks.
+- **Language Bindings**: Production-ready Python (cffi/ctypes) and R native FFI bindings for streamlined bioinformatics workflows.
 
 ---
 
