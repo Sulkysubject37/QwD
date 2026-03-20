@@ -23,6 +23,9 @@ pub fn build(b: *std.Build) void {
     const bloom_filter_mod = b.addModule("bloom_filter", .{
         .root_source_file = b.path("core/analytics/bloom_filter.zig"),
     });
+    const mode_mod = b.addModule("mode", .{
+        .root_source_file = b.path("core/config/mode.zig"),
+    });
 
     const simd_transpose_mod = b.addModule("simd_transpose", .{
         .root_source_file = b.path("core/simd/simd_transpose.zig"),
@@ -45,6 +48,7 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("core/batch/chunk_builder.zig"),
     });
     chunk_builder_mod.addImport("block_reader", block_reader_mod);
+    chunk_builder_mod.addImport("parser", parser_mod);
 
     const raw_batch_mod = b.addModule("raw_batch", .{
         .root_source_file = b.path("core/batch/raw_batch.zig"),
@@ -54,7 +58,7 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("core/vector/column_ops.zig"),
     });
     const bitplanes_mod = b.addModule("bitplanes", .{
-        .root_source_file = b.path("core/columnar/dna_bitplanes.zig"),
+        .root_source_file = b.path("core/columnar/bitplane_core.zig"),
     });
     const kmer_columnar_mod = b.addModule("kmer_columnar", .{
         .root_source_file = b.path("core/vector/kmer_columnar.zig"),
@@ -134,6 +138,10 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("core/memory/memory_manager.zig"),
     });
 
+    const global_allocator_mod = b.addModule("global_allocator", .{
+        .root_source_file = b.path("core/memory/global_allocator.zig"),
+    });
+
     const simd_ops_mod = b.addModule("simd_ops", .{
         .root_source_file = b.path("core/simd/simd_ops.zig"),
     });
@@ -162,6 +170,7 @@ pub fn build(b: *std.Build) void {
     const pipeline_config_mod = b.addModule("pipeline_config", .{
         .root_source_file = b.path("core/config/pipeline_config.zig"),
     });
+    pipeline_config_mod.addImport("mode", mode_mod);
 
     // Fastq Modules
     const qc_mod = b.addModule("qc", .{
@@ -322,6 +331,7 @@ pub fn build(b: *std.Build) void {
     overrepresented_mod.addImport("stage", stage_interface_mod);
     overrepresented_mod.addImport("fastq_block", fastq_block_mod);
     overrepresented_mod.addImport("bitplanes", bitplanes_mod);
+    overrepresented_mod.addImport("mode", mode_mod);
 
     const duplication_mod = b.addModule("duplication", .{
         .root_source_file = b.path("stages/qc/duplication_stage.zig"),
@@ -331,6 +341,7 @@ pub fn build(b: *std.Build) void {
     duplication_mod.addImport("bloom_filter", bloom_filter_mod);
     duplication_mod.addImport("fastq_block", fastq_block_mod);
     duplication_mod.addImport("bitplanes", bitplanes_mod);
+    duplication_mod.addImport("mode", mode_mod);
 
     const qc_adapter_detect_mod = b.addModule("qc_adapter_detect", .{
         .root_source_file = b.path("stages/qc/adapter_detection_stage.zig"),
@@ -416,6 +427,7 @@ pub fn build(b: *std.Build) void {
     pipeline_mod.addImport("entropy", entropy_mod);
     pipeline_mod.addImport("adapter_detect", adapter_detect_mod);
     pipeline_mod.addImport("pipeline_config", pipeline_config_mod);
+    pipeline_mod.addImport("mode", mode_mod);
     
     // Add all QC modules to pipeline
     pipeline_mod.addImport("basic_stats", basic_stats_mod);
@@ -457,12 +469,14 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("parallel_scheduler", parallel_scheduler_mod);
     exe.root_module.addImport("simd_ops", simd_ops_mod);
     exe.root_module.addImport("allocator", allocator_mod);
+    exe.root_module.addImport("global_allocator", global_allocator_mod);
     exe.root_module.addImport("batch_builder", batch_builder_mod);
     exe.root_module.addImport("chunk_builder", chunk_builder_mod);
     exe.root_module.addImport("read_graph", read_graph_mod);
     exe.root_module.addImport("prefetch", prefetch_mod);
     exe.root_module.addImport("pipeline", pipeline_mod);
     exe.root_module.addImport("pipeline_config", pipeline_config_mod);
+    exe.root_module.addImport("mode", mode_mod);
     exe.root_module.addImport("metrics", metrics_mod);
     exe.root_module.addImport("runtime_metrics", runtime_metrics_mod);
     exe.root_module.addImport("structured_output", structured_output_mod);

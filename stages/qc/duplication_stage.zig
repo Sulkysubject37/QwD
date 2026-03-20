@@ -2,6 +2,7 @@ const std = @import("std");
 const parser = @import("parser");
 const stage_mod = @import("stage");
 const bloom_mod = @import("bloom_filter");
+const mode_mod = @import("mode");
 
 pub const DuplicationStage = struct {
     map: std.StringHashMap(void),
@@ -9,15 +10,15 @@ pub const DuplicationStage = struct {
     allocator: std.mem.Allocator,
     total_reads: usize = 0,
     duplicate_reads: usize = 0,
-    fast_mode: bool = false,
+    mode: mode_mod.Mode = .EXACT,
 
-    pub fn init(allocator: std.mem.Allocator, fast_mode: bool) DuplicationStage {
+    pub fn init(allocator: std.mem.Allocator, is_fast: bool) DuplicationStage {
         var self = DuplicationStage{
             .map = std.StringHashMap(void).init(allocator),
             .allocator = allocator,
-            .fast_mode = fast_mode,
+            .mode = if (is_fast) .FAST else .EXACT,
         };
-        if (fast_mode) {
+        if (self.mode == .FAST) {
             self.bloom = bloom_mod.BloomFilter.init(allocator, 2 * 1024 * 1024) catch null;
         }
         return self;
@@ -38,9 +39,9 @@ pub const DuplicationStage = struct {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         self.total_reads += 1;
         var seq_to_hash = read.seq;
-        if (self.fast_mode and seq_to_hash.len > 50) seq_to_hash = seq_to_hash[0..50];
+        if (self.mode == .FAST and seq_to_hash.len > 50) seq_to_hash = seq_to_hash[0..50];
 
-        if (self.fast_mode and self.bloom != null) {
+        if (self.mode == .FAST and self.bloom != null) {
             if (self.bloom.?.contains(seq_to_hash)) {
                 self.duplicate_reads += 1;
             } else {
@@ -49,14 +50,19 @@ pub const DuplicationStage = struct {
             return true;
         }
 
-        if (self.map.count() < 200000) {
-            const v = try self.map.getOrPut(seq_to_hash);
-            if (!v.found_existing) {
-                const key = try self.allocator.dupe(u8, seq_to_hash);
-                v.key_ptr.* = key;
-                v.value_ptr.* = {};
-            } else {
+        if (self.mode == .EXACT or self.map.count() < 200000) {
+            if (self.map.contains(seq_to_hash)) {
                 self.duplicate_reads += 1;
+            } else {
+                const duped_seq = try self.allocator.dupe(u8, seq_to_hash);
+                errdefer self.allocator.free(duped_seq);
+                const v = try self.map.getOrPut(duped_seq);
+                if (v.found_existing) {
+                    self.allocator.free(duped_seq);
+                    self.duplicate_reads += 1;
+                } else {
+                    v.value_ptr.* = {};
+                }
             }
         } else {
             if (self.map.contains(seq_to_hash)) self.duplicate_reads += 1;
@@ -64,7 +70,7 @@ pub const DuplicationStage = struct {
         return true;
     }
 
-    pub fn processBitplanes(ptr: *anyopaque, bp: *const @import("bitplanes").Bitplanes, block: *const @import("fastq_block").FastqColumnBlock) !bool {
+    pub fn processBitplanes(ptr: *anyopaque, bp: *const @import("bitplanes").BitplaneCore, block: *const @import("fastq_block").FastqColumnBlock) !bool {
         _ = bp;
         return processBlock(ptr, block);
     }
@@ -78,9 +84,9 @@ pub const DuplicationStage = struct {
             const len = block.read_lengths[read_idx];
             for (0..len) |i| seq_buf[i] = block.bases[i][read_idx];
             var seq = seq_buf[0..len];
-            if (self.fast_mode and seq.len > 50) seq = seq[0..50];
+            if (self.mode == .FAST and seq.len > 50) seq = seq[0..50];
 
-            if (self.fast_mode and self.bloom != null) {
+            if (self.mode == .FAST and self.bloom != null) {
                 if (self.bloom.?.contains(seq)) {
                     self.duplicate_reads += 1;
                 } else {
@@ -89,14 +95,22 @@ pub const DuplicationStage = struct {
                 continue;
             }
 
-            if (self.map.count() < 200000) {
-                const v = try self.map.getOrPut(seq);
-                if (!v.found_existing) {
-                    const key = try self.allocator.dupe(u8, seq);
-                    v.key_ptr.* = key;
-                    v.value_ptr.* = {};
-                } else {
+
+            if (self.mode == .EXACT or self.map.count() < 200000) {
+                if (self.map.contains(seq)) {
                     self.duplicate_reads += 1;
+                } else {
+                    const duped_seq = self.allocator.dupe(u8, seq) catch continue;
+                    const v = self.map.getOrPut(duped_seq) catch {
+                        self.allocator.free(duped_seq);
+                        continue;
+                    };
+                    if (v.found_existing) {
+                        self.allocator.free(duped_seq);
+                        self.duplicate_reads += 1;
+                    } else {
+                        v.value_ptr.* = {};
+                    }
                 }
             } else {
                 if (self.map.contains(seq)) self.duplicate_reads += 1;
@@ -110,9 +124,9 @@ pub const DuplicationStage = struct {
         for (reads) |read| {
             self.total_reads += 1;
             var seq_to_hash = read.seq;
-            if (self.fast_mode and seq_to_hash.len > 50) seq_to_hash = seq_to_hash[0..50];
+            if (self.mode == .FAST and seq_to_hash.len > 50) seq_to_hash = seq_to_hash[0..50];
 
-            if (self.fast_mode and self.bloom != null) {
+            if (self.mode == .FAST and self.bloom != null) {
                 if (self.bloom.?.contains(seq_to_hash)) {
                     self.duplicate_reads += 1;
                 } else {
@@ -121,14 +135,21 @@ pub const DuplicationStage = struct {
                 continue;
             }
 
-            if (self.map.count() < 200000) {
-                const v = try self.map.getOrPut(seq_to_hash);
-                if (!v.found_existing) {
-                    const key = try self.allocator.dupe(u8, seq_to_hash);
-                    v.key_ptr.* = key;
-                    v.value_ptr.* = {};
-                } else {
+            if (self.mode == .EXACT or self.map.count() < 200000) {
+                if (self.map.contains(seq_to_hash)) {
                     self.duplicate_reads += 1;
+                } else {
+                    const duped_seq = self.allocator.dupe(u8, seq_to_hash) catch continue;
+                    const v = self.map.getOrPut(duped_seq) catch {
+                        self.allocator.free(duped_seq);
+                        continue;
+                    };
+                    if (v.found_existing) {
+                        self.allocator.free(duped_seq);
+                        self.duplicate_reads += 1;
+                    } else {
+                        v.value_ptr.* = {};
+                    }
                 }
             } else {
                 if (self.map.contains(seq_to_hash)) self.duplicate_reads += 1;
@@ -146,7 +167,34 @@ pub const DuplicationStage = struct {
         const other: *@This() = @ptrCast(@alignCast(other_ptr));
         self.total_reads += other.total_reads;
         self.duplicate_reads += other.duplicate_reads;
-        // Skip map merging for speed in this phase
+        
+        var it = other.map.iterator();
+        while (it.next()) |entry| {
+            const seq = entry.key_ptr.*;
+            if (self.map.contains(seq)) {
+                // This sequence was found in another thread's map, but we already have it.
+                // However, 'duplicate_reads' was already incremented for duplicates WITHIN each thread.
+                // We don't need to increment 'duplicate_reads' here because it represents the UNION of unique sequences.
+                // Wait, if it's in both maps, then it's a duplicate that was previously counted as unique in both threads.
+                // So we SHOULD increment duplicate_reads once.
+                self.duplicate_reads += 1;
+            } else if (self.mode == .EXACT or self.map.count() < 200000) {
+                const duped = self.allocator.dupe(u8, seq) catch continue;
+                const gop = self.map.getOrPut(duped) catch {
+                    self.allocator.free(duped);
+                    continue;
+                };
+                if (gop.found_existing) {
+                    self.allocator.free(duped);
+                    self.duplicate_reads += 1;
+                } else {
+                    gop.value_ptr.* = {};
+                }
+            }
+        }
+        
+        // Bloom filters are only in FAST mode and we don't merge them here yet for simplicity,
+        // but since they are approximate it's less critical than Exact mode determinism.
     }
 
     pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {

@@ -6,6 +6,7 @@ const pipeline_config_mod = @import("pipeline_config");
 const metrics_mod = @import("metrics");
 const structured_output = @import("structured_output");
 const runtime_metrics = @import("runtime_metrics");
+const mode_mod = @import("mode");
 
 const bam_reader_mod = @import("bam_reader");
 const bam_pipeline_mod = @import("bam_pipeline");
@@ -18,9 +19,7 @@ pub fn main() !void {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    var qwd_alloc = allocator_mod.createArena(allocator);
-    defer allocator_mod.destroyArena(&qwd_alloc);
-    const arena_allocator = qwd_alloc.allocator();
+
 
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
@@ -32,8 +31,10 @@ pub fn main() !void {
 
     const command = args[1];
     var num_threads: usize = std.Thread.getCpuCount() catch 1;
-    var fast_mode = false;
+    var mode: mode_mod.Mode = .EXACT;
     var perf_mode = false;
+    var mem_mb: usize = 16;
+    var max_memory_mb: usize = 1024;
     var output_format: enum { text, json } = .text;
 
     var positional_args = std.ArrayList([]const u8).init(allocator);
@@ -47,9 +48,24 @@ pub fn main() !void {
                 num_threads = try std.fmt.parseInt(usize, args[i], 10);
             }
         } else if (std.mem.eql(u8, args[i], "--fast")) {
-            fast_mode = true;
+            mode = .FAST;
+        } else if (std.mem.eql(u8, args[i], "--mode")) {
+            i += 1;
+            if (i < args.len) {
+                if (std.mem.eql(u8, args[i], "fast")) {
+                    mode = .FAST;
+                } else if (std.mem.eql(u8, args[i], "exact")) {
+                    mode = .EXACT;
+                }
+            }
         } else if (std.mem.eql(u8, args[i], "--perf")) {
             perf_mode = true;
+        } else if (std.mem.eql(u8, args[i], "--memory")) {
+            i += 1;
+            if (i < args.len) mem_mb = try std.fmt.parseInt(usize, args[i], 10);
+        } else if (std.mem.eql(u8, args[i], "--max-memory")) {
+            i += 1;
+            if (i < args.len) max_memory_mb = try std.fmt.parseInt(usize, args[i], 10);
         } else if (std.mem.eql(u8, args[i], "--json")) {
             output_format = .json;
         } else {
@@ -58,6 +74,12 @@ pub fn main() !void {
     }
 
     const stdout = std.io.getStdOut().writer().any();
+
+    const global_allocator = @import("global_allocator");
+    var global_pool = global_allocator.GlobalAllocator.init(allocator, max_memory_mb * 1024 * 1024);
+    const pool_allocator = global_pool.allocator();
+
+    const arena_allocator = pool_allocator;
 
     if (std.mem.eql(u8, command, "bamstats")) {
         if (positional_args.items.len < 1) return;
@@ -95,6 +117,7 @@ pub fn main() !void {
     }
 
     var pipeline = pipeline_mod.Pipeline.init(arena_allocator, null);
+    pipeline.mode = mode;
     defer pipeline.deinit();
 
     var file_path: []const u8 = "";
@@ -152,14 +175,14 @@ pub fn main() !void {
     const file = try std.fs.cwd().openFile(file_path, .{});
     defer file.close();
 
-    var parser = if (fast_mode) blk: {
+    var parser = if (mode == .FAST) blk: {
         break :blk try parser_mod.FastqParser.initMmap(arena_allocator, file);
-    } else try parser_mod.FastqParser.init(allocator, file.reader().any(), 10 * 1024 * 1024);
+    } else try parser_mod.FastqParser.init(allocator, file.reader().any(), (256 * 1024) + (1024 * 1024));
     defer parser.deinit();
 
     // Hyperscale Direct Chunked flow
     const chunk_builder_mod = @import("chunk_builder");
-    var chunk_builder = chunk_builder_mod.ChunkBuilder.init(&parser.br, 16 * 1024 * 1024);
+    var chunk_builder = chunk_builder_mod.ChunkBuilder.init(&parser, 256 * 1024);
 
     var perf = runtime_metrics.RuntimeMetrics.start();
 
@@ -170,6 +193,7 @@ pub fn main() !void {
         // try structured_output.writeJsonReport(pipeline.parallel_scheduler.?, stdout);
         // try stdout.writeAll("\n");
     } else {
+        try stdout.print("\n--- QwD Execution Mode: {s} ---\n", .{@tagName(mode)});
         pipeline.report(stdout);
         if (perf_mode) {
             perf.report(stdout);

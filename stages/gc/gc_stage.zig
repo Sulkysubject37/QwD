@@ -10,7 +10,7 @@ pub const GcStage = struct {
     gc_bases: usize = 0,
     total_bases: usize = 0,
     gc_ratio: f64 = 0.0,
-    cached_bp: ?bitplanes.Bitplanes = null,
+    cached_bp: ?bitplanes.BitplaneCore = null,
 
     pub fn process(ptr: *anyopaque, read: *const parser.Read) !bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
@@ -30,7 +30,7 @@ pub const GcStage = struct {
         for (0..block.read_count) |i| self.total_bases += block.read_lengths[i];
 
         if (self.cached_bp == null) {
-            self.cached_bp = try bitplanes.Bitplanes.init(block.allocator, block.capacity, block.max_read_len);
+            self.cached_bp = try bitplanes.BitplaneCore.init(block.allocator, block.capacity, block.max_read_len);
         }
         
         var bp = &self.cached_bp.?;

@@ -67,6 +67,14 @@ jobs:
           echo "Verifying Fast Mode Multicore Determinism..."
           diff res_1t_fast.txt res_8t_fast.txt
 
+      - name: Phase Q Memory Bounding
+        shell: bash
+        run: |
+          echo "--- Testing 8 Threads with 16MB Hard Memory Cap ---"
+          ./zig-out/bin/qwd qc tests/fixtures/sample.fastq --threads 8 --max-memory 16 > res_mem_bounded.txt
+          echo "Verifying memory bounded exact determinism against unconstrained execution..."
+          diff res_mem_bounded.txt res_1t_exact.txt
+
       - name: Interface Tests (Python & CLI)
         shell: bash
         run: |

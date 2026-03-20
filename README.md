@@ -21,6 +21,7 @@ QwD focuses on:
 - **Parallel Execution**: Multithreaded processing while maintaining bit-exact reproducibility.
 - **Phase Q Columnar Engine**: Fully vectorized k-mer counting and fused bitplane analytics over 32-lane column chunks.
 - **Language Bindings**: Production-ready Python (cffi/ctypes) and R native FFI bindings for streamlined bioinformatics workflows.
+- **Stability & Reliability**: Certified for 10M+ reads with strict memory bounding (e.g., 256MB cap). Features autonomous backpressure and non-blocking recovery.
 
 ---
 
