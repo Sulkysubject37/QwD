@@ -15,16 +15,23 @@ if [ ! -f "$BINARY" ]; then
     exit 1
 fi
 
+# Find a working python
+if command -v python3 >/dev/null 2>&1; then
+    PYTHON="python3"
+else
+    PYTHON="python"
+fi
+
 echo "Testing JSON output..."
 $BINARY qc "$FIXTURE" --json > output.json
 # Simple check if it is valid JSON
-python3.10 -c "import json; json.load(open('output.json'))"
+$PYTHON -c "import json; json.load(open('output.json'))"
 echo "JSON validity: OK"
 
 echo "Testing NDJSON streaming..."
 $BINARY qc "$FIXTURE" --ndjson > output.ndjson
 # Check if non-empty lines are valid JSON
-python3.10 -c "import json, sys; [json.loads(line) for line in sys.stdin if line.strip()]" < output.ndjson
+$PYTHON -c "import json, sys; [json.loads(line) for line in sys.stdin if line.strip()]" < output.ndjson
 echo "NDJSON validity: OK"
 
 rm output.json output.ndjson
