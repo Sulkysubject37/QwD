@@ -11,21 +11,15 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Setup Zig (Latest stable/master)
+      - name: Setup Zig (0.13.0)
         uses: mlugg/setup-zig@v1
         with:
-          version: master # Testing if latest fixes the .lib generation bug
+          version: 0.13.0
 
       - name: Zig Environment Check
         run: |
           zig version
           zig env
-
-      - name: Sanity Check (zig cc)
-        run: |
-          # Try to compile a trivial C file targeting GNU to see if import libs are generated
-          echo "int main() { return 0; }" > test.c
-          zig cc -target x86_64-windows-gnu test.c -o test.exe
 
       - name: Clear Zig Cache
         shell: pwsh
@@ -34,6 +28,12 @@ jobs:
             Remove-Item -Recurse -Force "$env:LOCALAPPDATA\zig"
             echo "Cleared Zig cache"
           }
+
+      - name: Sanity Check (zig cc)
+        run: |
+          # Try to compile a trivial C file targeting GNU to see if import libs are generated
+          echo "int main() { return 0; }" > test.c
+          zig cc -target x86_64-windows-gnu test.c -o test.exe
 
       - name: Build Project (GNU)
         run: zig build -Doptimize=ReleaseFast -Dtarget=x86_64-windows-gnu --summary all
