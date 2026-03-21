@@ -24,7 +24,13 @@ jobs:
           version: 0.13.0
 
       - name: Build project (ReleaseFast)
-        run: zig build -Doptimize=ReleaseFast
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" == "Windows" ]; then
+            zig build -Doptimize=ReleaseFast -Dtarget=x86_64-windows-gnu
+          else
+            zig build -Doptimize=ReleaseFast
+          fi
 
       - name: Generate robust test fixtures
         shell: bash
@@ -34,17 +40,31 @@ jobs:
           python3 -c "f=open('tests/fixtures/sample.bam','w'); f.write('BAM HEADER'); f.close()"
 
       - name: Run unit tests
-        run: zig build test --summary all
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" == "Windows" ]; then
+            zig build test --summary all -Dtarget=x86_64-windows-gnu
+          else
+            zig build test --summary all
+          fi
 
       - name: Run SIMD benchmark (Internal)
         shell: bash
         run: |
-          zig build bench || echo "Benchmark not supported on this platform"
+          if [ "$RUNNER_OS" == "Windows" ]; then
+            zig build bench -Dtarget=x86_64-windows-gnu || echo "Benchmark not supported on Windows"
+          else
+            zig build bench
+          fi
 
       - name: Run Core benchmark (Internal)
         shell: bash
         run: |
-          zig build bench-core || echo "Benchmark not supported on this platform"
+          if [ "$RUNNER_OS" == "Windows" ]; then
+            zig build bench-core -Dtarget=x86_64-windows-gnu || echo "Benchmark not supported on Windows"
+          else
+            zig build bench-core
+          fi
 
       - name: Multicore Correctness & Scaling (Phase R Extreme)
         shell: bash
