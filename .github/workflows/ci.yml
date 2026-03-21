@@ -31,6 +31,14 @@ jobs:
         with:
           version: 0.13.0
 
+      - name: Clear Zig Cache (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          if (Test-Path "$env:LOCALAPPDATA\zig") {
+            Remove-Item -Recurse -Force "$env:LOCALAPPDATA\zig"
+          }
+
       - name: Build project
         run: ${{ matrix.build_cmd }}
 
