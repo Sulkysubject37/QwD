@@ -16,6 +16,10 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
+      - name: Setup MSVC (Windows only)
+        if: matrix.os == 'windows-latest'
+        uses: ilammy/msvc-dev-cmd@v1
+
       - name: Setup Zig
         uses: mlugg/setup-zig@v1
         with:
@@ -25,10 +29,17 @@ jobs:
         shell: bash
         run: |
           if [ "${{ matrix.os }}" == "windows-latest" ]; then
-            zig build -Doptimize=ReleaseFast -Dtarget=x86_64-windows-gnu
+            # We use pwsh for the actual command on Windows to ensure MSVC env is picked up
+            echo "Building on Windows via PowerShell..."
           else
             zig build -Doptimize=ReleaseFast
           fi
+
+      - name: Build project (Windows ReleaseFast)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          zig build -Doptimize=ReleaseFast -Dtarget=x86_64-windows-msvc
 
       - name: Generate robust test fixtures
         shell: bash
@@ -41,44 +52,55 @@ jobs:
         shell: bash
         run: |
           if [ "${{ matrix.os }}" == "windows-latest" ]; then
-            zig build test --summary all -Dtarget=x86_64-windows-gnu
+            echo "Running tests on Windows via PowerShell..."
           else
             zig build test --summary all
           fi
+
+      - name: Run unit tests (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          zig build test --summary all -Dtarget=x86_64-windows-msvc
 
       - name: Run SIMD benchmark (Internal)
         shell: bash
         run: |
           if [ "${{ matrix.os }}" == "windows-latest" ]; then
-            zig build bench -Dtarget=x86_64-windows-gnu || echo "Benchmark not supported"
+            echo "Skipping bash benchmark on Windows"
           else
             zig build bench
           fi
+
+      - name: Run SIMD benchmark (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          zig build bench -Dtarget=x86_64-windows-msvc || echo "Benchmark not supported"
 
       - name: Run Core benchmark (Internal)
         shell: bash
         run: |
           if [ "${{ matrix.os }}" == "windows-latest" ]; then
-            zig build bench-core -Dtarget=x86_64-windows-gnu || echo "Benchmark not supported"
+            echo "Skipping bash benchmark on Windows"
           else
             zig build bench-core
           fi
+
+      - name: Run Core benchmark (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          zig build bench-core -Dtarget=x86_64-windows-msvc || echo "Benchmark not supported"
 
       - name: Multicore Correctness & Scaling (Phase R Extreme)
         shell: bash
         run: |
           QWD="./zig-out/bin/qwd"
           if [ -f "${QWD}.exe" ]; then QWD="${QWD}.exe"; fi
-          echo "--- 1 Thread (Exact) ---"
           $QWD qc tests/fixtures/sample.fastq --threads 1 > res_1t_exact.txt
-          
-          echo "--- 4 Threads (Exact) ---"
           $QWD qc tests/fixtures/sample.fastq --threads 4 > res_4t_exact.txt
-          
-          echo "--- 8 Threads (Exact) ---"
           $QWD qc tests/fixtures/sample.fastq --threads 8 > res_8t_exact.txt
-          
-          echo "Verifying Multicore Exact Determinism..."
           diff res_1t_exact.txt res_4t_exact.txt
           diff res_1t_exact.txt res_8t_exact.txt
 
@@ -87,10 +109,7 @@ jobs:
         run: |
           QWD="./zig-out/bin/qwd"
           if [ -f "${QWD}.exe" ]; then QWD="${QWD}.exe"; fi
-          echo "--- 1 Thread (Fast) ---"
           $QWD qc --fast tests/fixtures/sample.fastq --threads 1 > res_1t_fast.txt
-          
-          echo "--- 8 Threads (Fast) ---"
           $QWD qc --fast tests/fixtures/sample.fastq --threads 8 > res_8t_fast.txt
 
       - name: Phase Q Memory Bounding
@@ -98,9 +117,7 @@ jobs:
         run: |
           QWD="./zig-out/bin/qwd"
           if [ -f "${QWD}.exe" ]; then QWD="${QWD}.exe"; fi
-          echo "--- Testing 4 Threads with 128MB Hard Memory Cap ---"
           $QWD qc tests/fixtures/sample.fastq --threads 4 --max-memory 128 > res_mem_bounded.txt
-          echo "Verifying memory bounded exact determinism against unconstrained execution..."
           diff res_mem_bounded.txt res_1t_exact.txt
 
       - name: Setup Python

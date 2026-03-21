@@ -16,6 +16,10 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
+      - name: Setup MSVC (Windows only)
+        if: matrix.os == 'windows-latest'
+        uses: ilammy/msvc-dev-cmd@v1
+
       - name: Set up Python 3.10
         uses: actions/setup-python@v4
         with:
@@ -30,10 +34,16 @@ jobs:
         shell: bash
         run: |
           if [ "${{ matrix.os }}" == "windows-latest" ]; then
-            zig build -Doptimize=ReleaseFast -Dtarget=x86_64-windows-gnu
+            echo "Building on Windows via PowerShell..."
           else
             zig build -Doptimize=ReleaseFast
           fi
+
+      - name: Build QwD Shared Library (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          zig build -Doptimize=ReleaseFast -Dtarget=x86_64-windows-msvc
 
       - name: Run Python Tests
         run: |
