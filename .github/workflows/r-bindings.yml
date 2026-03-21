@@ -38,7 +38,13 @@ jobs:
           version: 0.13.0
 
       - name: Build QwD Shared Library (ReleaseFast)
-        run: zig build -Doptimize=ReleaseFast
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" == "Windows" ]; then
+            zig build -Doptimize=ReleaseFast -Dtarget=x86_64-windows-gnu
+          else
+            zig build -Doptimize=ReleaseFast
+          fi
 
       - name: Run R Tests
         uses: r-lib/actions/check-r-package@v2
