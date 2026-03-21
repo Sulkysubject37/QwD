@@ -5,6 +5,9 @@ set -e
 # Verifies CLI JSON output validity and schema compliance.
 
 BINARY="./zig-out/bin/qwd"
+if [ -f "${BINARY}.exe" ]; then
+    BINARY="${BINARY}.exe"
+fi
 FIXTURE="tests/fixtures/sample.fastq"
 
 if [ ! -f "$BINARY" ]; then
