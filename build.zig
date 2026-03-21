@@ -500,7 +500,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    lib.linkSystemLibrary("c");
+    lib.linkLibC();
     lib.root_module.addImport("pipeline", pipeline_mod);
     lib.root_module.addImport("parser", parser_mod);
     lib.root_module.addImport("bam_pipeline", bam_pipeline_mod);
