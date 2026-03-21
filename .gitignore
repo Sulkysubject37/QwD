@@ -14,5 +14,10 @@ qwed/
 __pycache__/
 generate_development_graph.py
 generate_qwd_logo.py
+pipeline.json
+benchmark_pipeline.json
+benchmark.sh
+benchmark_report.md
+QwD_Development_Proof.png
 qwd_0.1.0.tar.gz
 qwd.Rcheck/
