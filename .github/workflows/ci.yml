@@ -92,7 +92,7 @@ jobs:
 
       - name: Setup pak
         if: matrix.os != 'windows-latest'
-        uses: r-lib/actions/setup-pak@v1
+        uses: r-lib/actions/setup-pak@v2
 
       - name: Install R dependencies
         if: matrix.os != 'windows-latest'
