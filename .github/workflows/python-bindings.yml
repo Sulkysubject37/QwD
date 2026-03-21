@@ -13,12 +13,18 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
+            shell: bash
             build_cmd: "zig build -Doptimize=ReleaseFast"
           - os: macos-latest
+            shell: bash
             build_cmd: "zig build -Doptimize=ReleaseFast"
           - os: windows-latest
+            shell: pwsh
             build_cmd: "zig build -Doptimize=ReleaseFast -Dtarget=x86_64-windows-gnu"
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
     
     steps:
       - uses: actions/checkout@v3
@@ -35,11 +41,16 @@ jobs:
 
       - name: Clear Zig Cache (Windows)
         if: matrix.os == 'windows-latest'
-        shell: pwsh
         run: |
           if (Test-Path "$env:LOCALAPPDATA\zig") {
             Remove-Item -Recurse -Force "$env:LOCALAPPDATA\zig"
           }
+
+      - name: Toolchain Sanity Check (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          echo "int main() { return 0; }" > test.c
+          zig cc -target x86_64-windows-gnu test.c -o test.exe
 
       - name: Build QwD Shared Library
         run: ${{ matrix.build_cmd }}
