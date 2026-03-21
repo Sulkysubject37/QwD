@@ -44,7 +44,7 @@ jobs:
       - name: Build QwD Shared Library Windows (ReleaseFast)
         if: matrix.os == 'windows-latest'
         shell: pwsh
-        run: zig build -Doptimize=ReleaseFast
+        run: zig build -Doptimize=ReleaseFast -Dtarget=x86_64-windows-gnu
 
       - name: Run R Tests
         uses: r-lib/actions/check-r-package@v2
