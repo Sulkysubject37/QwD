@@ -5,7 +5,7 @@ Version: 0.1.0
 Author: MD. Arshad <arshad10867c@gmail.com>
 Maintainer: MD. Arshad <arshad10867c@gmail.com>
 Description: High-performance streaming analytics for FASTQ and BAM data.
-License: AFL-3.0
+License: AFL-3
 Encoding: UTF-8
 LazyData: true
 Imports: jsonlite
