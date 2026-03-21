@@ -71,14 +71,16 @@ jobs:
       - name: Multicore Correctness & Scaling (Phase R Extreme)
         shell: bash
         run: |
+          QWD="./zig-out/bin/qwd"
+          if [ -f "${QWD}.exe" ]; then QWD="${QWD}.exe"; fi
           echo "--- 1 Thread (Exact) ---"
-          ./zig-out/bin/qwd qc tests/fixtures/sample.fastq --threads 1 > res_1t_exact.txt
+          $QWD qc tests/fixtures/sample.fastq --threads 1 > res_1t_exact.txt
           
           echo "--- 4 Threads (Exact) ---"
-          ./zig-out/bin/qwd qc tests/fixtures/sample.fastq --threads 4 > res_4t_exact.txt
+          $QWD qc tests/fixtures/sample.fastq --threads 4 > res_4t_exact.txt
           
           echo "--- 8 Threads (Exact) ---"
-          ./zig-out/bin/qwd qc tests/fixtures/sample.fastq --threads 8 > res_8t_exact.txt
+          $QWD qc tests/fixtures/sample.fastq --threads 8 > res_8t_exact.txt
           
           echo "Verifying Multicore Exact Determinism..."
           diff res_1t_exact.txt res_4t_exact.txt
@@ -87,17 +89,21 @@ jobs:
       - name: Fast Mode (Probabilistic) Validation
         shell: bash
         run: |
+          QWD="./zig-out/bin/qwd"
+          if [ -f "${QWD}.exe" ]; then QWD="${QWD}.exe"; fi
           echo "--- 1 Thread (Fast) ---"
-          ./zig-out/bin/qwd qc --fast tests/fixtures/sample.fastq --threads 1 > res_1t_fast.txt
+          $QWD qc --fast tests/fixtures/sample.fastq --threads 1 > res_1t_fast.txt
           
           echo "--- 8 Threads (Fast) ---"
-          ./zig-out/bin/qwd qc --fast tests/fixtures/sample.fastq --threads 8 > res_8t_fast.txt
+          $QWD qc --fast tests/fixtures/sample.fastq --threads 8 > res_8t_fast.txt
 
       - name: Phase Q Memory Bounding
         shell: bash
         run: |
+          QWD="./zig-out/bin/qwd"
+          if [ -f "${QWD}.exe" ]; then QWD="${QWD}.exe"; fi
           echo "--- Testing 4 Threads with 128MB Hard Memory Cap ---"
-          ./zig-out/bin/qwd qc tests/fixtures/sample.fastq --threads 4 --max-memory 128 > res_mem_bounded.txt
+          $QWD qc tests/fixtures/sample.fastq --threads 4 --max-memory 128 > res_mem_bounded.txt
           echo "Verifying memory bounded exact determinism against unconstrained execution..."
           diff res_mem_bounded.txt res_1t_exact.txt
 
