@@ -32,7 +32,7 @@ jobs:
       - name: Build project Windows (ReleaseFast)
         if: matrix.os == 'windows-latest'
         shell: pwsh
-        run: zig build -Doptimize=ReleaseFast
+        run: zig build -Doptimize=ReleaseFast -Dtarget=x86_64-windows-gnu
 
       - name: Generate robust test fixtures
         shell: bash
@@ -48,7 +48,7 @@ jobs:
       - name: Run unit tests Windows
         if: matrix.os == 'windows-latest'
         shell: pwsh
-        run: zig build test --summary all
+        run: zig build test --summary all -Dtarget=x86_64-windows-gnu
 
       - name: Run SIMD benchmark (Internal)
         if: matrix.os != 'windows-latest'
@@ -57,7 +57,7 @@ jobs:
       - name: Run SIMD benchmark Windows
         if: matrix.os == 'windows-latest'
         shell: pwsh
-        run: zig build bench
+        run: zig build bench -Dtarget=x86_64-windows-gnu
 
       - name: Run Core benchmark (Internal)
         if: matrix.os != 'windows-latest'
@@ -66,7 +66,7 @@ jobs:
       - name: Run Core benchmark Windows
         if: matrix.os == 'windows-latest'
         shell: pwsh
-        run: zig build bench-core
+        run: zig build bench-core -Dtarget=x86_64-windows-gnu
 
       - name: Multicore Correctness & Scaling (Phase R Extreme)
         shell: bash
