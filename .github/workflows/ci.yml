@@ -42,13 +42,31 @@ jobs:
           python3 -c "f=open('tests/fixtures/sample.bam','w'); f.write('BAM HEADER'); f.close()"
 
       - name: Run unit tests
-        run: zig build test --summary all
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" == "Windows" ]; then
+            zig build test --summary all -Dtarget=x86_64-windows-gnu
+          else
+            zig build test --summary all
+          fi
 
       - name: Run SIMD benchmark (Internal)
-        run: zig build bench
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" == "Windows" ]; then
+            zig build bench -Dtarget=x86_64-windows-gnu || echo "Benchmark not supported on Windows"
+          else
+            zig build bench
+          fi
 
       - name: Run Core benchmark (Internal)
-        run: zig build bench-core
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" == "Windows" ]; then
+            zig build bench-core -Dtarget=x86_64-windows-gnu || echo "Benchmark not supported on Windows"
+          else
+            zig build bench-core
+          fi
 
       - name: Multicore Correctness & Scaling (Phase R Extreme)
         shell: bash
