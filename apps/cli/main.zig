@@ -22,8 +22,34 @@ pub fn main() !void {
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
 
-    if (args.len < 3) {
-        std.debug.print("Usage: {s} <qc|fastq-stats|pipeline|entropy|n50|quality-decay|adapter-detect|bamstats|run> [options] <file>\n", .{args[0]});
+    if (args.len < 2 or std.mem.eql(u8, args[1], "help") or std.mem.eql(u8, args[1], "--help") or std.mem.eql(u8, args[1], "-h")) {
+        std.debug.print(
+            \\QwD — high-performance streaming bioinformatics engine
+            \\
+            \\Usage: qwd <command> [options] <file>
+            \\
+            \\Subcommands:
+            \\  qc              Run full Quality Control suite (FASTQ)
+            \\  bamstats        Alignment and coverage analytics (BAM)
+            \\  pipeline        Run custom pipeline from JSON config
+            \\  entropy         Analyze sequence complexity (FASTQ)
+            \\  n50             Calculate N-statistics (FASTQ)
+            \\  quality-decay   Analyze quality drop-off (FASTQ)
+            \\  adapter-detect  Detect common adapters (FASTQ)
+            \\  help            Print this help message
+            \\
+            \\Options:
+            \\  --threads N     Number of parallel threads (default: CPU count)
+            \\  --mode <type>   Execution mode: 'exact' (deterministic) or 'fast' (probabilistic)
+            \\  --fast          Shorthand for --mode fast
+            \\  --json          Output results in structured JSON format
+            \\  --ndjson        Output results in streaming NDJSON format
+            \\  --max-memory N  Hard memory limit in MB (default: 1024)
+            \\  --perf          Print detailed performance metrics
+            \\
+            \\Documentation: https://github.com/Sulkysubject37/QwD/blob/main/docs/cli_usage.md
+            \\
+        , .{});
         return;
     }
 

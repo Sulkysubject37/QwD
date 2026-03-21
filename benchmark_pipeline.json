@@ -1,8 +1,0 @@
-{
-  "pipeline": [
-    "basic-stats",
-    "nucleotide-composition",
-    "gc-content",
-    "n-statistics"
-  ]
-}
