@@ -90,22 +90,19 @@ jobs:
         with:
           use-public-rspm: true
 
-      - name: Setup pak
-        if: matrix.os != 'windows-latest'
-        uses: r-lib/actions/setup-pak@v3
-
       - name: Install R dependencies
         if: matrix.os != 'windows-latest'
-        run: |
-          Rscript -e 'pak::local_install_dev_deps("bindings/r")'
-          Rscript -e 'pak::pkg_install(c("jsonlite", "rcmdcheck"))'
+        uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::rcmdcheck, any::jsonlite
+          needs: check
+          working-directory: bindings/r
 
       - name: R Package Build and Check
         if: matrix.os != 'windows-latest'
-        shell: bash
-        run: |
-          R CMD build bindings/r
-          R CMD check qwd_*.tar.gz --no-manual --no-build-vignettes
+        uses: r-lib/actions/check-r-package@v2
+        with:
+          working-directory: bindings/r
 
       - name: Upload Test Results
         uses: actions/upload-artifact@v4
