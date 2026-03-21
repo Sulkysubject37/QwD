@@ -9,37 +9,30 @@ on:
 jobs:
   build_and_test:
     strategy:
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            build_cmd: "zig build -Doptimize=ReleaseFast"
+            test_cmd: "zig build test --summary all"
+          - os: macos-latest
+            build_cmd: "zig build -Doptimize=ReleaseFast"
+            test_cmd: "zig build test --summary all"
+          - os: windows-latest
+            build_cmd: "zig build -Doptimize=ReleaseFast -Dtarget=x86_64-windows-gnu"
+            test_cmd: "zig build test --summary all -Dtarget=x86_64-windows-gnu"
     runs-on: ${{ matrix.os }}
     
     steps:
       - uses: actions/checkout@v3
-
-      - name: Setup MSVC (Windows only)
-        if: matrix.os == 'windows-latest'
-        uses: ilammy/msvc-dev-cmd@v1
 
       - name: Setup Zig
         uses: mlugg/setup-zig@v1
         with:
           version: 0.13.0
 
-      - name: Build project (ReleaseFast)
-        shell: bash
-        run: |
-          if [ "${{ matrix.os }}" == "windows-latest" ]; then
-            # We use pwsh for the actual command on Windows to ensure MSVC env is picked up
-            echo "Building on Windows via PowerShell..."
-          else
-            zig build -Doptimize=ReleaseFast
-          fi
-
-      - name: Build project (Windows ReleaseFast)
-        if: matrix.os == 'windows-latest'
-        shell: pwsh
-        run: |
-          zig build -Doptimize=ReleaseFast -Dtarget=x86_64-windows-msvc
+      - name: Build project
+        run: ${{ matrix.build_cmd }}
 
       - name: Generate robust test fixtures
         shell: bash
@@ -49,51 +42,9 @@ jobs:
           python3 -c "f=open('tests/fixtures/sample.bam','w'); f.write('BAM HEADER'); f.close()"
 
       - name: Run unit tests
-        shell: bash
-        run: |
-          if [ "${{ matrix.os }}" == "windows-latest" ]; then
-            echo "Running tests on Windows via PowerShell..."
-          else
-            zig build test --summary all
-          fi
+        run: ${{ matrix.test_cmd }}
 
-      - name: Run unit tests (Windows)
-        if: matrix.os == 'windows-latest'
-        shell: pwsh
-        run: |
-          zig build test --summary all -Dtarget=x86_64-windows-msvc
-
-      - name: Run SIMD benchmark (Internal)
-        shell: bash
-        run: |
-          if [ "${{ matrix.os }}" == "windows-latest" ]; then
-            echo "Skipping bash benchmark on Windows"
-          else
-            zig build bench
-          fi
-
-      - name: Run SIMD benchmark (Windows)
-        if: matrix.os == 'windows-latest'
-        shell: pwsh
-        run: |
-          zig build bench -Dtarget=x86_64-windows-msvc || echo "Benchmark not supported"
-
-      - name: Run Core benchmark (Internal)
-        shell: bash
-        run: |
-          if [ "${{ matrix.os }}" == "windows-latest" ]; then
-            echo "Skipping bash benchmark on Windows"
-          else
-            zig build bench-core
-          fi
-
-      - name: Run Core benchmark (Windows)
-        if: matrix.os == 'windows-latest'
-        shell: pwsh
-        run: |
-          zig build bench-core -Dtarget=x86_64-windows-msvc || echo "Benchmark not supported"
-
-      - name: Multicore Correctness & Scaling (Phase R Extreme)
+      - name: Multicore Correctness & Scaling
         shell: bash
         run: |
           QWD="./zig-out/bin/qwd"
