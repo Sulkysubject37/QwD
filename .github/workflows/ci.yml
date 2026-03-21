@@ -16,9 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Enable MSVC Dev Cmd (Windows)
-        if: matrix.os == 'windows-latest'
-        uses: ilammy/msvc-dev-cmd@v1
+
 
       - name: Setup Zig
         uses: mlugg/setup-zig@v1
