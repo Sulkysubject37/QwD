@@ -31,13 +31,13 @@ jobs:
           version: 0.13.0
 
       - name: Build QwD Shared Library (ReleaseFast)
-        shell: bash
-        run: |
-          if [ "$RUNNER_OS" == "Windows" ]; then
-            zig build -Doptimize=ReleaseFast -Dtarget=x86_64-windows-gnu
-          else
-            zig build -Doptimize=ReleaseFast
-          fi
+        if: matrix.os != 'windows-latest'
+        run: zig build -Doptimize=ReleaseFast
+
+      - name: Build QwD Shared Library Windows (ReleaseFast)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: zig build -Doptimize=ReleaseFast
 
       - name: Run Python Tests
         run: |
