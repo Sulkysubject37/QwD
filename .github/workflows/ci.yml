@@ -14,14 +14,17 @@ jobs:
         include:
           - os: ubuntu-latest
             shell: bash
+            is_windows: false
             build_cmd: "zig build -Doptimize=ReleaseFast"
             test_cmd: "zig build test --summary all"
           - os: macos-latest
             shell: bash
+            is_windows: false
             build_cmd: "zig build -Doptimize=ReleaseFast"
             test_cmd: "zig build test --summary all"
           - os: windows-latest
             shell: pwsh
+            is_windows: true
             build_cmd: "zig build -Doptimize=ReleaseFast -Dtarget=x86_64-windows-gnu"
             test_cmd: "zig build test --summary all -Dtarget=x86_64-windows-gnu"
     runs-on: ${{ matrix.os }}
@@ -38,7 +41,7 @@ jobs:
           version: 0.13.0
 
       - name: Clear Zig Cache (Windows)
-        if: matrix.os == 'windows-latest'
+        if: matrix.is_windows
         run: |
           if (Test-Path "$env:LOCALAPPDATA\zig") {
             Remove-Item -Recurse -Force "$env:LOCALAPPDATA\zig"
@@ -48,7 +51,7 @@ jobs:
           }
 
       - name: Toolchain Sanity Check (Windows)
-        if: matrix.os == 'windows-latest'
+        if: matrix.is_windows
         run: |
           Set-Content -Path test.c -Value "int main() { return 0; }"
           zig cc -target x86_64-windows-gnu test.c -o test.exe
@@ -66,32 +69,55 @@ jobs:
       - name: Run unit tests
         run: ${{ matrix.test_cmd }}
 
-      - name: Multicore Correctness & Scaling
-        shell: bash
+      - name: Multicore Correctness & Scaling (Unix)
+        if: "!matrix.is_windows"
         run: |
           QWD="./zig-out/bin/qwd"
-          if [ -f "${QWD}.exe" ]; then QWD="${QWD}.exe"; fi
           $QWD qc tests/fixtures/sample.fastq --threads 1 > res_1t_exact.txt
           $QWD qc tests/fixtures/sample.fastq --threads 4 > res_4t_exact.txt
           $QWD qc tests/fixtures/sample.fastq --threads 8 > res_8t_exact.txt
           diff res_1t_exact.txt res_4t_exact.txt
           diff res_1t_exact.txt res_8t_exact.txt
 
-      - name: Fast Mode (Probabilistic) Validation
-        shell: bash
+      - name: Multicore Correctness & Scaling (Windows)
+        if: matrix.is_windows
+        run: |
+          $QWD = ".\zig-out\bin\qwd.exe"
+          if (!(Test-Path $QWD)) { throw "Binary not found at $QWD" }
+          & $QWD qc tests/fixtures/sample.fastq --threads 1 | Out-File -FilePath res_1t_exact.txt -Encoding utf8
+          & $QWD qc tests/fixtures/sample.fastq --threads 4 | Out-File -FilePath res_4t_exact.txt -Encoding utf8
+          & $QWD qc tests/fixtures/sample.fastq --threads 8 | Out-File -FilePath res_8t_exact.txt -Encoding utf8
+          # Minimal comparison
+          if ((Get-Content res_1t_exact.txt) -ne (Get-Content res_4t_exact.txt)) { throw "Determinism failed (1t vs 4t)" }
+          if ((Get-Content res_1t_exact.txt) -ne (Get-Content res_8t_exact.txt)) { throw "Determinism failed (1t vs 8t)" }
+
+      - name: Fast Mode Validation (Unix)
+        if: "!matrix.is_windows"
         run: |
           QWD="./zig-out/bin/qwd"
-          if [ -f "${QWD}.exe" ]; then QWD="${QWD}.exe"; fi
           $QWD qc --fast tests/fixtures/sample.fastq --threads 1 > res_1t_fast.txt
           $QWD qc --fast tests/fixtures/sample.fastq --threads 8 > res_8t_fast.txt
 
-      - name: Phase Q Memory Bounding
-        shell: bash
+      - name: Fast Mode Validation (Windows)
+        if: matrix.is_windows
+        run: |
+          $QWD = ".\zig-out\bin\qwd.exe"
+          & $QWD qc --fast tests/fixtures/sample.fastq --threads 1 | Out-File -FilePath res_1t_fast.txt -Encoding utf8
+          & $QWD qc --fast tests/fixtures/sample.fastq --threads 8 | Out-File -FilePath res_8t_fast.txt -Encoding utf8
+
+      - name: Phase Q Memory Bounding (Unix)
+        if: "!matrix.is_windows"
         run: |
           QWD="./zig-out/bin/qwd"
-          if [ -f "${QWD}.exe" ]; then QWD="${QWD}.exe"; fi
           $QWD qc tests/fixtures/sample.fastq --threads 4 --max-memory 128 > res_mem_bounded.txt
           diff res_mem_bounded.txt res_1t_exact.txt
+
+      - name: Phase Q Memory Bounding (Windows)
+        if: matrix.is_windows
+        run: |
+          $QWD = ".\zig-out\bin\qwd.exe"
+          & $QWD qc tests/fixtures/sample.fastq --threads 4 --max-memory 128 | Out-File -FilePath res_mem_bounded.txt -Encoding utf8
+          if ((Get-Content res_mem_bounded.txt) -ne (Get-Content res_1t_exact.txt)) { throw "Memory bounded determinism failed" }
 
       - name: Setup Python
         uses: actions/setup-python@v4
@@ -99,19 +125,19 @@ jobs:
           python-version: '3.10'
 
       - name: Interface Tests (Python & CLI)
-        shell: bash
         run: |
           python3 tests/bindings/python_test.py
-          ./tests/interface/cli_test.sh
+          # Use bash for the shell script even on windows as it's a .sh
+          bash ./tests/interface/cli_test.sh
 
       - name: Setup R
-        if: matrix.os != 'windows-latest'
+        if: "!matrix.is_windows"
         uses: r-lib/actions/setup-r@v2
         with:
           use-public-rspm: true
 
       - name: Install R dependencies
-        if: matrix.os != 'windows-latest'
+        if: "!matrix.is_windows"
         uses: r-lib/actions/setup-r-dependencies@v2
         with:
           extra-packages: any::rcmdcheck, any::jsonlite
@@ -119,7 +145,7 @@ jobs:
           working-directory: bindings/r
 
       - name: R Package Build and Check
-        if: matrix.os != 'windows-latest'
+        if: "!matrix.is_windows"
         uses: r-lib/actions/check-r-package@v2
         with:
           working-directory: bindings/r
