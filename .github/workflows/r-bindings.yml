@@ -21,13 +21,12 @@ jobs:
         with:
           use-public-rspm: true
 
-      - name: Set up pak
-        uses: r-lib/actions/setup-pak@v2
-
-      - name: Install dependencies
-        run: |
-          Rscript -e 'pak::local_install_dev_deps("bindings/r")'
-          Rscript -e 'pak::pkg_install("jsonlite")'
+      - name: Install R dependencies
+        uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::rcmdcheck, any::jsonlite
+          needs: check
+          working-directory: bindings/r
 
       - name: Setup Zig
         uses: mlugg/setup-zig@v1
@@ -38,6 +37,6 @@ jobs:
         run: zig build -Doptimize=ReleaseFast
 
       - name: Run R Tests
-        run: |
-          R CMD build bindings/r
-          R CMD check qwd_*.tar.gz
+        uses: r-lib/actions/check-r-package@v2
+        with:
+          working-directory: bindings/r
