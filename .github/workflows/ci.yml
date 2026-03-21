@@ -10,17 +10,15 @@ jobs:
   build_and_test:
     strategy:
       matrix:
-        include:
-          - os: ubuntu-latest
-            target: x86_64-linux
-          - os: macos-latest
-            target: aarch64-macos
-          - os: windows-latest
-            target: x86_64-windows-gnu
+        os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     
     steps:
       - uses: actions/checkout@v3
+
+      - name: Setup MSVC (Windows only)
+        if: matrix.os == 'windows-latest'
+        uses: ilammy/msvc-dev-cmd@v1
 
       - name: Setup Zig
         uses: mlugg/setup-zig@v1
@@ -28,7 +26,15 @@ jobs:
           version: 0.13.0
 
       - name: Build project (ReleaseFast)
-        run: zig build -Doptimize=ReleaseFast -Dtarget=${{ matrix.target }}
+        shell: bash
+        run: |
+          if [ "${{ matrix.os }}" == "windows-latest" ]; then
+            # Explicitly target MSVC since we have the environment setup
+            zig build -Doptimize=ReleaseFast -Dtarget=x86_64-windows-msvc
+          else
+            # Default to native for Linux/macOS to ensure compatibility with host glibc/system
+            zig build -Doptimize=ReleaseFast
+          fi
 
       - name: Generate robust test fixtures
         shell: bash
@@ -38,17 +44,31 @@ jobs:
           python3 -c "f=open('tests/fixtures/sample.bam','w'); f.write('BAM HEADER'); f.close()"
 
       - name: Run unit tests
-        run: zig build test --summary all -Dtarget=${{ matrix.target }}
+        shell: bash
+        run: |
+          if [ "${{ matrix.os }}" == "windows-latest" ]; then
+            zig build test --summary all -Dtarget=x86_64-windows-msvc
+          else
+            zig build test --summary all
+          fi
 
       - name: Run SIMD benchmark (Internal)
         shell: bash
         run: |
-          zig build bench -Dtarget=${{ matrix.target }} || echo "Benchmark not supported on this platform"
+          if [ "${{ matrix.os }}" == "windows-latest" ]; then
+            zig build bench -Dtarget=x86_64-windows-msvc || echo "Benchmark not supported on Windows"
+          else
+            zig build bench
+          fi
 
       - name: Run Core benchmark (Internal)
         shell: bash
         run: |
-          zig build bench-core -Dtarget=${{ matrix.target }} || echo "Benchmark not supported on this platform"
+          if [ "${{ matrix.os }}" == "windows-latest" ]; then
+            zig build bench-core -Dtarget=x86_64-windows-msvc || echo "Benchmark not supported on Windows"
+          else
+            zig build bench-core
+          fi
 
       - name: Multicore Correctness & Scaling (Phase R Extreme)
         shell: bash
