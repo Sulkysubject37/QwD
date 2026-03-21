@@ -16,10 +16,6 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Setup MSVC (Windows only)
-        if: matrix.os == 'windows-latest'
-        uses: ilammy/msvc-dev-cmd@v1
-
       - name: Setup Zig
         uses: mlugg/setup-zig@v1
         with:
@@ -29,10 +25,8 @@ jobs:
         shell: bash
         run: |
           if [ "${{ matrix.os }}" == "windows-latest" ]; then
-            # Explicitly target MSVC since we have the environment setup
-            zig build -Doptimize=ReleaseFast -Dtarget=x86_64-windows-msvc
+            zig build -Doptimize=ReleaseFast -Dtarget=x86_64-windows-gnu
           else
-            # Default to native for Linux/macOS to ensure compatibility with host glibc/system
             zig build -Doptimize=ReleaseFast
           fi
 
@@ -47,7 +41,7 @@ jobs:
         shell: bash
         run: |
           if [ "${{ matrix.os }}" == "windows-latest" ]; then
-            zig build test --summary all -Dtarget=x86_64-windows-msvc
+            zig build test --summary all -Dtarget=x86_64-windows-gnu
           else
             zig build test --summary all
           fi
@@ -56,7 +50,7 @@ jobs:
         shell: bash
         run: |
           if [ "${{ matrix.os }}" == "windows-latest" ]; then
-            zig build bench -Dtarget=x86_64-windows-msvc || echo "Benchmark not supported on Windows"
+            zig build bench -Dtarget=x86_64-windows-gnu || echo "Benchmark not supported"
           else
             zig build bench
           fi
@@ -65,7 +59,7 @@ jobs:
         shell: bash
         run: |
           if [ "${{ matrix.os }}" == "windows-latest" ]; then
-            zig build bench-core -Dtarget=x86_64-windows-msvc || echo "Benchmark not supported on Windows"
+            zig build bench-core -Dtarget=x86_64-windows-gnu || echo "Benchmark not supported"
           else
             zig build bench-core
           fi
