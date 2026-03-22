@@ -87,9 +87,9 @@ jobs:
           & $QWD qc tests/fixtures/sample.fastq --threads 1 | Out-File -FilePath res_1t_exact.txt -Encoding utf8
           & $QWD qc tests/fixtures/sample.fastq --threads 4 | Out-File -FilePath res_4t_exact.txt -Encoding utf8
           & $QWD qc tests/fixtures/sample.fastq --threads 8 | Out-File -FilePath res_8t_exact.txt -Encoding utf8
-          # Minimal comparison
-          if ((Get-Content res_1t_exact.txt) -ne (Get-Content res_4t_exact.txt)) { throw "Determinism failed (1t vs 4t)" }
-          if ((Get-Content res_1t_exact.txt) -ne (Get-Content res_8t_exact.txt)) { throw "Determinism failed (1t vs 8t)" }
+          # Robust comparison using Compare-Object
+          if (Compare-Object (Get-Content res_1t_exact.txt) (Get-Content res_4t_exact.txt)) { throw "Determinism failed (1t vs 4t)" }
+          if (Compare-Object (Get-Content res_1t_exact.txt) (Get-Content res_8t_exact.txt)) { throw "Determinism failed (1t vs 8t)" }
 
       - name: Fast Mode Validation (Unix)
         if: "!matrix.is_windows"
@@ -117,7 +117,7 @@ jobs:
         run: |
           $QWD = ".\zig-out\bin\qwd.exe"
           & $QWD qc tests/fixtures/sample.fastq --threads 4 --max-memory 128 | Out-File -FilePath res_mem_bounded.txt -Encoding utf8
-          if ((Get-Content res_mem_bounded.txt) -ne (Get-Content res_1t_exact.txt)) { throw "Memory bounded determinism failed" }
+          if (Compare-Object (Get-Content res_mem_bounded.txt) (Get-Content res_1t_exact.txt)) { throw "Memory bounded determinism failed" }
 
       - name: Setup Python
         uses: actions/setup-python@v4
