@@ -3,6 +3,7 @@ const builtin = @import("builtin");
 
 pub const BlockReader = struct {
     reader: ?std.io.AnyReader = null,
+    file_fallback: ?std.fs.File = null,
     buffer: []u8,
     pos: usize,
     end: usize,
@@ -21,7 +22,15 @@ pub const BlockReader = struct {
     pub fn initMmap(allocator: std.mem.Allocator, file: std.fs.File) !BlockReader {
         if (builtin.os.tag == .windows) {
             // Fallback for Windows where posix mmap is not natively available via target libc
-            return BlockReader.init(allocator, file.reader().any(), 1024 * 1024);
+            // We initialize a standard BlockReader. Since we can't store a pointer to 
+            // a temporary reader, we must pass the file handle and let fill() use it.
+            // NOTE: We temporarily set reader to null and will update fill() to use file if reader is null.
+            return BlockReader{
+                .file_fallback = file,
+                .buffer = try allocator.alloc(u8, 1024 * 1024),
+                .pos = 0,
+                .end = 0,
+            };
         }
 
         const size_u64 = try file.getEndPos();
@@ -67,7 +76,12 @@ pub const BlockReader = struct {
         self.pos = 0;
         self.end = remaining;
         
-        const read_len = try self.reader.?.read(self.buffer[self.end..]);
+        const read_len = if (self.reader) |r| 
+            try r.read(self.buffer[self.end..]) 
+        else if (self.file_fallback) |f| 
+            try f.read(self.buffer[self.end..])
+        else return error.ReaderUnavailable;
+
         self.end += read_len;
         return read_len;
     }

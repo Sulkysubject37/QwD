@@ -16,7 +16,6 @@ pub const FastqColumnBlock = struct {
         var qualities = try allocator.alloc([]u8, max_read_len);
         
         const total_size = max_read_len * capacity;
-        // Use standard alloc, we'll rely on the allocator's natural alignment or manual stripe management
         const base_buf = try allocator.alloc(u8, total_size);
         const qual_buf = try allocator.alloc(u8, total_size);
         
@@ -51,59 +50,6 @@ pub const FastqColumnBlock = struct {
         self.read_count = 0;
     }
 
-    pub fn transposeRaw(self: *FastqColumnBlock, raw: anytype) void {
-        const count = raw.count;
-        self.read_count = count;
-        
-        var read_idx: usize = 0;
-        while (read_idx + 8 <= count) : (read_idx += 8) {
-            var b_ptrs: [8][]const u8 = undefined;
-            var q_ptrs: [8][]const u8 = undefined;
-            inline for (0..8) |i| {
-                b_ptrs[i] = raw.reads[read_idx + i].seq;
-                q_ptrs[i] = raw.reads[read_idx + i].qual;
-            }
-            
-            var pos: usize = 0;
-            while (pos < self.max_read_len) : (pos += 8) {
-                const b_rows = simd_transpose.load8x8Safe(b_ptrs, pos);
-                const transposed_b = simd_transpose.transpose8x8(b_rows);
-                inline for (0..8) |i| {
-                    if (pos + i < self.max_read_len) {
-                        const dest_col = self.bases[pos + i];
-                        const chunk: [8]u8 = @bitCast(transposed_b[i]);
-                        @memcpy(dest_col[read_idx..read_idx+8], &chunk);
-                    }
-                }
-
-                const q_rows = simd_transpose.load8x8Safe(q_ptrs, pos);
-                const transposed_q = simd_transpose.transpose8x8(q_rows);
-                inline for (0..8) |i| {
-                    if (pos + i < self.max_read_len) {
-                        const dest_col = self.qualities[pos + i];
-                        const chunk: [8]u8 = @bitCast(transposed_q[i]);
-                        @memcpy(dest_col[read_idx..read_idx+8], &chunk);
-                    }
-                }
-            }
-        }
-
-        // Residual reads handling
-        while (read_idx < count) : (read_idx += 1) {
-            const seq = raw.reads[read_idx].seq;
-            const qual = raw.reads[read_idx].qual;
-            const len = @min(seq.len, self.max_read_len);
-            for (0..len) |pos| {
-                self.bases[pos][read_idx] = seq[pos];
-                self.qualities[pos][read_idx] = qual[pos];
-            }
-        }
-        
-        for (0..count) |i| {
-            self.read_lengths[i] = @intCast(raw.reads[i].seq.len);
-        }
-    }
-
     pub fn transposeFromIndices(self: *FastqColumnBlock, data: []const u8, indices: []const usize, start_nl: i64, count: usize) void {
         self.read_count = count;
         
@@ -116,26 +62,22 @@ pub const FastqColumnBlock = struct {
                 const current_nl = start_nl + r_idx * 4;
                 
                 const seq_start = indices[@intCast(current_nl + 1)] + 1;
-                const seq_end = indices[@intCast(current_nl + 2)];
+                var seq_end = indices[@intCast(current_nl + 2)];
                 const qual_start = indices[@intCast(current_nl + 3)] + 1;
-                const qual_end = indices[@intCast(current_nl + 4)];
-            
-                const seq_len = @as(i64, @intCast(seq_end)) - @as(i64, @intCast(seq_start));
-                const qual_len = @as(i64, @intCast(qual_end)) - @as(i64, @intCast(qual_start));
+                var qual_end = indices[@intCast(current_nl + 4)];
 
-                if (seq_len > 0 and qual_len > 0) {
-                    b_ptrs[i] = data[seq_start..seq_end];
-                    q_ptrs[i] = data[qual_start..qual_end];
-                    self.read_lengths[read_idx + i] = @intCast(seq_len);
-                } else {
-                    b_ptrs[i] = &[_]u8{};
-                    q_ptrs[i] = &[_]u8{};
-                    self.read_lengths[read_idx + i] = 0;
-                }
+                // Strip trailing \r if present (CRLF support)
+                if (seq_end > seq_start and data[seq_end - 1] == '\r') seq_end -= 1;
+                if (qual_end > qual_start and data[qual_end - 1] == '\r') qual_end -= 1;
+                
+                const seq_len = seq_end - seq_start;
+                
+                b_ptrs[i] = data[seq_start..seq_end];
+                q_ptrs[i] = data[qual_start..qual_end];
+                self.read_lengths[read_idx + i] = @intCast(seq_len);
 
-                // Zero out tails for the current 8 reads in the block
-                const biological_len = if (seq_len > 0) @as(usize, @intCast(seq_len)) else 0;
-                for (biological_len..self.max_read_len) |pos| {
+                // Zero out tails for the current read in the block to prevent leakage
+                for (seq_len..self.max_read_len) |pos| {
                    self.bases[pos][read_idx + i] = 0;
                    self.qualities[pos][read_idx + i] = 0;
                 }
@@ -171,9 +113,13 @@ pub const FastqColumnBlock = struct {
             const current_nl = start_nl + r_idx * 4;
             
             const seq_start = indices[@intCast(current_nl + 1)] + 1;
-            const seq_end = indices[@intCast(current_nl + 2)];
+            var seq_end = indices[@intCast(current_nl + 2)];
             const qual_start = indices[@intCast(current_nl + 3)] + 1;
-            const qual_end = indices[@intCast(current_nl + 4)];
+            var qual_end = indices[@intCast(current_nl + 4)];
+
+            // Strip trailing \r if present (CRLF support)
+            if (seq_end > seq_start and data[seq_end - 1] == '\r') seq_end -= 1;
+            if (qual_end > qual_start and data[qual_end - 1] == '\r') qual_end -= 1;
             
             const seq = data[seq_start..seq_end];
             const qual = data[qual_start..qual_end];
