@@ -28,9 +28,9 @@ pub const FastqParser = struct {
     allocator: std.mem.Allocator,
     eof: bool = false,
 
-    pub fn init(allocator: std.mem.Allocator, reader: std.io.AnyReader, buffer_size: usize) !FastqParser {
+    pub fn init(allocator: std.mem.Allocator, file: std.fs.File, buffer_size: usize) !FastqParser {
         return FastqParser{
-            .br = try block_reader.BlockReader.init(allocator, reader, buffer_size),
+            .br = try block_reader.BlockReader.init(allocator, file, buffer_size),
             .allocator = allocator,
         };
     }

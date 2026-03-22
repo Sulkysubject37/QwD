@@ -99,7 +99,9 @@ pub fn main() !void {
         }
     }
 
-    const stdout = std.io.getStdOut().writer().any();
+    const std_out_file = std.io.getStdOut();
+    var bw = std.io.bufferedWriter(std_out_file.writer());
+    const stdout = bw.writer().any();
 
     const global_allocator = @import("global_allocator");
     var global_pool = global_allocator.GlobalAllocator.init(allocator, max_memory_mb * 1024 * 1024);
@@ -203,7 +205,7 @@ pub fn main() !void {
 
     var parser = if (mode == .FAST) blk: {
         break :blk try parser_mod.FastqParser.initMmap(arena_allocator, file);
-    } else try parser_mod.FastqParser.init(allocator, file.reader().any(), (256 * 1024) + (1024 * 1024));
+    } else try parser_mod.FastqParser.init(allocator, file, (256 * 1024) + (1024 * 1024));
     defer parser.deinit();
 
     // Hyperscale Direct Chunked flow
@@ -233,4 +235,5 @@ pub fn main() !void {
             }
         },
     }
+    try bw.flush();
 }
