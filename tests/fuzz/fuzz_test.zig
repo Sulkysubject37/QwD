@@ -14,7 +14,8 @@ test "Fuzz Test - FastqParser Malformed Input" {
     
     for (malformed_inputs) |input| {
         var stream = std.io.fixedBufferStream(input);
-        var fparser = try parser.FastqParser.init(allocator, stream.reader().any(), 1024);
+        var reader = stream.reader();
+        var fparser = try parser.FastqParser.init(allocator, reader.any(), 1024);
         defer fparser.deinit();
         
         var buffer: [1024]u8 = undefined;
