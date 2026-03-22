@@ -170,6 +170,11 @@ pub const OverrepresentedStage = struct {
             if (entry.value_ptr.* > top_count) {
                 top_count = entry.value_ptr.*;
                 top_seq = entry.key_ptr.*;
+            } else if (entry.value_ptr.* == top_count and top_count > 0) {
+                // Deterministic tie-break using lexicographical order
+                if (std.mem.lessThan(u8, entry.key_ptr.*, top_seq)) {
+                    top_seq = entry.key_ptr.*;
+                }
             }
         }
         if (top_count > 1) {

@@ -172,13 +172,10 @@ pub const DuplicationStage = struct {
         while (it.next()) |entry| {
             const seq = entry.key_ptr.*;
             if (self.map.contains(seq)) {
-                // This sequence was found in another thread's map, but we already have it.
-                // However, 'duplicate_reads' was already incremented for duplicates WITHIN each thread.
-                // We don't need to increment 'duplicate_reads' here because it represents the UNION of unique sequences.
-                // Wait, if it's in both maps, then it's a duplicate that was previously counted as unique in both threads.
-                // So we SHOULD increment duplicate_reads once.
+                // If it's already in our map, this sequence was the 'first' instance in both threads.
+                // We must count it as a duplicate now.
                 self.duplicate_reads += 1;
-            } else if (self.mode == .EXACT or self.map.count() < 200000) {
+            } else {
                 const duped = self.allocator.dupe(u8, seq) catch continue;
                 const gop = self.map.getOrPut(duped) catch {
                     self.allocator.free(duped);
@@ -192,9 +189,6 @@ pub const DuplicationStage = struct {
                 }
             }
         }
-        
-        // Bloom filters are only in FAST mode and we don't merge them here yet for simplicity,
-        // but since they are approximate it's less critical than Exact mode determinism.
     }
 
     pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
