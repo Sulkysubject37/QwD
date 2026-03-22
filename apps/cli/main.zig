@@ -205,7 +205,7 @@ pub fn main() !void {
 
     var parser = if (mode == .FAST) blk: {
         break :blk try parser_mod.FastqParser.initMmap(arena_allocator, file);
-    } else try parser_mod.FastqParser.init(allocator, file, (256 * 1024) + (1024 * 1024));
+    } else try parser_mod.FastqParser.init(allocator, file.reader().any(), (256 * 1024) + (1024 * 1024));
     defer parser.deinit();
 
     // Hyperscale Direct Chunked flow

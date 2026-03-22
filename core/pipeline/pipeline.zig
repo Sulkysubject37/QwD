@@ -138,7 +138,7 @@ pub const Pipeline = struct {
         } else {
             // Sequential fallback
             const dummy_br = block_reader.BlockReader{
-                .file = null,
+                .reader = null,
                 .buffer = &[_]u8{},
                 .pos = 0,
                 .end = 0,

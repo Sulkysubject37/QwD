@@ -2,16 +2,16 @@ const std = @import("std");
 const builtin = @import("builtin");
 
 pub const BlockReader = struct {
-    file: ?std.fs.File = null,
+    reader: ?std.io.AnyReader = null,
     buffer: []u8,
     pos: usize,
     end: usize,
     mmap_handle: ?[]u8 = null,
     is_mmap: bool = false,
 
-    pub fn init(allocator: std.mem.Allocator, file: std.fs.File, buffer_size: usize) !BlockReader {
+    pub fn init(allocator: std.mem.Allocator, reader: std.io.AnyReader, buffer_size: usize) !BlockReader {
         return BlockReader{
-            .file = file,
+            .reader = reader,
             .buffer = try allocator.alloc(u8, buffer_size),
             .pos = 0,
             .end = 0,
@@ -21,8 +21,7 @@ pub const BlockReader = struct {
     pub fn initMmap(allocator: std.mem.Allocator, file: std.fs.File) !BlockReader {
         if (builtin.os.tag == .windows) {
             // Fallback for Windows where posix mmap is not natively available via target libc
-            // We use the file handle directly to avoid AnyReader dangling pointer issues
-            return BlockReader.init(allocator, file, 1024 * 1024);
+            return BlockReader.init(allocator, file.reader().any(), 1024 * 1024);
         }
 
         const size_u64 = try file.getEndPos();
@@ -68,7 +67,7 @@ pub const BlockReader = struct {
         self.pos = 0;
         self.end = remaining;
         
-        const read_len = try self.file.?.read(self.buffer[self.end..]);
+        const read_len = try self.reader.?.read(self.buffer[self.end..]);
         self.end += read_len;
         return read_len;
     }

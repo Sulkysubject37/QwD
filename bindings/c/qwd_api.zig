@@ -21,7 +21,10 @@ pub export fn qwd_fastq_qc(path: [*:0]const u8) [*:0]const u8 {
     var file = std.fs.cwd().openFile(file_path, .{}) catch return allocError(allocator, "File not found");
     defer file.close();
 
-    var parser = parser_mod.FastqParser.init(arena_allocator, file, 65536) catch return allocError(allocator, "Parser init failed");
+    var buffered_reader = std.io.bufferedReader(file.reader());
+    const reader = buffered_reader.reader().any();
+
+    var parser = parser_mod.FastqParser.init(arena_allocator, reader, 65536) catch return allocError(allocator, "Parser init failed");
     defer parser.deinit();
 
     var pipeline = pipeline_mod.Pipeline.init(arena_allocator, null);
