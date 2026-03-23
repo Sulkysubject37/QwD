@@ -101,8 +101,8 @@ pub fn transpose8x8(rows: [8]@Vector(8, u8)) [8]@Vector(8, u8) {
     const res7: @Vector(2, u32) = @shuffle(u32, v2_6, v2_7, [2]i32{ 1, -2 });
 
     return .{
-        @bitCast(res0), @bitCast(res1), @bitCast(res2), @bitCast(res3),
-        @bitCast(res4), @bitCast(res5), @bitCast(res6), @bitCast(res7),
+        @bitCast(res0), @bitCast(res4), @bitCast(res2), @bitCast(res6),
+        @bitCast(res1), @bitCast(res5), @bitCast(res3), @bitCast(res7),
     };
 }
 
