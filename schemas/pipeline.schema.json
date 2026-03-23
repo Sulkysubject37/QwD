@@ -1,12 +1,13 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Pipeline Configuration",
+  "title": "QwD Custom Pipeline Configuration",
   "type": "object",
+  "required": ["version", "pipeline"],
   "properties": {
-    "pipeline": {
-      "type": "array",
-      "items": { "type": "string" }
+    "version": { "type": "string" },
+    "pipeline": { 
+      "type": "array", 
+      "items": { "type": "string" } 
     }
-  },
-  "required": ["pipeline"]
+  }
 }

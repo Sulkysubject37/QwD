@@ -20,6 +20,8 @@ pub const ParallelScheduler = struct {
     /// thread arenas, col_blocks, bitplanes, stage slices, etc.
     /// Must never be the capped GlobalAllocator or setup will deadlock.
     sys_allocator: std.mem.Allocator,
+    output_writer: ?std.io.AnyWriter = null,
+    output_mutex: std.Thread.Mutex = .{},
 
     pub fn init(allocator: std.mem.Allocator, sys_allocator: std.mem.Allocator, num_threads: usize) ParallelScheduler {
         return ParallelScheduler{
@@ -28,6 +30,8 @@ pub const ParallelScheduler = struct {
             .num_threads = if (num_threads == 0) 1 else num_threads,
             .allocator = allocator,
             .sys_allocator = sys_allocator,
+            .output_writer = null,
+            .output_mutex = .{},
         };
     }
 
@@ -112,6 +116,13 @@ pub const ParallelScheduler = struct {
 
                         for (ctx.stages) |stage| {
                             _ = stage.processBitplanes(ctx.bitplanes, ctx.col_block) catch break;
+                        }
+                        
+                        if (ctx.scheduler.output_writer) |writer| {
+                            ctx.scheduler.output_mutex.lock();
+                            defer ctx.scheduler.output_mutex.unlock();
+                            const count = ctx.scheduler.read_count.load(.monotonic);
+                            writer.print("{{\"reads_processed\": {d}}}\n", .{count}) catch {};
                         }
                         
                         current_nl += @intCast(rc * 4);

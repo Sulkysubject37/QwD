@@ -502,6 +502,8 @@ pub fn build(b: *std.Build) void {
     });
     lib.linkLibC();
     lib.root_module.addImport("pipeline", pipeline_mod);
+    lib.root_module.addImport("pipeline_config", pipeline_config_mod);
+    lib.root_module.addImport("entropy_lut", entropy_lut_mod);
     lib.root_module.addImport("parser", parser_mod);
     lib.root_module.addImport("bam_pipeline", bam_pipeline_mod);
     lib.root_module.addImport("bam_reader", bam_reader_mod);

@@ -11,6 +11,38 @@ const mode_mod = @import("mode");
 const bam_reader_mod = @import("bam_reader");
 const bam_pipeline_mod = @import("bam_pipeline");
 
+fn printHelp() void {
+    std.debug.print(
+        \\QwD — high-performance streaming bioinformatics engine
+        \\
+        \\Usage: qwd <command> [options] <file>
+        \\
+        \\Subcommands:
+        \\  qc              Run full Quality Control suite (FASTQ)
+        \\  bamstats        Alignment and coverage analytics (BAM)
+        \\  pipeline        Run custom pipeline from JSON config
+        \\  entropy         Analyze sequence complexity (FASTQ)
+        \\  n50             Calculate N-statistics (FASTQ)
+        \\  quality-decay   Analyze quality drop-off (FASTQ)
+        \\  adapter-detect  Detect common adapters (FASTQ)
+        \\  version         Print version information
+        \\  help            Print this help message
+        \\
+        \\Options:
+        \\  --threads N     Number of parallel threads (default: CPU count)
+        \\  --mode <type>   Execution mode: 'exact' (deterministic) or 'fast' (probabilistic)
+        \\  --fast          Shorthand for --mode fast
+        \\  --json          Output results in structured JSON format
+        \\  --ndjson        Output results in streaming NDJSON format
+        \\  --max-memory N  Hard memory limit in MB (default: 1024)
+        \\  --perf          Print detailed performance metrics
+        \\  --quiet         Minimize output verbosity
+        \\
+        \\Documentation: https://github.com/Sulkysubject37/QwD/blob/main/docs/cli_usage.md
+        \\
+    , .{});
+}
+
 pub fn main() !void {
     // Initialize global LUT for entropy
     @import("entropy_lut").initGlobal();
@@ -22,42 +54,25 @@ pub fn main() !void {
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
 
-    if (args.len < 2 or std.mem.eql(u8, args[1], "help") or std.mem.eql(u8, args[1], "--help") or std.mem.eql(u8, args[1], "-h")) {
-        std.debug.print(
-            \\QwD — high-performance streaming bioinformatics engine
-            \\
-            \\Usage: qwd <command> [options] <file>
-            \\
-            \\Subcommands:
-            \\  qc              Run full Quality Control suite (FASTQ)
-            \\  bamstats        Alignment and coverage analytics (BAM)
-            \\  pipeline        Run custom pipeline from JSON config
-            \\  entropy         Analyze sequence complexity (FASTQ)
-            \\  n50             Calculate N-statistics (FASTQ)
-            \\  quality-decay   Analyze quality drop-off (FASTQ)
-            \\  adapter-detect  Detect common adapters (FASTQ)
-            \\  help            Print this help message
-            \\
-            \\Options:
-            \\  --threads N     Number of parallel threads (default: CPU count)
-            \\  --mode <type>   Execution mode: 'exact' (deterministic) or 'fast' (probabilistic)
-            \\  --fast          Shorthand for --mode fast
-            \\  --json          Output results in structured JSON format
-            \\  --ndjson        Output results in streaming NDJSON format
-            \\  --max-memory N  Hard memory limit in MB (default: 1024)
-            \\  --perf          Print detailed performance metrics
-            \\
-            \\Documentation: https://github.com/Sulkysubject37/QwD/blob/main/docs/cli_usage.md
-            \\
-        , .{});
+    if (args.len < 2) {
+        printHelp();
         return;
     }
 
     const command = args[1];
+    if (std.mem.eql(u8, command, "version") or std.mem.eql(u8, command, "--version")) {
+        std.debug.print("QwD v1.0.0\n", .{});
+        return;
+    }
+    if (std.mem.eql(u8, command, "help") or std.mem.eql(u8, command, "--help") or std.mem.eql(u8, command, "-h")) {
+        printHelp();
+        return;
+    }
+
     var num_threads: usize = std.Thread.getCpuCount() catch 1;
     var mode: mode_mod.Mode = .EXACT;
     var perf_mode = false;
-    var mem_mb: usize = 16;
+    var quiet_mode = false;
     var max_memory_mb: usize = 1024;
     var output_format: structured_output.OutputFormat = .text;
 
@@ -84,9 +99,8 @@ pub fn main() !void {
             }
         } else if (std.mem.eql(u8, args[i], "--perf")) {
             perf_mode = true;
-        } else if (std.mem.eql(u8, args[i], "--memory")) {
-            i += 1;
-            if (i < args.len) mem_mb = try std.fmt.parseInt(usize, args[i], 10);
+        } else if (std.mem.eql(u8, args[i], "--quiet")) {
+            quiet_mode = true;
         } else if (std.mem.eql(u8, args[i], "--max-memory")) {
             i += 1;
             if (i < args.len) max_memory_mb = try std.fmt.parseInt(usize, args[i], 10);
@@ -126,8 +140,13 @@ pub fn main() !void {
         var perf = runtime_metrics.RuntimeMetrics.start();
         
         var record_buf: [1024]u8 = undefined;
+        var record_count: usize = 0;
         while (try bam_reader.next(&record_buf)) |record| {
             try bam_pipeline.run(record);
+            record_count += 1;
+            if (output_format == .ndjson and record_count % 1000 == 0) {
+                try stdout.print("{{\"records_processed\": {d}}}\n", .{record_count});
+            }
         }
 
         try bam_pipeline.finalize();
@@ -135,6 +154,8 @@ pub fn main() !void {
         if (output_format == .json) {
             try structured_output.writeJsonReport(bam_pipeline.scheduler, stdout);
             try stdout.writeAll("\n");
+        } else if (output_format == .ndjson) {
+            // Already reported progress
         } else {
             try bam_pipeline.report(stdout);
             if (perf_mode) {
@@ -199,6 +220,9 @@ pub fn main() !void {
     }
 
     try pipeline.setupSchedulers(num_threads);
+    if (output_format == .ndjson) {
+        pipeline.setupOutputWriter(stdout);
+    }
 
     const file = try std.fs.cwd().openFile(file_path, .{});
     defer file.close();
@@ -225,14 +249,15 @@ pub fn main() !void {
             try stdout.writeAll("\n");
         },
         .ndjson => {
-            const count = pipeline.parallel_scheduler.?.read_count.load(.monotonic);
-            try structured_output.writeNdjsonProcess(count, stdout);
+            // Incremental progress already written by scheduler
         },
         .text => {
-            try stdout.print("\n--- QwD Execution Mode: {s} ---\n", .{@tagName(mode)});
-            pipeline.report(stdout);
-            if (perf_mode) {
-                perf.report(stdout);
+            if (!quiet_mode) {
+                try stdout.print("\n--- QwD Execution Mode: {s} ---\n", .{@tagName(mode)});
+                pipeline.report(stdout);
+                if (perf_mode) {
+                    perf.report(stdout);
+                }
             }
         },
     }

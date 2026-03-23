@@ -62,6 +62,12 @@ pub const Pipeline = struct {
         }
     }
 
+    pub fn setupOutputWriter(self: *Pipeline, writer: std.io.AnyWriter) void {
+        if (self.parallel_scheduler) |*ps| {
+            ps.output_writer = writer;
+        }
+    }
+
     pub fn createStageInstance(self: *Pipeline, allocator: std.mem.Allocator, name: []const u8) !stage_interface.Stage {
         if (std.mem.eql(u8, name, "qc")) {
             const qc = try allocator.create(@import("qc").QcStage);

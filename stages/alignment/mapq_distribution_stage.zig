@@ -28,6 +28,16 @@ pub const MapqDistributionStage = struct {
         }
     }
 
+    pub fn reportJson(ptr: *anyopaque, writer: std.io.AnyWriter) !void {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        try writer.writeAll("\"mapq_distribution\": { \"histogram\": [");
+        for (0..61) |i| {
+            if (i > 0) try writer.writeAll(", ");
+            try writer.print("{d}", .{self.histogram[i]});
+        }
+        try writer.writeAll("] }");
+    }
+
     pub fn stage(self: *@This()) bam_stage.BamStage {
         return .{
             .ptr = self,
@@ -35,6 +45,7 @@ pub const MapqDistributionStage = struct {
                 .process = process,
                 .finalize = finalize,
                 .report = report,
+                .reportJson = reportJson,
             },
         };
     }

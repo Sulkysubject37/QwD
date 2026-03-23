@@ -60,6 +60,32 @@ pub const InsertSizeStage = struct {
         }
     }
 
+    pub fn reportJson(ptr: *anyopaque, writer: std.io.AnyWriter) !void {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        try writer.print(
+            \\"insert_size": {{
+            \\  "pairs_analyzed": {d},
+            \\  "min_insert": {d},
+            \\  "max_insert": {d},
+            \\  "mean_insert": {d:.2},
+            \\  "histogram_500bp_bins": [
+        , .{ self.count, self.min_insert_size, self.max_insert_size, self.mean_insert_size });
+        
+        var i: usize = 0;
+        var first = true;
+        while (i < MAX_INSERT) : (i += 500) {
+            var bin_sum: usize = 0;
+            var j: usize = 0;
+            while (j < 500 and i + j < MAX_INSERT) : (j += 1) {
+                bin_sum += self.insert_size_histogram[i + j];
+            }
+            if (!first) try writer.writeAll(", ");
+            try writer.print("{d}", .{bin_sum});
+            first = false;
+        }
+        try writer.writeAll("] }");
+    }
+
     pub fn stage(self: *@This()) bam_stage.BamStage {
         return .{
             .ptr = self,
@@ -67,6 +93,7 @@ pub const InsertSizeStage = struct {
                 .process = process,
                 .finalize = finalize,
                 .report = report,
+                .reportJson = reportJson,
             },
         };
     }

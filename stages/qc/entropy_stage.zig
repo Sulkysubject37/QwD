@@ -125,6 +125,16 @@ pub const EntropyStage = struct {
         writer.print("  Low complexity:    {d}\n", .{self.low_complexity_reads}) catch {};
     }
 
+    pub fn reportJson(ptr: *anyopaque, writer: std.io.AnyWriter) !void {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        try writer.print(
+            \\"entropy": {{
+            \\  "mean_entropy": {d:.4},
+            \\  "low_complexity_reads": {d}
+            \\}}
+        , .{ self.mean_entropy, self.low_complexity_reads });
+    }
+
     pub fn stage(self: *@This()) stage_mod.Stage {
         return .{
             .ptr = self,
@@ -135,6 +145,7 @@ pub const EntropyStage = struct {
                 .processBitplanes = processBitplanes,
                 .finalize = finalize,
                 .report = report,
+                .reportJson = reportJson,
                 .merge = merge,
             },
         };

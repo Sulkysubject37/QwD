@@ -112,6 +112,16 @@ pub const KmerSpectrumStage = struct {
         writer.print("  Total {d}-mers: {d}\n", .{self.k, total}) catch {};
     }
 
+    pub fn reportJson(ptr: *anyopaque, writer: std.io.AnyWriter) !void {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        try writer.print("\"kmer_spectrum\": {{ \"k\": {d}, \"counts\": [", .{self.k});
+        for (self.counts, 0..) |count, i| {
+            if (i > 0) try writer.writeAll(", ");
+            try writer.print("{d}", .{count});
+        }
+        try writer.writeAll("] }");
+    }
+
     pub fn stage(self: *@This()) stage_mod.Stage {
         return .{
             .ptr = self,
@@ -122,6 +132,7 @@ pub const KmerSpectrumStage = struct {
                 .processBitplanes = processBitplanes,
                 .finalize = finalize,
                 .report = report,
+                .reportJson = reportJson,
                 .merge = merge,
             },
         };

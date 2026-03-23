@@ -36,6 +36,21 @@ pub const ErrorRateStage = struct {
         writer.print("  Error rate:    {d:.4}%\n", .{self.error_rate * 100.0}) catch {};
     }
 
+    pub fn reportJson(ptr: *anyopaque, writer: std.io.AnyWriter) !void {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        try writer.print(
+            \\"error_rate_stats": {{
+            \\  "aligned_bases": {d},
+            \\  "mismatches": {d},
+            \\  "error_rate": {d:.6}
+            \\}}
+        , .{
+            self.aligned_bases,
+            self.mismatches,
+            self.error_rate,
+        });
+    }
+
     pub fn stage(self: *@This()) bam_stage.BamStage {
         return .{
             .ptr = self,
@@ -43,6 +58,7 @@ pub const ErrorRateStage = struct {
                 .process = process,
                 .finalize = finalize,
                 .report = report,
+                .reportJson = reportJson,
             },
         };
     }

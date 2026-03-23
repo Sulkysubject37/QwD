@@ -93,6 +93,19 @@ pub const NStatisticsStage = struct {
         writer.print("  N90: {d}\n", .{self.n90}) catch {};
     }
 
+    pub fn reportJson(ptr: *anyopaque, writer: std.io.AnyWriter) !void {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        try writer.print(
+            \\"n_statistics": {{
+            \\  "n10": {d},
+            \\  "n25": {d},
+            \\  "n50": {d},
+            \\  "n75": {d},
+            \\  "n90": {d}
+            \\}}
+        , .{ self.n10, self.n25, self.n50, self.n75, self.n90 });
+    }
+
     pub fn stage(self: *@This()) stage_mod.Stage {
         return .{
             .ptr = self,
@@ -103,6 +116,7 @@ pub const NStatisticsStage = struct {
                 .processBitplanes = processBitplanes,
                 .finalize = finalize,
                 .report = report,
+                .reportJson = reportJson,
                 .merge = merge,
             },
         };

@@ -1,12 +1,69 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "BAM Alignment Statistics",
+  "title": "QwD BAM Statistics Report",
   "type": "object",
+  "required": ["version", "read_count", "stages"],
   "properties": {
-    "total_alignments": { "type": "integer", "minimum": 0 },
-    "mapped_reads": { "type": "integer", "minimum": 0 },
-    "unmapped_reads": { "type": "integer", "minimum": 0 },
-    "mean_mapq": { "type": "number", "minimum": 0, "maximum": 60 }
-  },
-  "required": ["total_alignments", "mapped_reads"]
+    "version": { "type": "string" },
+    "read_count": { "type": "integer" },
+    "stages": {
+      "type": "object",
+      "properties": {
+        "alignment_stats": {
+          "type": "object",
+          "required": ["total_records", "mapped_reads", "unmapped_reads", "mean_mapq"],
+          "properties": {
+            "total_records": { "type": "integer" },
+            "mapped_reads": { "type": "integer" },
+            "unmapped_reads": { "type": "integer" },
+            "mean_mapq": { "type": "number" }
+          }
+        },
+        "mapq_distribution": {
+           "type": "object",
+           "required": ["bins"],
+           "properties": { "bins": { "type": "array", "items": { "type": "integer" } } }
+        },
+        "insert_size": {
+           "type": "object",
+           "required": ["minimum", "maximum", "mean"],
+           "properties": {
+               "minimum": { "type": "integer" },
+               "maximum": { "type": "integer" },
+               "mean": { "type": "number" }
+           }
+        },
+        "coverage": {
+           "type": "object",
+           "required": ["mean_coverage", "percent_covered", "total_bases", "covered_bases"],
+           "properties": {
+               "mean_coverage": { "type": "number" },
+               "percent_covered": { "type": "number" },
+               "total_bases": { "type": "integer" },
+               "covered_bases": { "type": "integer" }
+           }
+        },
+        "error_rate": {
+           "type": "object",
+           "required": ["total_bases", "mismatches", "insertions", "deletions", "error_rate"],
+           "properties": {
+               "total_bases": { "type": "integer" },
+               "mismatches": { "type": "integer" },
+               "insertions": { "type": "integer" },
+               "deletions": { "type": "integer" },
+               "error_rate": { "type": "number" }
+           }
+        },
+        "soft_clip": {
+           "type": "object",
+           "required": ["total_reads", "soft_clipped_reads", "total_clipped_bases"],
+           "properties": {
+               "total_reads": { "type": "integer" },
+               "soft_clipped_reads": { "type": "integer" },
+               "total_clipped_bases": { "type": "integer" }
+           }
+        }
+      }
+    }
+  }
 }

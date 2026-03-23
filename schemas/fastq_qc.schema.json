@@ -1,13 +1,111 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "FASTQ QC Metrics",
+  "title": "QwD FASTQ Quality Control Report",
   "type": "object",
+  "required": ["version", "read_count", "stages"],
   "properties": {
-    "read_count": { "type": "integer", "minimum": 0 },
-    "total_bases": { "type": "integer", "minimum": 0 },
-    "gc_ratio": { "type": "number", "minimum": 0, "maximum": 1 },
-    "mean_quality": { "type": "number", "minimum": 0 },
-    "n50": { "type": "integer", "minimum": 0 }
-  },
-  "required": ["read_count"]
+    "version": { "type": "string" },
+    "read_count": { "type": "integer" },
+    "stages": {
+      "type": "object",
+      "properties": {
+        "basic_stats": {
+          "type": "object",
+          "required": ["total_reads", "total_bases", "min_length", "max_length", "mean_length"],
+          "properties": {
+            "total_reads": { "type": "integer" },
+            "total_bases": { "type": "integer" },
+            "min_length": { "type": "integer" },
+            "max_length": { "type": "integer" },
+            "mean_length": { "type": "number" }
+          }
+        },
+        "per_base_quality": {
+          "type": "object",
+          "required": ["mean_qualities"],
+          "properties": {
+            "mean_qualities": { "type": "array", "items": { "type": "number" } }
+          }
+        },
+        "nucleotide_composition": {
+          "type": "object",
+          "required": ["a", "c", "g", "t", "n"],
+          "properties": {
+            "a": { "type": "integer" },
+            "c": { "type": "integer" },
+            "g": { "type": "integer" },
+            "t": { "type": "integer" },
+            "n": { "type": "integer" }
+          }
+        },
+        "gc_distribution": {
+          "type": "object",
+          "required": ["bins"],
+          "properties": {
+            "bins": { "type": "array", "items": { "type": "integer" } }
+          }
+        },
+        "length_distribution": {
+          "type": "object",
+          "required": ["bins"],
+          "properties": {
+            "bins": { "type": "array", "items": { "type": "integer" }, "minItems": 6, "maxItems": 6 }
+          }
+        },
+        "n_statistics": {
+          "type": "object",
+          "required": ["n10", "n25", "n50", "n75", "n90"],
+          "properties": {
+            "n10": { "type": "integer" },
+            "n25": { "type": "integer" },
+            "n50": { "type": "integer" },
+            "n75": { "type": "integer" },
+            "n90": { "type": "integer" }
+          }
+        },
+        "entropy": {
+          "type": "object",
+          "required": ["mean_entropy", "low_complexity_reads"],
+          "properties": {
+            "mean_entropy": { "type": "number" },
+            "low_complexity_reads": { "type": "integer" }
+          }
+        },
+        "kmer_spectrum": {
+          "type": "object",
+          "required": ["k", "counts"],
+          "properties": {
+            "k": { "type": "integer" },
+            "counts": { "type": "array", "items": { "type": "integer" } }
+          }
+        },
+        "overrepresented": {
+          "type": "object",
+          "required": ["unique_sequences", "most_frequent", "most_frequent_count"],
+          "properties": {
+            "unique_sequences": { "type": "integer" },
+            "most_frequent": { "type": "string" },
+            "most_frequent_count": { "type": "integer" }
+          }
+        },
+        "duplication": {
+          "type": "object",
+          "required": ["total_reads", "duplicate_reads", "duplication_ratio"],
+          "properties": {
+            "total_reads": { "type": "integer" },
+            "duplicate_reads": { "type": "integer" },
+            "duplication_ratio": { "type": "number" }
+          }
+        },
+        "adapter_detection": {
+          "type": "object",
+          "required": ["total_suffix_kmers", "max_kmer_count"],
+          "properties": {
+            "total_suffix_kmers": { "type": "integer" },
+            "max_kmer_count": { "type": "integer" }
+          }
+        }
+      }
+    }
+  }
 }
