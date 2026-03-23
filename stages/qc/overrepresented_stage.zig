@@ -182,6 +182,31 @@ pub const OverrepresentedStage = struct {
         }
     }
 
+    pub fn reportJson(ptr: *anyopaque, writer: std.io.AnyWriter) !void {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        var top_seq: []const u8 = "";
+        var top_count: u64 = 0;
+        var it = self.map.iterator();
+        while (it.next()) |entry| {
+            if (entry.value_ptr.* > top_count) {
+                top_count = entry.value_ptr.*;
+                top_seq = entry.key_ptr.*;
+            } else if (entry.value_ptr.* == top_count and top_count > 0) {
+                if (std.mem.lessThan(u8, entry.key_ptr.*, top_seq)) {
+                    top_seq = entry.key_ptr.*;
+                }
+            }
+        }
+        
+        try writer.print(
+            \\"overrepresented": {{
+            \\  "unique_sequences": {d},
+            \\  "most_frequent": "{s}",
+            \\  "most_frequent_count": {d}
+            \\}}
+        , .{ self.map.count(), top_seq, top_count });
+    }
+
     pub fn stage(self: *@This()) stage_mod.Stage {
         return .{
             .ptr = self,
@@ -192,6 +217,7 @@ pub const OverrepresentedStage = struct {
                 .processBitplanes = processBitplanes,
                 .finalize = finalize,
                 .report = report,
+                .reportJson = reportJson,
                 .merge = merge,
             },
         };

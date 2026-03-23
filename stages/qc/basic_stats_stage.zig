@@ -71,6 +71,25 @@ pub const BasicStatsStage = struct {
         writer.print("  Mean length: {d:.2}\n", .{self.mean_read_length}) catch {};
     }
 
+    pub fn reportJson(ptr: *anyopaque, writer: std.io.AnyWriter) !void {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        try writer.print(
+            \\"basic_stats": {{
+            \\  "total_reads": {d},
+            \\  "total_bases": {d},
+            \\  "min_length": {d},
+            \\  "max_length": {d},
+            \\  "mean_length": {d:.2}
+            \\}}
+        , .{
+            self.total_reads,
+            self.total_bases,
+            self.min_read_length,
+            self.max_read_length,
+            self.mean_read_length,
+        });
+    }
+
     pub fn stage(self: *@This()) stage_mod.Stage {
         return .{
             .ptr = self,
@@ -80,6 +99,7 @@ pub const BasicStatsStage = struct {
                 .processBlock = processBlock,
                 .finalize = finalize,
                 .report = report,
+                .reportJson = reportJson,
                 .merge = merge,
             },
         };

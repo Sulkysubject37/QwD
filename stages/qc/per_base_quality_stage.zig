@@ -84,6 +84,19 @@ pub const PerBaseQualityStage = struct {
         }
     }
 
+    pub fn reportJson(ptr: *anyopaque, writer: std.io.AnyWriter) !void {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        try writer.writeAll("\"per_base_quality\": { \"mean_qualities\": [");
+        var first = true;
+        for (0..MAX_POS) |pos| {
+            if (self.base_count[pos] == 0) break;
+            if (!first) try writer.writeAll(", ");
+            try writer.print("{d:.2}", .{self.mean_quality[pos]});
+            first = false;
+        }
+        try writer.writeAll("] }");
+    }
+
     pub fn stage(self: *@This()) stage_mod.Stage {
         return .{
             .ptr = self,
@@ -93,6 +106,7 @@ pub const PerBaseQualityStage = struct {
                 .processBlock = processBlock,
                 .finalize = finalize,
                 .report = report,
+                .reportJson = reportJson,
                 .merge = merge,
             },
         };

@@ -26,7 +26,15 @@ echo "Testing JSON output..."
 $BINARY qc "$FIXTURE" --json > output.json
 # Simple check if it is valid JSON
 $PYTHON -c "import json; json.load(open('output.json'))"
-echo "JSON validity: OK"
+echo "JSON syntax validity: OK"
+
+if $PYTHON -c "import jsonschema" >/dev/null 2>&1; then
+    echo "Testing strictly typed JSON Schema compliance..."
+    $PYTHON -c "import json, jsonschema; schema = json.load(open('schemas/fastq_qc.schema.json')); instance = json.load(open('output.json')); jsonschema.validate(instance=instance, schema=schema)"
+    echo "JSON Schema boundary compliance: OK"
+else
+    echo "jsonschema package not found; skipping strict constraint validation"
+fi
 
 echo "Testing NDJSON streaming..."
 $BINARY qc "$FIXTURE" --ndjson > output.ndjson

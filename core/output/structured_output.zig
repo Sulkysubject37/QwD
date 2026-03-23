@@ -15,18 +15,38 @@ pub fn writeJsonReport(scheduler: anytype, writer: std.io.AnyWriter) !void {
     };
     
     try writer.writeAll("{");
+    try writer.writeAll("\"version\": \"1.0.0\",");
     
-    // Handle read_count or record_count using comptime if
+    var count: usize = 0;
     if (comptime @hasField(ChildT, "read_count")) {
-        const count = if (@TypeOf(scheduler.read_count) == std.atomic.Value(usize)) 
+        count = if (@TypeOf(scheduler.read_count) == std.atomic.Value(usize)) 
             scheduler.read_count.load(.monotonic) 
         else 
             scheduler.read_count;
-        try writer.print("\"read_count\": {d}", .{count});
+        try writer.print("\"read_count\": {d},", .{count});
     } else if (comptime @hasField(ChildT, "record_count")) {
-        try writer.print("\"record_count\": {d}", .{scheduler.record_count});
+        count = scheduler.record_count;
+        try writer.print("\"record_count\": {d},", .{count});
     }
     
+    try writer.writeAll("\"stages\": {");
+    
+    var first = true;
+    if (comptime @hasField(ChildT, "master_stages")) {
+        for (scheduler.master_stages.items) |stage| {
+            if (!first) try writer.writeAll(",");
+            try stage.reportJson(writer);
+            first = false;
+        }
+    } else if (comptime @hasField(ChildT, "stages")) {
+        for (scheduler.stages.items) |stage| {
+            if (!first) try writer.writeAll(",");
+            try stage.reportJson(writer);
+            first = false;
+        }
+    }
+    
+    try writer.writeAll("}");
     try writer.writeAll("}");
 }
 

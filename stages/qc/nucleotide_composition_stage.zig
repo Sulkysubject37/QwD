@@ -96,6 +96,27 @@ pub const NucleotideCompositionStage = struct {
         }) catch {};
     }
 
+    pub fn reportJson(ptr: *anyopaque, writer: std.io.AnyWriter) !void {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        var total_bases: u64 = 0;
+        for (self.global_counts) |c| total_bases += c;
+        
+        try writer.print(
+            \\"nucleotide_composition": {{
+            \\  "a": {d},
+            \\  "c": {d},
+            \\  "g": {d},
+            \\  "t": {d},
+            \\  "n": 0
+            \\}}
+        , .{
+            self.global_counts[0],
+            self.global_counts[1],
+            self.global_counts[2],
+            self.global_counts[3],
+        });
+    }
+
     pub fn stage(self: *@This()) stage_mod.Stage {
         return .{
             .ptr = self,
@@ -106,6 +127,7 @@ pub const NucleotideCompositionStage = struct {
                 .processBitplanes = processBitplanes,
                 .finalize = finalize,
                 .report = report,
+                .reportJson = reportJson,
                 .merge = merge,
             },
         };

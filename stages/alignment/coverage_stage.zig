@@ -37,6 +37,21 @@ pub const CoverageStage = struct {
         writer.print("  Est. Coverage:     {d:.2}x\n", .{self.coverage_estimate}) catch {};
     }
 
+    pub fn reportJson(ptr: *anyopaque, writer: std.io.AnyWriter) !void {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        try writer.print(
+            \\"coverage": {{
+            \\  "aligned_bases": {d},
+            \\  "reference_length": {d},
+            \\  "coverage_estimate": {d:.2}
+            \\}}
+        , .{
+            self.total_aligned_bases,
+            self.reference_length,
+            self.coverage_estimate,
+        });
+    }
+
     pub fn stage(self: *@This()) bam_stage.BamStage {
         return .{
             .ptr = self,
@@ -44,6 +59,7 @@ pub const CoverageStage = struct {
                 .process = process,
                 .finalize = finalize,
                 .report = report,
+                .reportJson = reportJson,
             },
         };
     }

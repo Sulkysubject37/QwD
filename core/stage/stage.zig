@@ -13,6 +13,7 @@ pub const Stage = struct {
         processBitplanes: ?*const fn (ptr: *anyopaque, bitplanes: *const @import("bitplanes").BitplaneCore, block: *const @import("fastq_block").FastqColumnBlock) anyerror!bool = null,
         finalize: *const fn (ptr: *anyopaque) anyerror!void,
         report: *const fn (ptr: *anyopaque, writer: std.io.AnyWriter) void,
+        reportJson: ?*const fn (ptr: *anyopaque, writer: std.io.AnyWriter) anyerror!void = null,
         merge: ?*const fn (ptr: *anyopaque, other: *anyopaque) anyerror!void = null,
     };
 
@@ -57,6 +58,14 @@ pub const Stage = struct {
 
     pub fn report(self: Stage, writer: std.io.AnyWriter) void {
         return self.vtable.report(self.ptr, writer);
+    }
+
+    pub fn reportJson(self: Stage, writer: std.io.AnyWriter) !void {
+        if (self.vtable.reportJson) |rj| {
+            try rj(self.ptr, writer);
+        } else {
+            try writer.writeAll("{}");
+        }
     }
 
     pub fn merge(self: Stage, other: Stage) !void {

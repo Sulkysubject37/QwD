@@ -1,5 +1,6 @@
 const std = @import("std");
 const pipeline_mod = @import("pipeline");
+const pipeline_config_mod = @import("pipeline_config");
 const parser_mod = @import("parser");
 const bam_pipeline_mod = @import("bam_pipeline");
 const bam_reader_mod = @import("bam_reader");
@@ -16,8 +17,8 @@ pub export fn qwd_fastq_qc(path: [*:0]const u8) [*:0]const u8 {
     var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();
     const arena_allocator = arena.allocator();
-
     const file_path = std.mem.span(path);
+    @import("entropy_lut").initGlobal();
     var file = std.fs.cwd().openFile(file_path, .{}) catch return allocError(allocator, "File not found");
     defer file.close();
 
@@ -29,10 +30,19 @@ pub export fn qwd_fastq_qc(path: [*:0]const u8) [*:0]const u8 {
 
     var pipeline = pipeline_mod.Pipeline.init(arena_allocator, null);
     defer pipeline.deinit();
-    pipeline.setupSchedulers(1) catch return allocError(allocator, "Scheduler setup failed");
-    
     pipeline.addStage("basic-stats") catch return allocError(allocator, "Stage init failed");
     pipeline.addStage("per-base-quality") catch return allocError(allocator, "Stage init failed");
+    pipeline.addStage("nucleotide-composition") catch return allocError(allocator, "Stage init failed");
+    pipeline.addStage("gc-distribution") catch return allocError(allocator, "Stage init failed");
+    pipeline.addStage("length-distribution") catch return allocError(allocator, "Stage init failed");
+    pipeline.addStage("n-statistics") catch return allocError(allocator, "Stage init failed");
+    pipeline.addStage("entropy") catch return allocError(allocator, "Stage init failed");
+    pipeline.addStage("kmer-spectrum") catch return allocError(allocator, "Stage init failed");
+    pipeline.addStage("overrepresented") catch return allocError(allocator, "Stage init failed");
+    pipeline.addStage("duplication") catch return allocError(allocator, "Stage init failed");
+    pipeline.addStage("adapter-detect") catch return allocError(allocator, "Stage init failed");
+
+    pipeline.setupSchedulers(1) catch return allocError(allocator, "Scheduler setup failed");
 
     const record_buffer = arena_allocator.alloc(u8, 65536) catch return allocError(allocator, "Buffer alloc failed");
 
@@ -70,11 +80,14 @@ pub export fn qwd_bam_stats(path: [*:0]const u8) [*:0]const u8 {
     var file = std.fs.cwd().openFile(file_path, .{}) catch return allocError(allocator, "File not found");
     defer file.close();
 
+    var buffered_reader = std.io.bufferedReader(file.reader());
+    var reader = buffered_reader.reader();
+
     var bam_pipeline = bam_pipeline_mod.BamPipeline.init(arena_allocator);
     defer bam_pipeline.deinit();
     bam_pipeline.addDefaultStages() catch return allocError(allocator, "BAM stage init failed");
 
-    var bam_reader = bam_reader_mod.BamReader.init(arena_allocator, file.reader().any()) catch return allocError(allocator, "BAM parser failed");
+    var bam_reader = bam_reader_mod.BamReader.init(arena_allocator, reader.any()) catch return allocError(allocator, "BAM parser failed");
     
     var record_buf: [4096]u8 = undefined;
     while (bam_reader.next(&record_buf) catch null) |record| {
@@ -90,11 +103,60 @@ pub export fn qwd_bam_stats(path: [*:0]const u8) [*:0]const u8 {
     return std.fmt.allocPrintZ(allocator, "{s}", .{buffer.items}) catch return "{\"error\":\"final alloc failure\"}";
 }
 
-pub export fn qwd_pipeline(config_json_path: [*:0]const u8, input_path: [*:0]const u8) [*:0]const u8 {
-    _ = config_json_path;
-    _ = input_path;
+pub export fn qwd_pipeline(config_path: [*:0]const u8, input_path: [*:0]const u8) [*:0]const u8 {
     const allocator = std.heap.c_allocator;
-    return allocError(allocator, "qwd_pipeline not fully implemented in C API yet");
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
+    const c_path = std.mem.span(config_path);
+    const i_path = std.mem.span(input_path);
+    @import("entropy_lut").initGlobal();
+
+    const config_data = std.fs.cwd().readFileAlloc(arena_allocator, c_path, 1024 * 1024) catch return allocError(allocator, "Config file not found");
+    const config = pipeline_config_mod.PipelineConfig.parseJson(arena_allocator, config_data) catch return allocError(allocator, "Invalid config JSON");
+
+    var pipeline = pipeline_mod.Pipeline.init(arena_allocator, null);
+    defer pipeline.deinit();
+
+    for (config.value.pipeline) |stage_name| {
+        pipeline.addStage(stage_name) catch return allocError(allocator, "Stage init failed");
+    }
+
+    pipeline.setupSchedulers(1) catch return allocError(allocator, "Scheduler setup failed");
+
+    const file = std.fs.cwd().openFile(i_path, .{}) catch return allocError(allocator, "Input file not found");
+    defer file.close();
+
+    var buffered_reader = std.io.bufferedReader(file.reader());
+    var reader = buffered_reader.reader();
+
+    var parser = parser_mod.FastqParser.init(arena_allocator, reader.any(), 65536) catch return allocError(allocator, "Parser init failed");
+    defer parser.deinit();
+
+    const record_buffer = arena_allocator.alloc(u8, 65536) catch return allocError(allocator, "Buffer alloc failed");
+
+    while (true) {
+        if (parser.next(record_buffer) catch null) |read| {
+            if (pipeline.parallel_scheduler) |*ps| {
+                ps.process(read) catch return allocError(allocator, "Processing error");
+            } else if (pipeline.scheduler) |*s| {
+                s.process(read) catch return allocError(allocator, "Processing error");
+            }
+        } else break;
+    }
+
+    pipeline.finalize() catch return allocError(allocator, "Pipeline finalize error");
+
+    var buffer = std.ArrayList(u8).init(allocator);
+    defer buffer.deinit();
+    
+    if (pipeline.parallel_scheduler) |*ps| {
+        structured_output.writeJsonReport(ps, buffer.writer().any()) catch return allocError(allocator, "JSON report failed");
+    } else if (pipeline.scheduler) |*s| {
+        structured_output.writeJsonReport(s, buffer.writer().any()) catch return allocError(allocator, "JSON report failed");
+    }
+
+    return std.fmt.allocPrintZ(allocator, "{s}", .{buffer.items}) catch return "{\"error\":\"final alloc failure\"}";
 }
 
 pub export fn qwd_free_string(ptr: [*:0]const u8) void {

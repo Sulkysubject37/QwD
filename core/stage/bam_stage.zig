@@ -9,6 +9,7 @@ pub const BamStage = struct {
         process: *const fn (ptr: *anyopaque, record: *bam_reader.AlignmentRecord) anyerror!bool,
         finalize: *const fn (ptr: *anyopaque) anyerror!void,
         report: *const fn (ptr: *anyopaque, writer: std.io.AnyWriter) void,
+        reportJson: ?*const fn (ptr: *anyopaque, writer: std.io.AnyWriter) anyerror!void = null,
     };
 
     pub fn process(self: BamStage, record: *bam_reader.AlignmentRecord) !bool {
@@ -21,5 +22,13 @@ pub const BamStage = struct {
 
     pub fn report(self: BamStage, writer: std.io.AnyWriter) void {
         return self.vtable.report(self.ptr, writer);
+    }
+
+    pub fn reportJson(self: BamStage, writer: std.io.AnyWriter) !void {
+        if (self.vtable.reportJson) |rj| {
+            try rj(self.ptr, writer);
+        } else {
+            try writer.writeAll("{}");
+        }
     }
 };

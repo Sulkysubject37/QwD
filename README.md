@@ -1,4 +1,6 @@
-# QwD ![QwD Logo](qwd_logo.png)
+# QwD (v1.0.0)
+
+QwD is a highly advanced SIMD-vectorized streaming Sequence Analytics Engine. ![QwD Logo](qwd_logo.png)
 
 ### Meaning
 QwD derives from Arabic:
@@ -59,11 +61,19 @@ Structured Output (JSON/NDJSON)
 # Install Zig via script (if not present)
 ./scripts/install_zig.sh
 
-# Build Release binary
+# Build Release binary (v1.0.0 Contract)
 zig build -Doptimize=ReleaseFast
 ```
 
 The binary will be available at `./zig-out/bin/qwd`.
+
+---
+
+### Architectural Guarantees (Phase Q.5)
+Detailed specifications are documented in **[Phase Q.5 Protocol](docs/phase_q5.md)**.
+- **Execution Modes**: `Exact` (HashMap precise deduplication) vs `Fast` (Bloom/MinHash scaling limits memory to <32MB regardless of input length).
+- **JSON Schemas**: Bounded payload formats enforceable via predefined `schemas/*.schema.json`.
+- **Determinism**: 100% thread-isolated memory allocation guaranteeing multithreaded bit-exact parity.
 
 ---
 

@@ -200,6 +200,18 @@ pub const DuplicationStage = struct {
         writer.print("  Duplication ratio: {d:.2}%\n", .{ratio * 100.0}) catch {};
     }
 
+    pub fn reportJson(ptr: *anyopaque, writer: std.io.AnyWriter) !void {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        const ratio = if (self.total_reads > 0) @as(f64, @floatFromInt(self.duplicate_reads)) / @as(f64, @floatFromInt(self.total_reads)) else 0.0;
+        try writer.print(
+            \\"duplication": {{
+            \\  "total_reads": {d},
+            \\  "duplicate_reads": {d},
+            \\  "duplication_ratio": {d:.4}
+            \\}}
+        , .{ self.total_reads, self.duplicate_reads, ratio });
+    }
+
     pub fn stage(self: *@This()) stage_mod.Stage {
         return .{
             .ptr = self,
@@ -210,6 +222,7 @@ pub const DuplicationStage = struct {
                 .processBitplanes = processBitplanes,
                 .finalize = finalize,
                 .report = report,
+                .reportJson = reportJson,
                 .merge = merge,
             },
         };
