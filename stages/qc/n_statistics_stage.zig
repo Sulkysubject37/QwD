@@ -22,20 +22,24 @@ pub const NStatisticsStage = struct {
         return true;
     }
 
-    pub fn processBitplanes(ptr: *anyopaque, bitplanes: *const @import("bitplanes").BitplaneCore, block: *const @import("fastq_block").FastqColumnBlock) anyerror!bool {
-        _ = bitplanes;
-        return processBlock(ptr, block);
-    }
-
-    pub fn processBlock(ptr: *anyopaque, block: *const @import("fastq_block").FastqColumnBlock) !bool {
+    pub fn processBitplanes(ptr: *anyopaque, bp: *const @import("bitplanes").BitplaneCore, block: *const @import("fastq_block").FastqColumnBlock) anyerror!bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
+        const res = @constCast(bp).getFused(block.read_count);
+        self.total_bases += res.total_bases;
         for (0..block.read_count) |i| {
             const len = block.read_lengths[i];
-            self.total_bases += len;
             const idx = if (len >= 30000) 29999 else len;
             self.length_histogram[idx] += 1;
         }
         return true;
+    }
+
+    pub fn processBlock(ptr: *anyopaque, block: *const @import("fastq_block").FastqColumnBlock) !bool {
+        const bitplanes = @import("bitplanes");
+        var bp = try bitplanes.BitplaneCore.init(block.allocator, block.capacity, block.max_read_len);
+        defer bp.deinit();
+        bp.fromColumnBlock(block);
+        return processBitplanes(ptr, &bp, block);
     }
 
     pub fn processRawBatch(ptr: *anyopaque, reads: []const parser.Read) !bool {

@@ -19,16 +19,25 @@ pub const BasicStatsStage = struct {
         return true;
     }
 
-    pub fn processBlock(ptr: *anyopaque, block: *const @import("fastq_block").FastqColumnBlock) !bool {
+    pub fn processBitplanes(ptr: *anyopaque, bp: *const @import("bitplanes").BitplaneCore, block: *const @import("fastq_block").FastqColumnBlock) !bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
+        const res = @constCast(bp).getFused(block.read_count);
         self.total_reads += block.read_count;
+        self.total_bases += res.total_bases;
         for (0..block.read_count) |i| {
             const len = block.read_lengths[i];
-            self.total_bases += len;
             if (len < self.min_read_length) self.min_read_length = len;
             if (len > self.max_read_length) self.max_read_length = len;
         }
         return true;
+    }
+
+    pub fn processBlock(ptr: *anyopaque, block: *const @import("fastq_block").FastqColumnBlock) !bool {
+        const bitplanes = @import("bitplanes");
+        var bp = try bitplanes.BitplaneCore.init(block.allocator, block.capacity, block.max_read_len);
+        defer bp.deinit();
+        bp.fromColumnBlock(block);
+        return processBitplanes(ptr, &bp, block);
     }
 
     pub fn processRawBatch(ptr: *anyopaque, reads: []const parser.Read) !bool {
@@ -97,6 +106,7 @@ pub const BasicStatsStage = struct {
                 .process = process,
                 .processRawBatch = processRawBatch,
                 .processBlock = processBlock,
+                .processBitplanes = processBitplanes,
                 .finalize = finalize,
                 .report = report,
                 .reportJson = reportJson,

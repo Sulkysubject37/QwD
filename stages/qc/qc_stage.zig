@@ -27,22 +27,26 @@ pub const QcStage = struct {
         return true;
     }
 
-    pub fn processBlock(ptr: *anyopaque, block: *const fastq_block.FastqColumnBlock) !bool {
+    pub fn processBitplanes(ptr: *anyopaque, bp: *const @import("bitplanes").BitplaneCore, block: *const @import("fastq_block").FastqColumnBlock) !bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
+        const res = @constCast(bp).getFused(block.read_count);
         self.total_reads += block.read_count;
-        
-        for (0..block.read_count) |i| {
-            self.total_bases += block.read_lengths[i];
-        }
+        self.total_bases += res.total_bases;
 
         // Columnar quality summation
         for (0..block.max_read_len) |col| {
-            // Only process column if at least one read has data here
-            // But we can just use the count and assume shorter reads have 0/dummy qualities
             self.sum_quality += column_ops.sumQualityColumn(block.qualities[col], block.read_count);
         }
 
         return true;
+    }
+
+    pub fn processBlock(ptr: *anyopaque, block: *const fastq_block.FastqColumnBlock) !bool {
+        const bitplanes = @import("bitplanes");
+        var bp = try bitplanes.BitplaneCore.init(block.allocator, block.capacity, block.max_read_len);
+        defer bp.deinit();
+        bp.fromColumnBlock(block);
+        return processBitplanes(ptr, &bp, block);
     }
 
     pub fn finalize(ptr: *anyopaque) !void {
@@ -68,14 +72,27 @@ pub const QcStage = struct {
         writer.print("  Mean quality: {d:.2}\n", .{self.mean_quality}) catch {};
     }
 
+    pub fn reportJson(ptr: *anyopaque, writer: std.io.AnyWriter) !void {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        try writer.print(
+            \\"qc": {{
+            \\  "total_reads": {d},
+            \\  "total_bases": {d},
+            \\  "mean_quality": {d:.2}
+            \\}}
+        , .{ self.total_reads, self.total_bases, self.mean_quality });
+    }
+
     pub fn stage(self: *@This()) stage_mod.Stage {
         return .{
             .ptr = self,
             .vtable = &.{
                 .process = process,
                 .processBlock = processBlock,
+                .processBitplanes = processBitplanes,
                 .finalize = finalize,
                 .report = report,
+                .reportJson = reportJson,
                 .merge = merge,
             },
         };

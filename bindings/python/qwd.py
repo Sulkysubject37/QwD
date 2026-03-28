@@ -36,6 +36,9 @@ if _lib is None:
 if _lib:
     _lib.qwd_fastq_qc.restype = ctypes.c_void_p
     _lib.qwd_fastq_qc.argtypes = [ctypes.c_char_p]
+
+    _lib.qwd_fastq_qc_fast.restype = ctypes.c_void_p
+    _lib.qwd_fastq_qc_fast.argtypes = [ctypes.c_char_p, ctypes.c_int]
     
     _lib.qwd_bam_stats.restype = ctypes.c_void_p
     _lib.qwd_bam_stats.argtypes = [ctypes.c_char_p]
@@ -45,9 +48,12 @@ if _lib:
     
     _lib.qwd_free_string.argtypes = [ctypes.c_void_p]
 
-def qc(fastq_path):
+def qc(fastq_path, fast=False, threads=0):
     if not _lib: raise RuntimeError("QwD shared library not found")
-    res_ptr = _lib.qwd_fastq_qc(fastq_path.encode('utf-8'))
+    if fast:
+        res_ptr = _lib.qwd_fastq_qc_fast(fastq_path.encode('utf-8'), threads)
+    else:
+        res_ptr = _lib.qwd_fastq_qc(fastq_path.encode('utf-8'))
     res_str = ctypes.string_at(res_ptr).decode('utf-8')
     data = json.loads(res_str)
     _lib.qwd_free_string(res_ptr)

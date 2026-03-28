@@ -45,8 +45,54 @@ pub const KmerSpectrumStage = struct {
     }
 
     pub fn processBitplanes(ptr: *anyopaque, bp: *const @import("bitplanes").BitplaneCore, block: *const @import("fastq_block").FastqColumnBlock) !bool {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        const kmer_columnar = @import("kmer_columnar");
+        const k = self.k;
+        const vec_size = 32;
+
+        var read_idx: usize = 0;
+        while (read_idx + vec_size <= block.read_count) : (read_idx += vec_size) {
+            var hashes: @Vector(vec_size, u32) = @splat(@as(u32, 0));
+            
+            // Initialization: Fill first k-1 bases
+            for (0..k-1) |i| {
+                const col_bases: @Vector(vec_size, u8) = block.bases[i][read_idx..][0..vec_size].*;
+                hashes = kmer_columnar.updateKmerHashes(hashes, col_bases, k);
+            }
+
+            // Rolling hash across the rest of the reads
+            for (k-1..block.max_read_len) |i| {
+                const col_bases: @Vector(vec_size, u8) = block.bases[i][read_idx..][0..vec_size].*;
+                hashes = kmer_columnar.updateKmerHashes(hashes, col_bases, k);
+                
+                // For each read in the vector, check if it hasn't reached its end
+                inline for (0..vec_size) |v_idx| {
+                    if (i < block.read_lengths[read_idx + v_idx]) {
+                        self.counts[hashes[v_idx]] += 1;
+                    }
+                }
+            }
+        }
+
+        // Residual scalar handling
+        while (read_idx < block.read_count) : (read_idx += 1) {
+            const len = block.read_lengths[read_idx];
+            if (len < k) continue;
+
+            var hash: usize = 0;
+            for (0..k) |i| {
+                hash = kmer_bitroll.rollKmer(hash, dna_2bit.encodeBase(block.bases[i][read_idx]), k);
+            }
+            self.counts[hash] += 1;
+
+            for (k..len) |i| {
+                hash = kmer_bitroll.rollKmer(hash, dna_2bit.encodeBase(block.bases[i][read_idx]), k);
+                self.counts[hash] += 1;
+            }
+        }
+
         _ = bp;
-        return processBlock(ptr, block);
+        return true;
     }
 
     pub fn processBlock(ptr: *anyopaque, block: *const @import("fastq_block").FastqColumnBlock) !bool {

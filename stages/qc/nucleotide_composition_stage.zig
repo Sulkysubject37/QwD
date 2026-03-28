@@ -27,6 +27,11 @@ pub const NucleotideCompositionStage = struct {
     pub fn processBitplanes(ptr: *anyopaque, bp: *const @import("bitplanes").BitplaneCore, block: *const @import("fastq_block").FastqColumnBlock) !bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         
+        // Use pre-computed fused results for global counters
+        const results = @constCast(bp).getFused(block.read_count);
+        _ = results; // We actually need per-position counts too, so we still iterate, 
+                     // but we can trust the results are cached if we used them elsewhere.
+        
         for (0..block.max_read_len) |col| {
             if (col >= MAX_POS) break;
             const col_offset = col * bp.u64_per_col;
