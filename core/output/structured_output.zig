@@ -53,3 +53,17 @@ pub fn writeJsonReport(scheduler: anytype, writer: std.io.AnyWriter) !void {
 pub fn writeNdjsonProcess(read_count: usize, writer: std.io.AnyWriter) !void {
     try writer.print("{{\"reads_processed\": {d}}}\n", .{read_count});
 }
+
+pub fn writeJsonEscaped(writer: std.io.AnyWriter, s: []const u8) !void {
+    for (s) |c| {
+        switch (c) {
+            '\"' => try writer.writeAll("\\\""),
+            '\\' => try writer.writeAll("\\\\"),
+            '\n' => try writer.writeAll("\\n"),
+            '\r' => try writer.writeAll("\\r"),
+            '\t' => try writer.writeAll("\\t"),
+            0x00...0x08, 0x0B, 0x0C, 0x0E...0x1F => try writer.print("\\u{x:0>4}", .{c}),
+            else => try writer.writeByte(c),
+        }
+    }
+}

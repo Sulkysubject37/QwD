@@ -30,17 +30,17 @@ pub export fn qwd_fastq_qc(path: [*:0]const u8) [*:0]const u8 {
 
     var pipeline = pipeline_mod.Pipeline.init(arena_allocator, null);
     defer pipeline.deinit();
-    pipeline.addStage("basic-stats") catch return allocError(allocator, "Stage init failed");
-    pipeline.addStage("per-base-quality") catch return allocError(allocator, "Stage init failed");
-    pipeline.addStage("nucleotide-composition") catch return allocError(allocator, "Stage init failed");
-    pipeline.addStage("gc-distribution") catch return allocError(allocator, "Stage init failed");
-    pipeline.addStage("length-distribution") catch return allocError(allocator, "Stage init failed");
-    pipeline.addStage("n-statistics") catch return allocError(allocator, "Stage init failed");
+    pipeline.addStage("basic_stats") catch return allocError(allocator, "Stage init failed");
+    pipeline.addStage("per_base_quality") catch return allocError(allocator, "Stage init failed");
+    pipeline.addStage("nucleotide_composition") catch return allocError(allocator, "Stage init failed");
+    pipeline.addStage("gc_distribution") catch return allocError(allocator, "Stage init failed");
+    pipeline.addStage("length_distribution") catch return allocError(allocator, "Stage init failed");
+    pipeline.addStage("n_statistics") catch return allocError(allocator, "Stage init failed");
     pipeline.addStage("entropy") catch return allocError(allocator, "Stage init failed");
-    pipeline.addStage("kmer-spectrum") catch return allocError(allocator, "Stage init failed");
+    pipeline.addStage("kmer_spectrum") catch return allocError(allocator, "Stage init failed");
     pipeline.addStage("overrepresented") catch return allocError(allocator, "Stage init failed");
     pipeline.addStage("duplication") catch return allocError(allocator, "Stage init failed");
-    pipeline.addStage("adapter-detect") catch return allocError(allocator, "Stage init failed");
+    pipeline.addStage("adapter_detect") catch return allocError(allocator, "Stage init failed");
 
     pipeline.setupSchedulers(1) catch return allocError(allocator, "Scheduler setup failed");
 
@@ -65,6 +65,55 @@ pub export fn qwd_fastq_qc(path: [*:0]const u8) [*:0]const u8 {
         structured_output.writeJsonReport(ps, buffer.writer().any()) catch return allocError(allocator, "JSON report failed");
     } else if (pipeline.scheduler) |*s| {
         structured_output.writeJsonReport(s, buffer.writer().any()) catch return allocError(allocator, "JSON report failed");
+    }
+
+    return std.fmt.allocPrintZ(allocator, "{s}", .{buffer.items}) catch return "{\"error\":\"final alloc failure\"}";
+}
+
+pub export fn qwd_fastq_qc_fast(path: [*:0]const u8, threads: c_int) [*:0]const u8 {
+    const allocator = std.heap.c_allocator;
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
+    const file_path = std.mem.span(path);
+    @import("entropy_lut").initGlobal();
+    
+    var file = std.fs.cwd().openFile(file_path, .{}) catch return allocError(allocator, "File not found");
+    defer file.close();
+
+    var parser = parser_mod.FastqParser.initMmap(arena_allocator, file) catch return allocError(allocator, "Mmap failed");
+    defer parser.deinit();
+
+    var pipeline = pipeline_mod.Pipeline.init(arena_allocator, null);
+    pipeline.mode = .FAST;
+    defer pipeline.deinit();
+    
+    pipeline.addStage("basic_stats") catch return allocError(allocator, "Stage init failed");
+    pipeline.addStage("per_base_quality") catch return allocError(allocator, "Stage init failed");
+    pipeline.addStage("nucleotide_composition") catch return allocError(allocator, "Stage init failed");
+    pipeline.addStage("gc_distribution") catch return allocError(allocator, "Stage init failed");
+    pipeline.addStage("length_distribution") catch return allocError(allocator, "Stage init failed");
+    pipeline.addStage("n_statistics") catch return allocError(allocator, "Stage init failed");
+    pipeline.addStage("entropy") catch return allocError(allocator, "Stage init failed");
+    pipeline.addStage("kmer_spectrum") catch return allocError(allocator, "Stage init failed");
+    pipeline.addStage("overrepresented") catch return allocError(allocator, "Stage init failed");
+    pipeline.addStage("duplication") catch return allocError(allocator, "Stage init failed");
+    pipeline.addStage("adapter_detect") catch return allocError(allocator, "Stage init failed");
+
+    const num_threads: usize = if (threads <= 0) std.Thread.getCpuCount() catch 1 else @intCast(threads);
+    pipeline.setupSchedulers(num_threads) catch return allocError(allocator, "Scheduler setup failed");
+
+    const chunk_builder_mod = @import("chunk_builder");
+    var chunk_builder = chunk_builder_mod.ChunkBuilder.init(&parser, 256 * 1024);
+
+    pipeline.run_chunked(&chunk_builder) catch return allocError(allocator, "Processing error");
+    pipeline.finalize() catch return allocError(allocator, "Pipeline finalize error");
+
+    var buffer = std.ArrayList(u8).init(allocator);
+    defer buffer.deinit();
+    
+    if (pipeline.parallel_scheduler) |*ps| {
+        structured_output.writeJsonReport(ps, buffer.writer().any()) catch return allocError(allocator, "JSON report failed");
     }
 
     return std.fmt.allocPrintZ(allocator, "{s}", .{buffer.items}) catch return "{\"error\":\"final alloc failure\"}";
@@ -168,6 +217,21 @@ pub export fn qwd_free_string(ptr: [*:0]const u8) void {
 pub export fn qwd_fastq_qc_r(path: [*c]const [*c]const u8, out: [*c]u8, max_len: [*c]const c_int) void {
     const p = path[0];
     const res = qwd_fastq_qc(p);
+    defer qwd_free_string(res);
+
+    const len = std.mem.indexOfSentinel(u8, 0, res);
+    const m_len: usize = @intCast(max_len[0]);
+    if (m_len > 0) {
+        const copy_len = @min(len, m_len - 1);
+        @memcpy(out[0..copy_len], res[0..copy_len]);
+        out[copy_len] = 0;
+    }
+}
+
+pub export fn qwd_fastq_qc_fast_r(path: [*c]const [*c]const u8, threads: [*c]const c_int, out: [*c]u8, max_len: [*c]const c_int) void {
+    const p = path[0];
+    const t = threads[0];
+    const res = qwd_fastq_qc_fast(p, t);
     defer qwd_free_string(res);
 
     const len = std.mem.indexOfSentinel(u8, 0, res);

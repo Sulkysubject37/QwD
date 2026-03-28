@@ -39,26 +39,22 @@ pub const EntropyStage = struct {
 
     pub fn processBitplanes(ptr: *anyopaque, bp: *const @import("bitplanes").BitplaneCore, block: *const @import("fastq_block").FastqColumnBlock) !bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
+        _ = bp;
 
         for (0..block.read_count) |read_idx| {
             var base_counts = [_]usize{0} ** 4;
-            const word_idx = read_idx >> 6;
-            const bit_mask = @as(u64, 1) << @as(u6, @intCast(read_idx & 63));
+            const len = block.read_lengths[read_idx];
 
-            for (0..block.read_lengths[read_idx]) |col| {
-                const col_offset = col * bp.u64_per_col;
-                if (bp.plane_a[col_offset + word_idx] & bit_mask != 0) {
-                    base_counts[0] += 1;
-                } else if (bp.plane_c[col_offset + word_idx] & bit_mask != 0) {
-                    base_counts[1] += 1;
-                } else if (bp.plane_g[col_offset + word_idx] & bit_mask != 0) {
-                    base_counts[2] += 1;
-                } else if (bp.plane_t[col_offset + word_idx] & bit_mask != 0) {
-                    base_counts[3] += 1;
+            for (0..len) |col| {
+                switch (block.bases[col][read_idx]) {
+                    'A', 'a' => base_counts[0] += 1,
+                    'C', 'c' => base_counts[1] += 1,
+                    'G', 'g' => base_counts[2] += 1,
+                    'T', 't' => base_counts[3] += 1,
+                    else => {},
                 }
             }
 
-            const len = block.read_lengths[read_idx];
             if (len > 0) {
                 const entropy = entropy_lut_mod.global_lut.getEntropy(base_counts, len);
                 self.total_reads += 1;

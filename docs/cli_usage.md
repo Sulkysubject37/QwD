@@ -76,7 +76,7 @@ qwd pipeline config.json reads.fastq
 **Example `config.json`:**
 ```json
 {
-  "pipeline": ["basic-stats", "gc-content", "entropy"]
+  "pipeline": ["basic-stats", "gc", "entropy"]
 }
 ```
 

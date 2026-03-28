@@ -50,36 +50,31 @@ pub const AdapterDetectionStage = struct {
     }
 
     pub fn processBitplanes(ptr: *anyopaque, bp: *const @import("bitplanes").BitplaneCore, block: *const @import("fastq_block").FastqColumnBlock) !bool {
-        _ = bp;
-        return processBlock(ptr, block);
-    }
-
-    pub fn processBlock(ptr: *anyopaque, block: *const @import("fastq_block").FastqColumnBlock) !bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         const k = self.k;
-        var suffix_buf: [1024]u8 = undefined;
+        _ = bp;
 
         for (0..block.read_count) |read_idx| {
             const len = block.read_lengths[read_idx];
             if (len < self.suffix_length) continue;
 
             const start = len - self.suffix_length;
-            for (0..self.suffix_length) |i| {
-                suffix_buf[i] = block.bases[start + i][read_idx];
-            }
-            const suffix = suffix_buf[0..self.suffix_length];
-
             var hash: usize = 0;
+            
+            // Initialization for suffix
             for (0..k) |i| {
-                const idx: usize = switch (suffix[i]) {
+                const b = block.bases[start + i][read_idx];
+                const idx: usize = switch (b) {
                     'A', 'a' => 0, 'C', 'c' => 1, 'G', 'g' => 2, 'T', 't' => 3, else => 0,
                 };
                 hash = (hash << 2) | idx;
             }
             self.counts[hash & 0xFFFF] += 1;
             self.total_suffix_kmers += 1;
+
             for (k..self.suffix_length) |i| {
-                const idx: usize = switch (suffix[i]) {
+                const b = block.bases[start + i][read_idx];
+                const idx: usize = switch (b) {
                     'A', 'a' => 0, 'C', 'c' => 1, 'G', 'g' => 2, 'T', 't' => 3, else => 0,
                 };
                 hash = ((hash << 2) | idx) & 0xFFFF;
@@ -88,6 +83,14 @@ pub const AdapterDetectionStage = struct {
             }
         }
         return true;
+    }
+
+    pub fn processBlock(ptr: *anyopaque, block: *const @import("fastq_block").FastqColumnBlock) !bool {
+        const bitplanes = @import("bitplanes");
+        var bp = try bitplanes.BitplaneCore.init(block.allocator, block.capacity, block.max_read_len);
+        defer bp.deinit();
+        bp.fromColumnBlock(block);
+        return processBitplanes(ptr, &bp, block);
     }
 
     pub fn processRawBatch(ptr: *anyopaque, reads: []const parser.Read) !bool {
@@ -159,6 +162,7 @@ pub const AdapterDetectionStage = struct {
                 .process = process,
                 .processRawBatch = processRawBatch,
                 .processBlock = processBlock,
+                .processBitplanes = processBitplanes,
                 .finalize = finalize,
                 .report = report,
                 .reportJson = reportJson,

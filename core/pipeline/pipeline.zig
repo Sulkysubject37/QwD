@@ -77,27 +77,27 @@ pub const Pipeline = struct {
             const gc = try allocator.create(@import("gc").GcStage);
             gc.* = @import("gc").GcStage{};
             return gc.stage();
-        } else if (std.mem.eql(u8, name, "basic-stats")) {
+        } else if (std.mem.eql(u8, name, "basic_stats")) {
             const stage = try allocator.create(@import("basic_stats").BasicStatsStage);
             stage.* = @import("basic_stats").BasicStatsStage{};
             return stage.stage();
-        } else if (std.mem.eql(u8, name, "per-base-quality")) {
+        } else if (std.mem.eql(u8, name, "per_base_quality")) {
             const stage = try allocator.create(@import("per_base_quality").PerBaseQualityStage);
             stage.* = @import("per_base_quality").PerBaseQualityStage{};
             return stage.stage();
-        } else if (std.mem.eql(u8, name, "nucleotide-composition")) {
+        } else if (std.mem.eql(u8, name, "nucleotide_composition")) {
             const stage = try allocator.create(@import("nucleotide_composition").NucleotideCompositionStage);
             stage.* = @import("nucleotide_composition").NucleotideCompositionStage{};
             return stage.stage();
-        } else if (std.mem.eql(u8, name, "gc-distribution")) {
+        } else if (std.mem.eql(u8, name, "gc_distribution")) {
             const stage = try allocator.create(@import("gc_distribution").GcDistributionStage);
             stage.* = @import("gc_distribution").GcDistributionStage{};
             return stage.stage();
-        } else if (std.mem.eql(u8, name, "length-distribution")) {
+        } else if (std.mem.eql(u8, name, "length_distribution")) {
             const stage = try allocator.create(@import("qc_length_dist").LengthDistributionStage);
             stage.* = @import("qc_length_dist").LengthDistributionStage{};
             return stage.stage();
-        } else if (std.mem.eql(u8, name, "n-statistics")) {
+        } else if (std.mem.eql(u8, name, "n_statistics")) {
             const stage = try allocator.create(@import("n_statistics").NStatisticsStage);
             stage.* = @import("n_statistics").NStatisticsStage{};
             return stage.stage();
@@ -105,7 +105,7 @@ pub const Pipeline = struct {
             const stage = try allocator.create(@import("qc_entropy").EntropyStage);
             stage.* = @import("qc_entropy").EntropyStage{};
             return stage.stage();
-        } else if (std.mem.eql(u8, name, "kmer-spectrum")) {
+        } else if (std.mem.eql(u8, name, "kmer_spectrum")) {
             const stage = try allocator.create(@import("kmer_spectrum").KmerSpectrumStage);
             stage.* = try @import("kmer_spectrum").KmerSpectrumStage.init(allocator);
             return stage.stage();
@@ -117,7 +117,7 @@ pub const Pipeline = struct {
             const stage = try allocator.create(@import("duplication").DuplicationStage);
             stage.* = @import("duplication").DuplicationStage.init(allocator, self.mode == .FAST);
             return stage.stage();
-        } else if (std.mem.eql(u8, name, "adapter-detect")) {
+        } else if (std.mem.eql(u8, name, "adapter_detect")) {
             const stage = try allocator.create(@import("qc_adapter_detect").AdapterDetectionStage);
             stage.* = try @import("qc_adapter_detect").AdapterDetectionStage.init(allocator);
             return stage.stage();

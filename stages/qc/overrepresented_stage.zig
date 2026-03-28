@@ -201,10 +201,14 @@ pub const OverrepresentedStage = struct {
         try writer.print(
             \\"overrepresented": {{
             \\  "unique_sequences": {d},
-            \\  "most_frequent": "{s}",
+            \\  "most_frequent": "
+        , .{self.map.count()});
+        try @import("structured_output").writeJsonEscaped(writer, top_seq);
+        try writer.print(
+            \\",
             \\  "most_frequent_count": {d}
             \\}}
-        , .{ self.map.count(), top_seq, top_count });
+        , .{top_count});
     }
 
     pub fn stage(self: *@This()) stage_mod.Stage {
