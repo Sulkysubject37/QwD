@@ -174,17 +174,17 @@ pub fn main() !void {
     if (std.mem.eql(u8, command, "qc") or std.mem.eql(u8, command, "fastq-stats")) {
         if (positional_args.items.len < 1) return;
         file_path = positional_args.items[0];
-        try pipeline.addStage("basic-stats");
-        try pipeline.addStage("per-base-quality");
-        try pipeline.addStage("nucleotide-composition");
-        try pipeline.addStage("gc-distribution");
-        try pipeline.addStage("length-distribution");
-        try pipeline.addStage("n-statistics");
+        try pipeline.addStage("basic_stats");
+        try pipeline.addStage("per_base_quality");
+        try pipeline.addStage("nucleotide_composition");
+        try pipeline.addStage("gc_distribution");
+        try pipeline.addStage("length_distribution");
+        try pipeline.addStage("n_statistics");
         try pipeline.addStage("entropy");
-        try pipeline.addStage("kmer-spectrum");
+        try pipeline.addStage("kmer_spectrum");
         try pipeline.addStage("overrepresented");
         try pipeline.addStage("duplication");
-        try pipeline.addStage("adapter-detect");
+        try pipeline.addStage("adapter_detect");
     } else if (std.mem.eql(u8, command, "entropy")) {
         if (positional_args.items.len < 1) return;
         file_path = positional_args.items[0];
@@ -192,16 +192,17 @@ pub fn main() !void {
     } else if (std.mem.eql(u8, command, "n50")) {
         if (positional_args.items.len < 1) return;
         file_path = positional_args.items[0];
-        try pipeline.addStage("n-statistics");
-    } else if (std.mem.eql(u8, command, "quality-decay")) {
+        try pipeline.addStage("n_statistics");
+    } else if (std.mem.eql(u8, command, "per-base-quality")) {
         if (positional_args.items.len < 1) return;
         file_path = positional_args.items[0];
-        try pipeline.addStage("per-base-quality");
+        try pipeline.addStage("per_base_quality");
     } else if (std.mem.eql(u8, command, "adapter-detect")) {
         if (positional_args.items.len < 1) return;
         file_path = positional_args.items[0];
-        try pipeline.addStage("adapter-detect");
+        try pipeline.addStage("adapter_detect");
     } else if (std.mem.eql(u8, command, "pipeline")) {
+
         if (positional_args.items.len < 2) return;
         const config_path = positional_args.items[0];
         file_path = positional_args.items[1];
@@ -215,7 +216,7 @@ pub fn main() !void {
     } else if (std.mem.eql(u8, command, "run")) {
         if (positional_args.items.len < 1) return;
         file_path = positional_args.items[0];
-        try pipeline.addStage("basic-stats");
+        try pipeline.addStage("basic_stats");
         try pipeline.addStage("qc");
     }
 

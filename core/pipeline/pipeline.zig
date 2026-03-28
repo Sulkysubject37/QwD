@@ -69,67 +69,79 @@ pub const Pipeline = struct {
     }
 
     pub fn createStageInstance(self: *Pipeline, allocator: std.mem.Allocator, name: []const u8) !stage_interface.Stage {
-        if (std.mem.eql(u8, name, "qc")) {
+        // Backward compatibility for hyphenated names
+        var buf: [64]u8 = undefined;
+        var sanitized_name = name;
+        if (std.mem.indexOfScalar(u8, name, '-') != null) {
+            const copy_len = @min(name.len, buf.len);
+            @memcpy(buf[0..copy_len], name[0..copy_len]);
+            for (buf[0..copy_len]) |*c| {
+                if (c.* == '-') c.* = '_';
+            }
+            sanitized_name = buf[0..copy_len];
+        }
+
+        if (std.mem.eql(u8, sanitized_name, "qc")) {
             const qc = try allocator.create(@import("qc").QcStage);
             qc.* = @import("qc").QcStage{};
             return qc.stage();
-        } else if (std.mem.eql(u8, name, "gc")) {
+        } else if (std.mem.eql(u8, sanitized_name, "gc")) {
             const gc = try allocator.create(@import("gc").GcStage);
             gc.* = @import("gc").GcStage{};
             return gc.stage();
-        } else if (std.mem.eql(u8, name, "basic_stats")) {
+        } else if (std.mem.eql(u8, sanitized_name, "basic_stats")) {
             const stage = try allocator.create(@import("basic_stats").BasicStatsStage);
             stage.* = @import("basic_stats").BasicStatsStage{};
             return stage.stage();
-        } else if (std.mem.eql(u8, name, "per_base_quality")) {
+        } else if (std.mem.eql(u8, sanitized_name, "per_base_quality")) {
             const stage = try allocator.create(@import("per_base_quality").PerBaseQualityStage);
             stage.* = @import("per_base_quality").PerBaseQualityStage{};
             return stage.stage();
-        } else if (std.mem.eql(u8, name, "nucleotide_composition")) {
+        } else if (std.mem.eql(u8, sanitized_name, "nucleotide_composition")) {
             const stage = try allocator.create(@import("nucleotide_composition").NucleotideCompositionStage);
             stage.* = @import("nucleotide_composition").NucleotideCompositionStage{};
             return stage.stage();
-        } else if (std.mem.eql(u8, name, "gc_distribution")) {
+        } else if (std.mem.eql(u8, sanitized_name, "gc_distribution")) {
             const stage = try allocator.create(@import("gc_distribution").GcDistributionStage);
             stage.* = @import("gc_distribution").GcDistributionStage{};
             return stage.stage();
-        } else if (std.mem.eql(u8, name, "length_distribution")) {
+        } else if (std.mem.eql(u8, sanitized_name, "length_distribution")) {
             const stage = try allocator.create(@import("qc_length_dist").LengthDistributionStage);
             stage.* = @import("qc_length_dist").LengthDistributionStage{};
             return stage.stage();
-        } else if (std.mem.eql(u8, name, "n_statistics")) {
+        } else if (std.mem.eql(u8, sanitized_name, "n_statistics")) {
             const stage = try allocator.create(@import("n_statistics").NStatisticsStage);
             stage.* = @import("n_statistics").NStatisticsStage{};
             return stage.stage();
-        } else if (std.mem.eql(u8, name, "entropy")) {
+        } else if (std.mem.eql(u8, sanitized_name, "entropy")) {
             const stage = try allocator.create(@import("qc_entropy").EntropyStage);
             stage.* = @import("qc_entropy").EntropyStage{};
             return stage.stage();
-        } else if (std.mem.eql(u8, name, "kmer_spectrum")) {
+        } else if (std.mem.eql(u8, sanitized_name, "kmer_spectrum")) {
             const stage = try allocator.create(@import("kmer_spectrum").KmerSpectrumStage);
             stage.* = try @import("kmer_spectrum").KmerSpectrumStage.init(allocator);
             return stage.stage();
-        } else if (std.mem.eql(u8, name, "overrepresented")) {
+        } else if (std.mem.eql(u8, sanitized_name, "overrepresented")) {
             const stage = try allocator.create(@import("overrepresented").OverrepresentedStage);
             stage.* = @import("overrepresented").OverrepresentedStage.init(allocator, self.mode == .FAST);
             return stage.stage();
-        } else if (std.mem.eql(u8, name, "duplication")) {
+        } else if (std.mem.eql(u8, sanitized_name, "duplication")) {
             const stage = try allocator.create(@import("duplication").DuplicationStage);
             stage.* = @import("duplication").DuplicationStage.init(allocator, self.mode == .FAST);
             return stage.stage();
-        } else if (std.mem.eql(u8, name, "adapter_detect")) {
+        } else if (std.mem.eql(u8, sanitized_name, "adapter_detect")) {
             const stage = try allocator.create(@import("qc_adapter_detect").AdapterDetectionStage);
             stage.* = try @import("qc_adapter_detect").AdapterDetectionStage.init(allocator);
             return stage.stage();
-        } else if (std.mem.eql(u8, name, "trim")) {
+        } else if (std.mem.eql(u8, sanitized_name, "trim")) {
             const stage = try allocator.create(@import("trim").TrimStage);
             stage.* = @import("trim").TrimStage.init("AGATCGGAAGAGC");
             return stage.stage();
-        } else if (std.mem.eql(u8, name, "filter")) {
+        } else if (std.mem.eql(u8, sanitized_name, "filter")) {
             const stage = try allocator.create(@import("filter").FilterStage);
             stage.* = @import("filter").FilterStage.init(20.0);
             return stage.stage();
-        } else if (std.mem.eql(u8, name, "kmer")) {
+        } else if (std.mem.eql(u8, sanitized_name, "kmer")) {
             const stage = try allocator.create(@import("kmer").KmerStage);
             stage.* = try @import("kmer").KmerStage.init(allocator, 5);
             return stage.stage();
