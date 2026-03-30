@@ -1,14 +1,17 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const gzip_reader = @import("gzip_reader");
 
 pub const BlockReader = struct {
     reader: ?std.io.AnyReader = null,
     file_fallback: ?std.fs.File = null,
+    gzip: ?*gzip_reader.GzipReader = null, // Store as pointer for stability
     buffer: []u8,
     pos: usize,
     end: usize,
     mmap_handle: ?[]u8 = null,
     is_mmap: bool = false,
+    allocator: std.mem.Allocator,
 
     pub fn init(allocator: std.mem.Allocator, reader: std.io.AnyReader, buffer_size: usize) !BlockReader {
         return BlockReader{
@@ -16,20 +19,33 @@ pub const BlockReader = struct {
             .buffer = try allocator.alloc(u8, buffer_size),
             .pos = 0,
             .end = 0,
+            .allocator = allocator,
+        };
+    }
+
+    pub fn initGzip(allocator: std.mem.Allocator, reader: std.io.AnyReader, buffer_size: usize, gzip_mode: @import("mode").GzipMode) !BlockReader {
+        // Heap allocate GzipReader so background threads have a stable pointer
+        const gz = try allocator.create(gzip_reader.GzipReader);
+        gz.* = try gzip_reader.GzipReader.init(allocator, reader, gzip_mode);
+        try gz.start();
+        
+        return BlockReader{
+            .gzip = gz,
+            .buffer = try allocator.alloc(u8, buffer_size),
+            .pos = 0,
+            .end = 0,
+            .allocator = allocator,
         };
     }
 
     pub fn initMmap(allocator: std.mem.Allocator, file: std.fs.File) !BlockReader {
         if (builtin.os.tag == .windows) {
-            // Fallback for Windows where posix mmap is not natively available via target libc
-            // We initialize a standard BlockReader. Since we can't store a pointer to 
-            // a temporary reader, we must pass the file handle and let fill() use it.
-            // NOTE: We temporarily set reader to null and will update fill() to use file if reader is null.
             return BlockReader{
                 .file_fallback = file,
                 .buffer = try allocator.alloc(u8, 1024 * 1024),
                 .pos = 0,
                 .end = 0,
+                .allocator = allocator,
             };
         }
 
@@ -51,10 +67,15 @@ pub const BlockReader = struct {
             .end = size,
             .mmap_handle = ptr,
             .is_mmap = true,
+            .allocator = allocator,
         };
     }
 
     pub fn deinit(self: *BlockReader, allocator: std.mem.Allocator) void {
+        if (self.gzip) |gz| {
+            gz.deinit(allocator);
+            allocator.destroy(gz);
+        }
         if (self.is_mmap) {
             if (builtin.os.tag != .windows) {
                 const ptr = self.mmap_handle.?;
@@ -67,7 +88,7 @@ pub const BlockReader = struct {
     }
 
     pub fn fill(self: *BlockReader) !usize {
-        if (self.is_mmap) return 0; // Everything is already in memory
+        if (self.is_mmap) return 0;
 
         const remaining = self.end - self.pos;
         if (remaining > 0 and self.pos > 0) {
@@ -76,13 +97,21 @@ pub const BlockReader = struct {
         self.pos = 0;
         self.end = remaining;
         
-        const read_len = if (self.reader) |r| 
-            try r.read(self.buffer[self.end..]) 
-        else if (self.file_fallback) |f| 
-            try f.read(self.buffer[self.end..])
-        else return error.ReaderUnavailable;
+        var total_read: usize = 0;
+        while (self.end < self.buffer.len) {
+            const read_len = if (self.gzip) |gz|
+                try gz.read(self.buffer[self.end..])
+            else if (self.reader) |r| 
+                try r.read(self.buffer[self.end..]) 
+            else if (self.file_fallback) |f| 
+                try f.read(self.buffer[self.end..])
+            else return error.ReaderUnavailable;
 
-        self.end += read_len;
-        return read_len;
+            if (read_len == 0) break;
+            self.end += read_len;
+            total_read += read_len;
+        }
+
+        return total_read;
     }
 };

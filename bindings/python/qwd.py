@@ -40,6 +40,9 @@ if _lib:
     _lib.qwd_fastq_qc_fast.restype = ctypes.c_void_p
     _lib.qwd_fastq_qc_fast.argtypes = [ctypes.c_char_p, ctypes.c_int]
     
+    _lib.qwd_fastq_qc_ex.restype = ctypes.c_void_p
+    _lib.qwd_fastq_qc_ex.argtypes = [ctypes.c_char_p, ctypes.c_int, ctypes.c_int, ctypes.c_int]
+
     _lib.qwd_bam_stats.restype = ctypes.c_void_p
     _lib.qwd_bam_stats.argtypes = [ctypes.c_char_p]
     
@@ -48,12 +51,30 @@ if _lib:
     
     _lib.qwd_free_string.argtypes = [ctypes.c_void_p]
 
-def qc(fastq_path, fast=False, threads=0):
+def qc(fastq_path, approx=False, threads=0, gzip_mode="auto", **kwargs):
+    """
+    Run FASTQ Quality Control.
+    :param approx: Use probabilistic analytical mode (True/False)
+    :param threads: Number of parallel threads (0 for CPU count)
+    :param gzip_mode: Decompression engine ('auto', 'libdeflate', 'qwd', 'compat')
+    """
     if not _lib: raise RuntimeError("QwD shared library not found")
-    if fast:
-        res_ptr = _lib.qwd_fastq_qc_fast(fastq_path.encode('utf-8'), threads)
-    else:
-        res_ptr = _lib.qwd_fastq_qc(fastq_path.encode('utf-8'))
+    
+    # Backward compatibility
+    is_approx = approx or kwargs.get('fast', False)
+    
+    mode_idx = 1 if is_approx else 0
+    
+    gz_map = {
+        "auto": 0,
+        "libdeflate": 1,
+        "chunked": 2,
+        "compat": 3,
+        "qwd": 4
+    }
+    gz_idx = gz_map.get(gzip_mode, 0)
+    
+    res_ptr = _lib.qwd_fastq_qc_ex(fastq_path.encode('utf-8'), threads, mode_idx, gz_idx)
     res_str = ctypes.string_at(res_ptr).decode('utf-8')
     data = json.loads(res_str)
     _lib.qwd_free_string(res_ptr)

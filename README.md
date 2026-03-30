@@ -16,103 +16,52 @@ QwD derives from Arabic:
 **قَلَّ وَدَلَّ (qalla wa dalla)**
 Meaning: **brevity with clarity**
 
-### Motto
-QwD — minimal passes, maximal insight
-
 ---
 
 ### Project Status (v1.1.0)
-QwD has reached a major milestone with the release of **v1.1.0**. This version introduces a fully refactored Columnar SIMD Engine and the debut of the **QwD Dashboard**, a professional macOS interface for laboratory-grade diagnostics.
-
-### QwD Dashboard
-A native macOS (SwiftUI) application built for researchers who require instant, visual feedback on sequence quality.
-- **Lab Professional Aesthetic**: A high-density, "Apple-minimalist" design optimized for information retrieval at a glance.
-- **Scientific Print Engine**: High-fidelity, vector-based PDF export for professional documentation.
-- **Real-Time Visuals**: Integrated high-contrast charts for GC Composition, Read Length distribution, and Sequence Entropy.
-- **Deep Integration**: Seamlessly bridges the high-performance Zig core with modern macOS UI capabilities.
-
-### Description
-QwD is a high-performance streaming analytics engine designed for FASTQ and BAM sequencing data. It delivers real-time diagnostics by performing exhaustive analytics in a single streaming pass, with a core focus on **Scientific Determinism**—guaranteeing bit-identical results regardless of hardware concurrency.
-
-QwD operates in two distinct modes:
-1. **Exact Mode (Default)**: Prioritizes 100% precision. Uses exhaustive sequence tracking via HashMaps to ensure every single read is accounted for in duplication and overrepresentation metrics.
-2. **Fast Mode (Probabilistic)**: Prioritizes throughput and memory efficiency. Replaces heavy tracking with mathematically-sound sketches (Bloom Filters and MinHash), delivering ~5x speedup.
+QwD v1.1.0 introduces the **Universal GZIP Engine**, delivering integrated decompression that is **18% faster** than reading uncompressed files. This version also debuts the **QwD Dashboard**, a professional macOS interface for laboratory-grade diagnostics.
 
 ### Key Features
-- **Streaming Core**: O(1) resident memory footprint per thread, capable of processing multi-terabyte datasets without OOM.
-- **Phase Q/R Optimized Engine**: Fully vectorized 16x16 transposition kernels and fused bitplane analytics over 32-lane column chunks.
-- **Scientific Determinism**: A lock-free aggregation system ensures perfectly reproducible results across any thread count.
-- **Vertical SIMD Scanner**: hardware-accelerated newline scanning for 32-lane record boundary detection.
-- **Multi-Language Core**: Unified C API exposing `qwd_fastq_qc_fast` for native integration with Python, R, and Swift.
+- **Async GZIP Prefetcher**: A background decompression engine that overlaps I/O with analysis, reaching **>200k reads/sec** on integrated GZIP data.
+- **Native "Bit-Sieve" Core**: A pure-Zig DEFLATE implementation achieving performance parity with `libdeflate`.
+- **Orthogonal Execution**: Explicit separation between Analytical Precision (`exact` vs `approx`) and Decompression Engine (`auto`, `libdeflate`, `qwd`, `compat`).
+- **Phase Q/R Optimized Engine**: Vectorized 16x16 transposition kernels and 32-lane column chunks.
+- **Scientific Determinism**: Guaranteed bit-identical results across all thread counts.
+- **Multi-Language Bindings**: Full support for Python, R, and Swift with unified feature sets.
 
 ---
 
-### Architecture
-The core architecture follows a high-density linear data flow:
+### Analytical Modes (`--mode`)
+1. **Exact Mode (Default)**: 100% precision. Uses exhaustive tracking for final publication-grade results.
+2. **Approx Mode**: Probabilistic acceleration using Bloom Filters and MinHash, delivering massive throughput for terabyte-scale diagnostics.
 
-**mmap → Vertical Scanner → Parallel Scheduler → Columnar Transpose → Bitplane Kernels → Aggregation**
+---
+
+### Performance (1M Reads Benchmark)
+| Format | Engine | Throughput | vs Plain |
+| :--- | :--- | :--- | :--- |
+| **BGZF GZIP** | **Native Async** | **~207,000 reads/sec** | **1.18x** |
+| Plain FASTQ | Direct I/O | ~176,000 reads/sec | 1.00x |
+| Standard GZIP | Compat Fallback | ~71,000 reads/sec | 0.40x |
 
 ---
 
 ### Installation & Build
-
-#### Prerequisites
-- Zig 0.13.0
-- Swift 6.0+ (For Dashboard only)
-
-#### Build Core Engine
 ```bash
-# Build Release binary (v1.1.0 Contract)
 /usr/local/zig/zig build -Doptimize=ReleaseFast
 ```
 
-#### Build Dashboard (macOS)
-```bash
-cd apps/dashboard
-swift build -c release
-```
+### Quick Start
+- **CLI**: `qwd qc reads.fastq.gz --mode exact`
+- **Python**: `qwd.qc("reads.fastq.gz", gzip_mode="qwd")`
+- **R**: `qwd_qc("reads.fastq.gz", approx=TRUE)`
 
 ---
 
-### CLI Usage
-For a detailed guide on subcommands and flags, see the **[CLI Usage Guide](docs/cli_usage.md)**.
-
-- **Exact Mode (Deterministic QC)**: 
-  ```bash
-  qwd qc --threads 8 reads.fastq
-  ```
-- **Fast Mode (Probabilistic QC)**: 
-  ```bash
-  qwd qc --fast --threads 8 reads.fastq
-  ```
-
----
-
-### Python & R Integration
-
-#### Python
-```python
-import qwd
-data = qwd.qc("reads.fastq", fast=True, threads=4)
-print(f"Total Reads: {data['stages']['basic_stats']['total_reads']}")
-```
-
-#### R
-```R
-source("bindings/r/R/qwd.R")
-metrics <- qwd_qc("reads.fastq", fast = TRUE)
-print(metrics$stages$basic_stats$total_reads)
-```
-
----
-
-### Performance Benchmarks (v1.1.0)
-On a standard workstation (8 cores):
-- **Throughput**: ~1.5M – 2.5M reads/sec (Full QC suite).
-- **Peak Throughput**: >5M reads/sec (Core Engine / Minimal Stats).
-- **Memory Floor**: ~85MB - 256MB RSS (Hard Cap).
-
----
+### Documentation
+- **[CLI Usage Guide](docs/cli_usage.md)**
+- **[Phase P: Universal GZIP Engine](docs/phase_p.md)**
+- **[Dashboard Setup](apps/dashboard/README.md)**
 
 ### License
 Academic Free License (AFL) 3.0

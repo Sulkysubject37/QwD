@@ -4,10 +4,36 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    // Fundamental Modules
+    const mode_mod = b.addModule("mode", .{
+        .root_source_file = b.path("core/config/mode.zig"),
+    });
+
+    const ring_buffer_mod = b.addModule("ring_buffer", .{
+        .root_source_file = b.path("core/parallel/ring_buffer.zig"),
+    });
+
+
     // Core Modules
+    const deflate_wrapper_mod = b.addModule("deflate_wrapper", .{
+        .root_source_file = b.path("core/io/deflate_wrapper.zig"),
+    });
+    deflate_wrapper_mod.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
+
+    const gzip_reader_mod = b.addModule("gzip_reader", .{
+        .root_source_file = b.path("core/io/gzip_reader.zig"),
+    });
+    gzip_reader_mod.addImport("deflate_wrapper", deflate_wrapper_mod);
+    gzip_reader_mod.addImport("mode", mode_mod);
+    gzip_reader_mod.addImport("ring_buffer", ring_buffer_mod);
+
+
     const block_reader_mod = b.addModule("block_reader", .{
         .root_source_file = b.path("core/io/block_reader.zig"),
     });
+    block_reader_mod.addImport("gzip_reader", gzip_reader_mod);
+    block_reader_mod.addImport("mode", mode_mod);
+
     const newline_scan_mod = b.addModule("newline_scan", .{
         .root_source_file = b.path("core/simd/newline_scan.zig"),
     });
@@ -22,9 +48,6 @@ pub fn build(b: *std.Build) void {
     });
     const bloom_filter_mod = b.addModule("bloom_filter", .{
         .root_source_file = b.path("core/analytics/bloom_filter.zig"),
-    });
-    const mode_mod = b.addModule("mode", .{
-        .root_source_file = b.path("core/config/mode.zig"),
     });
 
     const simd_transpose_mod = b.addModule("simd_transpose", .{
@@ -42,6 +65,7 @@ pub fn build(b: *std.Build) void {
     });
     parser_mod.addImport("block_reader", block_reader_mod);
     parser_mod.addImport("newline_scan", newline_scan_mod);
+    parser_mod.addImport("mode", mode_mod);
 
     // Phase Q Hyperscale Modules
     const chunk_builder_mod = b.addModule("chunk_builder", .{
@@ -79,9 +103,6 @@ pub fn build(b: *std.Build) void {
     });
     batch_builder_mod.addImport("parser", parser_mod);
     batch_builder_mod.addImport("read_batch", read_batch_mod);
-    const ring_buffer_mod = b.addModule("ring_buffer", .{
-        .root_source_file = b.path("core/parallel/ring_buffer.zig"),
-    });
     const base_decode_mod = b.addModule("base_decode", .{
         .root_source_file = b.path("core/simd/base_decode.zig"),
     });
@@ -459,6 +480,10 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    exe.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
+    exe.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
+    exe.linkSystemLibrary("deflate");
+    exe.linkLibC();
     exe.root_module.addImport("parser", parser_mod);
     exe.root_module.addImport("block_reader", block_reader_mod);
     exe.root_module.addImport("scheduler", scheduler_mod);
@@ -496,11 +521,15 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    lib.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
+    lib.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
+    lib.linkSystemLibrary("deflate");
     lib.linkLibC();
     lib.root_module.addImport("pipeline", pipeline_mod);
     lib.root_module.addImport("pipeline_config", pipeline_config_mod);
     lib.root_module.addImport("entropy_lut", entropy_lut_mod);
     lib.root_module.addImport("parser", parser_mod);
+    lib.root_module.addImport("mode", mode_mod);
     lib.root_module.addImport("bam_pipeline", bam_pipeline_mod);
     lib.root_module.addImport("bam_reader", bam_reader_mod);
     lib.root_module.addImport("allocator", allocator_mod);
@@ -529,6 +558,10 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    core_bench.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
+    core_bench.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
+    core_bench.linkSystemLibrary("deflate");
+    core_bench.linkLibC();
     core_bench.root_module.addImport("parser", parser_mod);
     core_bench.root_module.addImport("scheduler", scheduler_mod);
     core_bench.root_module.addImport("parallel_scheduler", parallel_scheduler_mod);
@@ -546,6 +579,10 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    fastq_tests.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
+    fastq_tests.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
+    fastq_tests.linkSystemLibrary("deflate");
+    fastq_tests.linkLibC();
     fastq_tests.root_module.addImport("parser", parser_mod);
     fastq_tests.root_module.addImport("qc_entropy", qc_entropy_mod);
     fastq_tests.root_module.addImport("kmer_spectrum", kmer_spectrum_mod);
@@ -559,6 +596,10 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    bam_tests.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
+    bam_tests.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
+    bam_tests.linkSystemLibrary("deflate");
+    bam_tests.linkLibC();
     bam_tests.root_module.addImport("bam_reader", bam_reader_mod);
     bam_tests.root_module.addImport("alignment_stats", alignment_stats_mod);
     bam_tests.root_module.addImport("mapq_dist", mapq_dist_mod);
@@ -572,6 +613,10 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    perf_tests.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
+    perf_tests.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
+    perf_tests.linkSystemLibrary("deflate");
+    perf_tests.linkLibC();
     const run_perf_tests = b.addRunArtifact(perf_tests);
 
     const rep_tests = b.addTest(.{
@@ -579,6 +624,10 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    rep_tests.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
+    rep_tests.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
+    rep_tests.linkSystemLibrary("deflate");
+    rep_tests.linkLibC();
     const run_rep_tests = b.addRunArtifact(rep_tests);
 
     const fuzz_tests = b.addTest(.{
@@ -586,6 +635,10 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    fuzz_tests.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
+    fuzz_tests.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
+    fuzz_tests.linkSystemLibrary("deflate");
+    fuzz_tests.linkLibC();
     fuzz_tests.root_module.addImport("parser", parser_mod);
     const run_fuzz_tests = b.addRunArtifact(fuzz_tests);
 
@@ -594,6 +647,10 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    stress_tests.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
+    stress_tests.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
+    stress_tests.linkSystemLibrary("deflate");
+    stress_tests.linkLibC();
     const run_stress_tests = b.addRunArtifact(stress_tests);
 
     test_step.dependOn(&run_fastq_tests.step);

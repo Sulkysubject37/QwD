@@ -123,11 +123,11 @@ pub const Pipeline = struct {
             return stage.stage();
         } else if (std.mem.eql(u8, sanitized_name, "overrepresented")) {
             const stage = try allocator.create(@import("overrepresented").OverrepresentedStage);
-            stage.* = @import("overrepresented").OverrepresentedStage.init(allocator, self.mode == .FAST);
+            stage.* = @import("overrepresented").OverrepresentedStage.init(allocator, self.mode == .APPROX);
             return stage.stage();
         } else if (std.mem.eql(u8, sanitized_name, "duplication")) {
             const stage = try allocator.create(@import("duplication").DuplicationStage);
-            stage.* = @import("duplication").DuplicationStage.init(allocator, self.mode == .FAST);
+            stage.* = @import("duplication").DuplicationStage.init(allocator, self.mode == .APPROX);
             return stage.stage();
         } else if (std.mem.eql(u8, sanitized_name, "adapter_detect")) {
             const stage = try allocator.create(@import("qc_adapter_detect").AdapterDetectionStage);
@@ -162,6 +162,7 @@ pub const Pipeline = struct {
                 .end = 0,
                 .mmap_handle = null,
                 .is_mmap = true,
+                .allocator = self.arena.child_allocator,
             };
 
             var local_parser = parser_mod.FastqParser{

@@ -13,7 +13,7 @@ pub const OverrepresentedStage = struct {
         return OverrepresentedStage{
             .map = std.StringHashMap(u64).init(allocator),
             .allocator = allocator,
-            .mode = if (is_fast) .FAST else .EXACT,
+            .mode = if (is_fast) .APPROX else .EXACT,
         };
     }
 
@@ -29,7 +29,7 @@ pub const OverrepresentedStage = struct {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         self.total_reads += 1;
         
-        if (self.mode == .FAST and self.total_reads > 50_000) return true;
+        if (self.mode == .APPROX and self.total_reads > 50_000) return true;
 
         if (self.mode == .EXACT or self.map.count() < 100000) {
             if (self.map.getPtr(read.seq)) |v| {
@@ -67,7 +67,7 @@ pub const OverrepresentedStage = struct {
 
         for (0..block.read_count) |read_idx| {
             self.total_reads += 1;
-            if (self.mode == .FAST and self.total_reads > 50_000) continue;
+            if (self.mode == .APPROX and self.total_reads > 50_000) continue;
 
             const len = block.read_lengths[read_idx];
             for (0..len) |i| seq_buf[i] = block.bases[i][read_idx];
@@ -102,7 +102,7 @@ pub const OverrepresentedStage = struct {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         for (reads) |read| {
             self.total_reads += 1;
-            if (self.mode == .FAST and self.total_reads > 50_000) continue;
+            if (self.mode == .APPROX and self.total_reads > 50_000) continue;
 
             if (self.mode == .EXACT or self.map.count() < 100000) {
                 if (self.map.getPtr(read.seq)) |v| {

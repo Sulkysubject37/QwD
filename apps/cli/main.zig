@@ -30,8 +30,8 @@ fn printHelp() void {
         \\
         \\Options:
         \\  --threads N     Number of parallel threads (default: CPU count)
-        \\  --mode <type>   Execution mode: 'exact' (deterministic) or 'fast' (probabilistic)
-        \\  --fast          Shorthand for --mode fast
+        \\  --mode <type>   Analytical mode: 'exact' (deterministic) or 'approx' (probabilistic)
+        \\  --gzip-mode <m> Decompression: 'auto', 'libdeflate', 'chunked', 'compat'
         \\  --json          Output results in structured JSON format
         \\  --ndjson        Output results in streaming NDJSON format
         \\  --max-memory N  Hard memory limit in MB (default: 1024)
@@ -71,6 +71,7 @@ pub fn main() !void {
 
     var num_threads: usize = std.Thread.getCpuCount() catch 1;
     var mode: mode_mod.Mode = .EXACT;
+    var gzip_mode: mode_mod.GzipMode = .AUTO;
     var perf_mode = false;
     var quiet_mode = false;
     var max_memory_mb: usize = 1024;
@@ -86,15 +87,28 @@ pub fn main() !void {
             if (i < args.len) {
                 num_threads = try std.fmt.parseInt(usize, args[i], 10);
             }
-        } else if (std.mem.eql(u8, args[i], "--fast")) {
-            mode = .FAST;
         } else if (std.mem.eql(u8, args[i], "--mode")) {
             i += 1;
             if (i < args.len) {
-                if (std.mem.eql(u8, args[i], "fast")) {
-                    mode = .FAST;
+                if (std.mem.eql(u8, args[i], "approx")) {
+                    mode = .APPROX;
                 } else if (std.mem.eql(u8, args[i], "exact")) {
                     mode = .EXACT;
+                }
+            }
+        } else if (std.mem.eql(u8, args[i], "--gzip-mode")) {
+            i += 1;
+            if (i < args.len) {
+                if (std.mem.eql(u8, args[i], "auto")) {
+                    gzip_mode = .AUTO;
+                } else if (std.mem.eql(u8, args[i], "libdeflate")) {
+                    gzip_mode = .LIBDEFLATE;
+                } else if (std.mem.eql(u8, args[i], "chunked")) {
+                    gzip_mode = .CHUNKED;
+                } else if (std.mem.eql(u8, args[i], "compat")) {
+                    gzip_mode = .COMPAT;
+                } else if (std.mem.eql(u8, args[i], "qwd")) {
+                    gzip_mode = .NATIVE_QWD;
                 }
             }
         } else if (std.mem.eql(u8, args[i], "--perf")) {
@@ -229,9 +243,11 @@ pub fn main() !void {
     defer file.close();
 
     var fr = file.reader();
-    var parser = if (mode == .FAST) blk: {
+    var parser = if (std.mem.endsWith(u8, file_path, ".gz")) blk: {
+        break :blk try parser_mod.FastqParser.initGzip(allocator, fr.any(), 16 * 1024 * 1024, gzip_mode);
+    } else if (mode == .APPROX) blk: {
         break :blk try parser_mod.FastqParser.initMmap(arena_allocator, file);
-    } else try parser_mod.FastqParser.init(allocator, fr.any(), (256 * 1024) + (1024 * 1024));
+    } else try parser_mod.FastqParser.init(allocator, fr.any(), 16 * 1024 * 1024);
     defer parser.deinit();
 
     // Hyperscale Direct Chunked flow

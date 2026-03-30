@@ -27,6 +27,11 @@ class TestPythonBindings(unittest.TestCase):
         self.assertIn("read_count", res)
         self.assertEqual(res["read_count"], 1)
 
+    def test_qc_approx(self):
+        res = qwd.qc(self.fastq_path, approx=True)
+        self.assertIn("read_count", res)
+        self.assertEqual(res["read_count"], 1)
+
     def test_bamstats(self):
         res = qwd.bamstats(self.bam_path)
         # Note: BamReader stub returns predefined records, ignoring the actual file content for now,

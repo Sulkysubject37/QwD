@@ -19,7 +19,8 @@ public final class QwDEngine {
     
     // User Preferences (synced with AppStorage keys in SettingsView)
     private let threadCountKey = "qwd_thread_count"
-    private let executionModeKey = "qwd_execution_mode"
+    private let analysisModeKey = "qwd_analysis_mode"
+    private let gzipModeKey = "qwd_gzip_mode"
     
     private init() {}
     
@@ -30,20 +31,25 @@ public final class QwDEngine {
         
         // Fetch current settings from UserDefaults
         let threads = UserDefaults.standard.integer(forKey: threadCountKey) == 0 ? 4 : UserDefaults.standard.integer(forKey: threadCountKey)
-        let modeString = UserDefaults.standard.string(forKey: executionModeKey) ?? "Exact"
-        let isFast = modeString == "Fast (Heuristic)"
+        let modeString = UserDefaults.standard.string(forKey: analysisModeKey) ?? "Exact (Deterministic)"
+        let gzipModeString = UserDefaults.standard.string(forKey: gzipModeKey) ?? "Auto (Detect)"
+        
+        // Map strings to C-API integers
+        let modeInt: Int32 = modeString.contains("Approx") ? 1 : 0
+        let gzipModeInt: Int32 = switch gzipModeString {
+            case let s where s.contains("SIMD"): 1
+            case let s where s.contains("Chunked"): 2
+            case let s where s.contains("Compat"): 3
+            default: 0
+        }
         
         defer { self.isRunning = false }
         
+        // Removed 'await' from the detached closure body since it's synchronous
         let result = await Task.detached(priority: .userInitiated) { () -> String? in
             return path.withCString { cPath in
-                let resPtr: UnsafePointer<Int8>?
-                
-                if isFast {
-                    resPtr = qwd_fastq_qc_fast(cPath, Int32(threads))
-                } else {
-                    resPtr = qwd_fastq_qc(cPath)
-                }
+                // qwd_fastq_qc_ex is now exposed in CQwD.h
+                let resPtr = qwd_fastq_qc_ex(cPath, Int32(threads), modeInt, gzipModeInt)
                 
                 guard let validPtr = resPtr else { return nil }
                 defer { qwd_free_string(validPtr) }
@@ -51,7 +57,7 @@ public final class QwDEngine {
             }
         }.value
         
-        guard let jsonString = result, let data = jsonString.data(using: .utf8) else {
+        guard let jsonString = result, let data = jsonString.data(using: String.Encoding.utf8) else {
             self.errorMessage = "Failed to communicate with QwD Engine."
             return
         }

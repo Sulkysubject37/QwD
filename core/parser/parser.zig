@@ -35,6 +35,13 @@ pub const FastqParser = struct {
         };
     }
 
+    pub fn initGzip(allocator: std.mem.Allocator, reader: std.io.AnyReader, buffer_size: usize, gzip_mode: @import("mode").GzipMode) !FastqParser {
+        return FastqParser{
+            .br = try block_reader.BlockReader.initGzip(allocator, reader, buffer_size, gzip_mode),
+            .allocator = allocator,
+        };
+    }
+
     pub fn initMmap(allocator: std.mem.Allocator, file: std.fs.File) !FastqParser {
         return FastqParser{
             .br = try block_reader.BlockReader.initMmap(allocator, file),

@@ -16,9 +16,9 @@ pub const DuplicationStage = struct {
         var self = DuplicationStage{
             .map = std.StringHashMap(void).init(allocator),
             .allocator = allocator,
-            .mode = if (is_fast) .FAST else .EXACT,
+            .mode = if (is_fast) .APPROX else .EXACT,
         };
-        if (self.mode == .FAST) {
+        if (self.mode == .APPROX) {
             self.bloom = bloom_mod.BloomFilter.init(allocator, 2 * 1024 * 1024) catch null;
         }
         return self;
@@ -39,9 +39,9 @@ pub const DuplicationStage = struct {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         self.total_reads += 1;
         var seq_to_hash = read.seq;
-        if (self.mode == .FAST and seq_to_hash.len > 50) seq_to_hash = seq_to_hash[0..50];
+        if (self.mode == .APPROX and seq_to_hash.len > 50) seq_to_hash = seq_to_hash[0..50];
 
-        if (self.mode == .FAST and self.bloom != null) {
+        if (self.mode == .APPROX and self.bloom != null) {
             if (self.bloom.?.contains(seq_to_hash)) {
                 self.duplicate_reads += 1;
             } else {
@@ -84,9 +84,11 @@ pub const DuplicationStage = struct {
             const len = block.read_lengths[read_idx];
             for (0..len) |i| seq_buf[i] = block.bases[i][read_idx];
             var seq = seq_buf[0..len];
-            if (self.mode == .FAST and seq.len > 50) seq = seq[0..50];
+            if (self.mode == .APPROX and seq.len > 50) seq = seq[0..50];
 
-            if (self.mode == .FAST and self.bloom != null) {
+            if (self.mode == .APPROX and self.bloom != null) {
+
+
                 if (self.bloom.?.contains(seq)) {
                     self.duplicate_reads += 1;
                 } else {
@@ -124,9 +126,10 @@ pub const DuplicationStage = struct {
         for (reads) |read| {
             self.total_reads += 1;
             var seq_to_hash = read.seq;
-            if (self.mode == .FAST and seq_to_hash.len > 50) seq_to_hash = seq_to_hash[0..50];
+            if (self.mode == .APPROX and seq_to_hash.len > 50) seq_to_hash = seq_to_hash[0..50];
 
-            if (self.mode == .FAST and self.bloom != null) {
+            if (self.mode == .APPROX and self.bloom != null) {
+
                 if (self.bloom.?.contains(seq_to_hash)) {
                     self.duplicate_reads += 1;
                 } else {

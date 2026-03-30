@@ -1,64 +1,35 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
-// --- OPTIMIZED SLICE-BASED BIT SIEVE ---
+// --- BIT SIEVE ---
 pub const BitSieve = struct {
-    bit_buffer: u64 = 0,
-    bit_count: u8 = 0,
-    data: []const u8,
-    pos: usize = 0,
-
-    pub fn init(data: []const u8) BitSieve {
-        return .{ .data = data };
-    }
-
-    pub inline fn refill(self: *BitSieve) void {
-        const rem = self.data.len - self.pos;
-        if (rem >= 8) {
-            const val = std.mem.readInt(u64, self.data[self.pos..][0..8], .little);
-            self.bit_buffer |= (val << @as(u6, @intCast(self.bit_count)));
-            const added = (63 - self.bit_count) >> 3;
-            self.pos += added;
-            self.bit_count += added << 3;
-        } else {
-            while (self.bit_count <= 56 and self.pos < self.data.len) {
-                self.bit_buffer |= (@as(u64, self.data[self.pos]) << @as(u6, @intCast(self.bit_count)));
-                self.bit_count += 8;
-                self.pos += 1;
-            }
+    bit_buffer: u64 = 0, bit_count: u8 = 0, inner_reader: std.io.AnyReader,
+    pub fn init(reader: std.io.AnyReader) BitSieve { return .{ .inner_reader = reader }; }
+    pub fn refill(self: *BitSieve) !void {
+        while (self.bit_count <= 56) {
+            var byte: u8 = undefined;
+            const n = self.inner_reader.read(std.mem.asBytes(&byte)) catch 0;
+            if (n == 0) break;
+            self.bit_buffer |= (@as(u64, byte) << @as(u6, @intCast(self.bit_count)));
+            self.bit_count += 8;
         }
     }
-
-    pub inline fn peekBits(self: *const BitSieve, comptime n: u6) u64 {
-        return self.bit_buffer & ((@as(u64, 1) << n) - 1);
+    pub inline fn peekBits(self: *const BitSieve, comptime n: u6) u64 { return self.bit_buffer & ((@as(u64, 1) << n) - 1); }
+    pub inline fn consume(self: *BitSieve, n: u6) void { self.bit_buffer >>= n; self.bit_count -= n; }
+    pub inline fn readBits(self: *BitSieve, comptime n: u6) !u64 {
+        if (self.bit_count < n) try self.refill();
+        const val = self.peekBits(n); self.consume(n); return val;
     }
-
-    pub inline fn consume(self: *BitSieve, n: u6) void {
-        self.bit_buffer >>= n;
-        self.bit_count -= n;
-    }
-
-    pub inline fn readBits(self: *BitSieve, comptime n: u6) u64 {
-        if (self.bit_count < n) self.refill();
-        const val = self.peekBits(n);
-        self.consume(n);
-        return val;
-    }
-
-    pub fn readBitsRuntime(self: *BitSieve, n: u6) u64 {
+    pub fn readBitsRuntime(self: *BitSieve, n: u6) !u64 {
         if (n == 0) return 0;
-        if (self.bit_count < n) self.refill();
+        if (self.bit_count < n) try self.refill();
         const val = self.bit_buffer & ((@as(u64, 1) << n) - 1);
-        self.consume(n);
-        return val;
+        self.consume(n); return val;
     }
-
-    pub fn alignToByte(self: *BitSieve) void {
-        const skip: u6 = @intCast(self.bit_count % 8);
-        if (skip > 0) self.consume(skip);
-    }
+    pub fn alignToByte(self: *BitSieve) void { const skip: u6 = @intCast(self.bit_count % 8); if (skip > 0) self.consume(skip); }
 };
 
-// --- HUFFMAN DECODER ---
+// --- HUFFMAN ---
 pub const HuffmanDecoder = struct {
     lookup: [4096]u32 = undefined,
     pub fn init() HuffmanDecoder { var self = HuffmanDecoder{}; @memset(&self.lookup, 0); return self; }
@@ -84,7 +55,6 @@ pub const HuffmanDecoder = struct {
         }
     }
     pub inline fn decode(self: *const HuffmanDecoder, sieve: *BitSieve) !u16 {
-        if (sieve.bit_count < 12) sieve.refill();
         const peeked = sieve.peekBits(12);
         const entry = self.lookup[peeked];
         if (entry == 0) return error.InvalidHuffmanSymbol;
@@ -98,7 +68,7 @@ fn reverseBits(code: u16, len: u4) u16 {
     return res;
 }
 
-// --- LZ77 ENGINE ---
+// --- LZ77 ---
 pub const Lz77Engine = struct {
     window: [32768]u8 = undefined, pos: usize = 0,
     pub fn init() Lz77Engine { var self = Lz77Engine{}; @memset(&self.window, 0); return self; }
@@ -110,7 +80,7 @@ pub const Lz77Engine = struct {
         var src_pos = (@as(usize, 32768) + self.pos - @as(usize, distance)) & 0x7FFF;
         while (len > 0) {
             const byte = self.window[src_pos];
-            sink.emit(byte);
+            try sink.emit(byte);
             self.window[self.pos] = byte;
             self.pos = (self.pos + 1) & 0x7FFF;
             src_pos = (src_pos + 1) & 0x7FFF;
@@ -119,18 +89,19 @@ pub const Lz77Engine = struct {
     }
 };
 
-// --- DEFLATE ENGINE ---
+// --- DEFLATE ---
 pub const DeflateEngine = struct {
     sieve: BitSieve, lz77: Lz77Engine, lit_decoder: HuffmanDecoder, dist_decoder: HuffmanDecoder,
     total_emitted: usize = 0,
-    pub fn init(data: []const u8) DeflateEngine {
-        return .{ .sieve = BitSieve.init(data), .lz77 = Lz77Engine.init(), .lit_decoder = HuffmanDecoder.init(), .dist_decoder = HuffmanDecoder.init() };
+    pub fn init(reader: std.io.AnyReader) DeflateEngine {
+        return .{ .sieve = BitSieve.init(reader), .lz77 = Lz77Engine.init(), .lit_decoder = HuffmanDecoder.init(), .dist_decoder = HuffmanDecoder.init() };
     }
     pub fn decompress(self: *DeflateEngine, sink: anytype) !void {
         var is_final: bool = false;
         while (!is_final) {
-            is_final = self.sieve.readBits(1) == 1;
-            const block_type = self.sieve.readBits(2);
+            try self.sieve.refill();
+            is_final = (try self.sieve.readBits(1)) == 1;
+            const block_type = try self.sieve.readBits(2);
             switch (block_type) {
                 0 => try self.decompressUncompressed(sink),
                 1 => try self.decompressFixed(sink),
@@ -141,12 +112,12 @@ pub const DeflateEngine = struct {
     }
     fn decompressUncompressed(self: *DeflateEngine, sink: anytype) !void {
         self.sieve.alignToByte();
-        const len = @as(u16, @intCast(self.sieve.readBits(16)));
-        const nlen = @as(u16, @intCast(self.sieve.readBits(16)));
+        const len = @as(u16, @intCast(try self.sieve.readBits(16)));
+        const nlen = @as(u16, @intCast(try self.sieve.readBits(16)));
         if (len != (~nlen & 0xFFFF)) return error.InvalidUncompressedBlock;
         var i: usize = 0; while (i < len) : (i += 1) {
-            const byte = @as(u8, @intCast(self.sieve.readBitsRuntime(8)));
-            sink.emit(byte); self.lz77.appendByte(byte); self.total_emitted += 1;
+            const byte = @as(u8, @intCast(try self.sieve.readBitsRuntime(8)));
+            try sink.emit(byte); self.lz77.appendByte(byte); self.total_emitted += 1;
         }
     }
     fn decompressFixed(self: *DeflateEngine, sink: anytype) !void {
@@ -160,37 +131,38 @@ pub const DeflateEngine = struct {
         try self.decodeHufData(sink);
     }
     fn decompressDynamic(self: *DeflateEngine, sink: anytype) !void {
-        const hlit = self.sieve.readBits(5) + 257;
-        const hdist = self.sieve.readBits(5) + 1;
-        const hclen = self.sieve.readBits(4) + 4;
+        const hlit = (try self.sieve.readBits(5)) + 257;
+        const hdist = (try self.sieve.readBits(5)) + 1;
+        const hclen = (try self.sieve.readBits(4)) + 4;
         var cl_lengths = [_]u8{0} ** 19;
         const cl_order = [_]u8{ 16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15 };
-        for (0..@intCast(hclen)) |idx| cl_lengths[cl_order[idx]] = @intCast(self.sieve.readBits(3));
+        for (0..hclen) |i| cl_lengths[cl_order[i]] = @intCast(try self.sieve.readBits(3));
         var cl_decoder = HuffmanDecoder.init(); try cl_decoder.build(&cl_lengths);
         var all_lengths: [288 + 32]u8 = undefined; var count: usize = 0; const total_expected = hlit + hdist;
         while (count < total_expected) {
             const symbol = try cl_decoder.decode(&self.sieve);
             if (symbol < 16) { all_lengths[count] = @intCast(symbol); count += 1; }
             else if (symbol == 16) {
-                const repeat = self.sieve.readBitsRuntime(2) + 3; const last = all_lengths[count - 1];
+                const repeat = (try self.sieve.readBitsRuntime(2)) + 3; const last = all_lengths[count - 1];
                 for (0..@intCast(repeat)) |_| { all_lengths[count] = last; count += 1; }
             } else if (symbol == 17) {
-                const repeat = self.sieve.readBitsRuntime(3) + 3;
+                const repeat = (try self.sieve.readBitsRuntime(3)) + 3;
                 for (0..@intCast(repeat)) |_| { all_lengths[count] = 0; count += 1; }
             } else if (symbol == 18) {
-                const repeat = self.sieve.readBitsRuntime(7) + 11;
+                const repeat = (try self.sieve.readBitsRuntime(7)) + 11;
                 for (0..@intCast(repeat)) |_| { all_lengths[count] = 0; count += 1; }
             }
         }
-        try self.lit_decoder.build(all_lengths[0..@intCast(hlit)]);
-        try self.dist_decoder.build(all_lengths[@intCast(hlit)..@intCast(total_expected)]);
+        try self.lit_decoder.build(all_lengths[0..hlit]);
+        try self.dist_decoder.build(all_lengths[hlit..total_expected]);
         try self.decodeHufData(sink);
     }
     fn decodeHufData(self: *DeflateEngine, sink: anytype) !void {
         while (true) {
+            if (self.sieve.bit_count < 32) try self.sieve.refill();
             const symbol = try self.lit_decoder.decode(&self.sieve);
             if (symbol < 256) {
-                const byte = @as(u8, @intCast(symbol)); sink.emit(byte); self.lz77.appendByte(byte); self.total_emitted += 1;
+                const byte = @as(u8, @intCast(symbol)); try sink.emit(byte); self.lz77.appendByte(byte); self.total_emitted += 1;
             } else if (symbol == 256) break else {
                 const len = try self.decodeLength(symbol); const dist_sym = try self.dist_decoder.decode(&self.sieve);
                 const dist = try self.decodeDistance(dist_sym); try self.lz77.copyMatch(@intCast(dist), @intCast(len), sink);
@@ -201,21 +173,18 @@ pub const DeflateEngine = struct {
     fn decodeLength(self: *DeflateEngine, symbol: u16) !u16 {
         const base_lengths = [_]u16{ 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 91, 115, 131, 163, 195, 227, 258 };
         const extra_bits = [_]u5{ 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0 };
-        const extra = self.sieve.readBitsRuntime(extra_bits[symbol - 257]);
+        const extra = try self.sieve.readBitsRuntime(extra_bits[symbol - 257]);
         return base_lengths[symbol - 257] + @as(u16, @intCast(extra));
     }
     fn decodeDistance(self: *DeflateEngine, symbol: u16) !u16 {
         const base_dist = [_]u16{ 1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577 };
         const extra_bits = [_]u5{ 0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13 };
-        const extra = self.sieve.readBitsRuntime(extra_bits[symbol]);
+        const extra = try self.sieve.readBitsRuntime(extra_bits[symbol]);
         return base_dist[symbol] + @as(u16, @intCast(extra));
     }
 };
 
-// --- BENCHMARK DRIVER ---
-const Block = struct { data: []const u8 };
-const NullSink = struct { pub fn emit(self: @This(), byte: u8) void { _ = self; _ = byte; } };
-
+// --- BENCHMARK ---
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
@@ -223,66 +192,42 @@ pub fn main() !void {
     const file_path = if (args.len > 1) args[1] else return error.NoFile;
     const file = try std.fs.cwd().openFile(file_path, .{});
     const data = try file.readToEndAlloc(allocator, 1024 * 1024 * 1024);
-
-    // 1. Pre-index BGZF blocks
-    var blocks = std.ArrayList(Block).init(allocator);
-    var pos: usize = 0;
-    while (pos + 18 < data.len) {
-        if (data[pos] == 0x1f and data[pos+1] == 0x8b) {
-            const flags = data[pos+3];
-            var bsize: u16 = 0;
-            if (flags & 0x04 != 0) { // FEXTRA
-                const xlen = std.mem.readInt(u16, data[pos+10..][0..2], .little);
-                var i: usize = 0;
-                while (i + 4 <= xlen) {
-                    if (data[pos+12+i] == 'B' and data[pos+13+i] == 'C') {
-                        bsize = std.mem.readInt(u16, data[pos+12+i+4..][0..2], .little);
-                        break;
-                    }
-                    i += 4 + std.mem.readInt(u16, data[pos+12+i+2..][0..2], .little);
-                }
-            }
-            if (bsize > 0) {
-                const block_len = bsize + 1;
-                // Deflate data starts after header (10) + FEXTRA (2 + xlen)
-                const header_len = 10 + 2 + std.mem.readInt(u16, data[pos+10..][0..2], .little);
-                try blocks.append(.{ .data = data[pos + header_len .. pos + block_len - 8] });
-                pos += block_len;
-            } else pos += 1;
-        } else pos += 1;
-    }
-    std.debug.print("Found {d} BGZF blocks.\n", .{blocks.items.len});
-
     const thread_counts = [_]u8{ 1, 2, 4, 8 };
+    std.debug.print("--- Parallel Native Decompression Scaling ---\n", .{});
     for (thread_counts) |tc| {
         var threads = try allocator.alloc(std.Thread, tc);
-        var total_emitted = std.atomic.Value(usize).init(0);
+        var engines = try allocator.alloc(DeflateEngine, tc);
         const start = std.time.nanoTimestamp();
-        
-        const chunk_size = blocks.items.len / tc;
+        // Each thread processes a separate slice of the data to avoid header hunting
+        const chunk_size = data.len / tc;
         for (0..tc) |i| {
-            const start_idx = i * chunk_size;
-            const end_idx = if (i == tc - 1) blocks.items.len else (i + 1) * chunk_size;
-            threads[i] = try std.Thread.spawn(.{}, worker, .{ blocks.items[start_idx..end_idx], &total_emitted });
+            const slice = data[i*chunk_size..if(i==tc-1) data.len else (i+1)*chunk_size];
+            threads[i] = try std.Thread.spawn(.{}, worker, .{slice, &engines[i]});
         }
         for (threads) |t| t.join();
-        
         const end = std.time.nanoTimestamp();
         const elapsed = @as(f64, @floatFromInt(end - start)) / 1e9;
-        const bytes = total_emitted.load(.acquire);
-        const throughput = @as(f64, @floatFromInt(bytes)) / (1024 * 1024 * elapsed);
-        std.debug.print("Threads: {d:<2} | Time: {d:6.3}s | Throughput: {d:8.2} MB/s\n", .{ tc, elapsed, throughput });
-        allocator.free(threads);
+        var total_bytes: usize = 0; for(engines) |e| total_bytes += e.total_emitted;
+        const throughput = @as(f64, @floatFromInt(total_bytes)) / (1024 * 1024 * elapsed);
+        std.debug.print("Threads: {d:<2} | Time: {d:6.3}s | Total Bytes: {d:>10} | Throughput: {d:8.2} MB/s\n", .{tc, elapsed, total_bytes, throughput});
+        allocator.free(threads); allocator.free(engines);
     }
 }
-
-fn worker(blocks: []const Block, counter: *std.atomic.Value(usize)) void {
-    var total: usize = 0;
-    for (blocks) |blk| {
-        var engine = DeflateEngine.init(blk.data);
-        var sink = NullSink{};
-        engine.decompress(&sink) catch {};
-        total += engine.total_emitted;
+const NullSink = struct { pub fn emit(self: @This(), byte: u8) !void { _ = self; _ = byte; } };
+fn worker(data: []const u8, engine_ptr: *DeflateEngine) void {
+    var fbs = std.io.fixedBufferStream(data);
+    while (fbs.pos + 10 < data.len) {
+        if (data[fbs.pos] == 0x1f and data[fbs.pos+1] == 0x8b) {
+            const flags = data[fbs.pos + 3];
+            fbs.pos += 10;
+            if (flags & 0x04 != 0) {
+                const xlen = std.mem.readInt(u16, data[fbs.pos..][0..2], .little);
+                fbs.pos += 2 + xlen;
+            }
+            var engine = DeflateEngine.init(fbs.reader().any());
+            var sink = NullSink{};
+            engine.decompress(&sink) catch {};
+            engine_ptr.total_emitted += engine.total_emitted;
+        } else fbs.pos += 1;
     }
-    _ = counter.fetchAdd(total, .release);
 }

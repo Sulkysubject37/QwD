@@ -9,7 +9,6 @@ SEED="${3:-42}"
 export PATH=$PATH:/usr/local/zig
 
 echo "Building native Zig generator..."
-zig build-exe tools/gen_fastq.zig -O ReleaseFast -o /tmp/gen_fastq 2>&1
-
+zig build-exe tools/gen_fastq.zig -O ReleaseFast --name gen_fastq 2>&1
 echo "Generating $READS reads → $OUTPUT"
-/tmp/gen_fastq "$OUTPUT" "$READS" "$SEED"
+./gen_fastq "$OUTPUT" "$READS" "$SEED"
