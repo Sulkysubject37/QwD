@@ -15,7 +15,7 @@ QwD enforces two independent axes of execution to ensure clarity and predictable
 ### Axis 2: Decompression Mode (`--gzip-mode`)
 - **`auto`** (Default): Detects BGZF and uses the optimized SIMD fast-path.
 - **`libdeflate`**: Uses `libdeflate` SIMD kernels (AVX2/NEON) for decompression.
-- **`qwd`**: Uses the **Pure-Zig Native Engine**. This is a zero-dependency implementation achieving performance parity with `libdeflate`.
+- **`qwd`**: Uses the **Pure-Zig Native Engine**. This is a zero-dependency implementation achieving performance parity with `libdeflate`. See **[Native Engine Reference](native_qwd_engine.md)** for details.
 - **`compat`**: Standard library streaming fallback for non-blocked GZIP files.
 
 ## Architecture: Async Prefetch Engine
