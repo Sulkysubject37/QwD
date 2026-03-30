@@ -15,6 +15,7 @@ struct SettingsView: View {
     enum GzipMode: String, CaseIterable, Identifiable {
         case auto       = "Auto (Detect)"
         case libdeflate = "SIMD (Fast)"
+        case native     = "Native (QwD)"
         case chunked    = "Chunked (Large)"
         case compat     = "Compat (Safe)"
         var id: String { rawValue }
@@ -42,6 +43,10 @@ struct SettingsView: View {
                     }
                 }
                 .pickerStyle(.menu)
+                
+                Text(gzipMode == .native ? "Pure-Zig zero-dependency engine. Optimized for Phase P.2." : "Detection-based selection.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Resource Allocation") {
@@ -59,7 +64,7 @@ struct SettingsView: View {
             Section("System Diagnostics") {
                 LabeledContent("QwD Core", value: "v1.1.0 (Production)")
                 LabeledContent("SIMD Acceleration", value: "Enabled (NEON/AVX2)")
-                LabeledContent("GZIP Engine", value: "libdeflate (SIMD)")
+                LabeledContent("Native Deflate", value: "Verified Stable")
             }
             
             Section {

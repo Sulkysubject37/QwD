@@ -12,7 +12,7 @@ struct QwDDashboardApp: App {
                 .frame(minWidth: 1000, minHeight: 700)
                 .onReceive(NotificationCenter.default.publisher(for: .qwdOpenFile)) { notif in
                     if let path = notif.object as? String {
-                        Task { await engine.runQC(on: path) }
+                        engine.selectedFilePath = path
                     }
                 }
         }
@@ -24,7 +24,7 @@ struct QwDDashboardApp: App {
                     panel.message = "Choose a FASTQ or BAM file to analyze"
                     panel.begin { resp in
                         if resp == .OK, let url = panel.url {
-                            Task { await engine.runQC(on: url.path) }
+                            engine.selectedFilePath = url.path
                         }
                     }
                 }
@@ -89,7 +89,7 @@ struct ContentView: View {
                     let panel = NSOpenPanel()
                     panel.begin { resp in
                         if resp == .OK, let url = panel.url {
-                            Task { await engine.runQC(on: url.path) }
+                            engine.selectedFilePath = url.path
                         }
                     }
                 } label: {
@@ -100,10 +100,11 @@ struct ContentView: View {
             ToolbarItem(placement: .destructiveAction) {
                 Button(role: .destructive) {
                     engine.lastReport = nil
+                    engine.selectedFilePath = nil
                 } label: {
                     Label("Clear Result", systemImage: "trash")
                 }
-                .disabled(engine.lastReport == nil)
+                .disabled(engine.lastReport == nil && engine.selectedFilePath == nil)
             }
         }
     }

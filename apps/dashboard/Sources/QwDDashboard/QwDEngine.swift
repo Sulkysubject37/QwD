@@ -17,6 +17,9 @@ public final class QwDEngine {
     public var lastReport: QCReport? = nil
     public var errorMessage: String? = nil
     
+    // Track selected file path for the 2-step setup process
+    public var selectedFilePath: String? = nil
+    
     // User Preferences (synced with AppStorage keys in SettingsView)
     private let threadCountKey = "qwd_thread_count"
     private let analysisModeKey = "qwd_analysis_mode"
@@ -25,7 +28,12 @@ public final class QwDEngine {
     private init() {}
     
     @MainActor
-    public func runQC(on path: String) async {
+    public func runQC(on path: String? = nil) async {
+        guard let targetPath = path ?? self.selectedFilePath else {
+            self.errorMessage = "No file selected."
+            return
+        }
+        
         self.isRunning = true
         self.errorMessage = nil
         
@@ -40,17 +48,15 @@ public final class QwDEngine {
             case let s where s.contains("SIMD"): 1
             case let s where s.contains("Chunked"): 2
             case let s where s.contains("Compat"): 3
+            case let s where s.contains("Native"): 4
             default: 0
         }
         
         defer { self.isRunning = false }
         
-        // Removed 'await' from the detached closure body since it's synchronous
         let result = await Task.detached(priority: .userInitiated) { () -> String? in
-            return path.withCString { cPath in
-                // qwd_fastq_qc_ex is now exposed in CQwD.h
+            return targetPath.withCString { cPath in
                 let resPtr = qwd_fastq_qc_ex(cPath, Int32(threads), modeInt, gzipModeInt)
-                
                 guard let validPtr = resPtr else { return nil }
                 defer { qwd_free_string(validPtr) }
                 return String(cString: validPtr)
@@ -66,12 +72,10 @@ public final class QwDEngine {
             let decoder = JSONDecoder()
             let report = try decoder.decode(QCReport.self, from: data)
             self.lastReport = report
+            self.selectedFilePath = nil // Reset after success
         } catch {
             self.errorMessage = "Failed to parse Engine output: \(error.localizedDescription)"
             print("JSON Error: \(error)")
-            #if DEBUG
-            print("Raw JSON: \(jsonString)")
-            #endif
         }
     }
 }

@@ -65,3 +65,11 @@ public struct OverrepresentedStats: Codable, Identifiable {
     public let most_frequent: String
     public let most_frequent_count: Int
 }
+
+// ─────────────────────────────────────────────
+// Extensions
+// ─────────────────────────────────────────────
+
+extension Notification.Name {
+    public static let qwdOpenFile = Notification.Name("qwdOpenFile")
+}
