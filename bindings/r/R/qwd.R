@@ -28,7 +28,7 @@ qwd_qc <- function(fastq_path, approx = FALSE, threads = 0, gzip_mode = "auto", 
   dyn.load(path)
   
   # Map gzip_mode to index
-  gz_map <- c("auto" = 0, "libdeflate" = 1, "chunked" = 2, "compat" = 3, "qwd" = 4)
+  gz_map <- c("auto" = 0, "native" = 1, "qwd" = 1, "libdeflate" = 2, "chunked" = 3, "compat" = 4)
   gz_idx <- if (gzip_mode %in% names(gz_map)) gz_map[gzip_mode] else 0
 
   # Allocate 2MB buffer

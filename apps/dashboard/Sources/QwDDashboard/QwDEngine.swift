@@ -45,13 +45,12 @@ public final class QwDEngine {
         // Map strings to C-API integers
         let modeInt: Int32 = modeString.contains("Approx") ? 1 : 0
         let gzipModeInt: Int32 = switch gzipModeString {
-            case let s where s.contains("SIMD"): 1
-            case let s where s.contains("Chunked"): 2
-            case let s where s.contains("Compat"): 3
-            case let s where s.contains("Native"): 4
+            case let s where s.contains("Native"): 1
+            case let s where s.contains("SIMD"): 2
+            case let s where s.contains("Chunked"): 3
+            case let s where s.contains("Compat"): 4
             default: 0
         }
-        
         defer { self.isRunning = false }
         
         let result = await Task.detached(priority: .userInitiated) { () -> String? in

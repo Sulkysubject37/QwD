@@ -78,9 +78,9 @@ pub const BasicStatsStage = struct {
             \\  "basic_stats": {{
             \\    "total_reads": {d},
             \\    "total_bases": {d},
-            \\    "min_read_length": {d},
-            \\    "max_read_length": {d},
-            \\    "mean_read_length": {d:.2}
+            \\    "min_length": {d},
+            \\    "max_length": {d},
+            \\    "mean_length": {d:.2}
             \\  }}
         , .{
             self.total_reads,

@@ -35,10 +35,10 @@ pub const GzipReader = struct {
     };
 
     const ProxyContext = struct {
-        parent: *GzipReader,
+        parent: ?*GzipReader = null,
         pub fn read(ctx: *const anyopaque, b: []u8) anyerror!usize {
             const self_p: *const ProxyContext = @ptrFromInt(@intFromPtr(ctx));
-            const p = self_p.parent;
+            const p = self_p.parent orelse return error.InvalidProxyContext;
             
             const buffered_rem = p.io_stream.buffer.len - p.io_stream.pos;
             if (buffered_rem > 0) {
@@ -66,13 +66,14 @@ pub const GzipReader = struct {
         };
         
         self.proxy_ptr = try allocator.create(ProxyContext);
-        self.proxy_ptr.parent = undefined; 
+        self.proxy_ptr.* = .{ .parent = null }; 
         self.queue = try RingBuffer(PrefetchBlock).init(allocator, 32);
         return self;
     }
 
     pub fn start(self: *GzipReader) !void {
         if (self.thread == null) {
+            self.proxy_ptr.parent = self;
             self.thread = try std.Thread.spawn(.{}, prefetchWorker, .{self});
         }
     }

@@ -182,6 +182,8 @@ pub fn build(b: *std.Build) void {
     pipeline_mod.addImport("mode", mode_mod);
     pipeline_mod.addImport("pipeline_config", pipeline_config_mod);
     pipeline_mod.addImport("stage", stage_interface_mod);
+    pipeline_mod.addImport("bgzf_native_reader", bgzf_native_reader_mod);
+    pipeline_mod.addImport("bgzf_chunk_builder", bgzf_chunk_builder_mod);
     var it = stage_mods.iterator();
     while (it.next()) |e| pipeline_mod.addImport(e.key_ptr.*, e.value_ptr.*);
 

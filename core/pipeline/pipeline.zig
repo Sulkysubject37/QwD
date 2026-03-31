@@ -159,6 +159,30 @@ pub const Pipeline = struct {
         }
     }
 
+    pub fn reportJson(self: *Pipeline, writer: std.io.AnyWriter) !void {
+        try writer.print(
+            \\{{
+            \\  "version": "1.1.0",
+            \\  "read_count": {d},
+            \\  "stages": {{
+        , .{self.read_count});
+
+        for (self.stages.items, 0..) |stage, i| {
+            if (i > 0) try writer.writeAll(",");
+            try writer.writeAll("\n");
+            try stage.reportJson(writer);
+        }
+
+        try writer.writeAll("\n  }\n}\n");
+    }
+
+    pub fn reportJsonAlloc(self: *Pipeline, allocator: std.mem.Allocator) ![*:0]const u8 {
+        var list = std.ArrayList(u8).init(allocator);
+        errdefer list.deinit();
+        try self.reportJson(list.writer().any());
+        return try list.toOwnedSliceSentinel(0);
+    }
+
     pub fn createStageInstance(self: *Pipeline, allocator: std.mem.Allocator, name: []const u8) !stage_mod.Stage {
         _ = self;
         if (std.mem.eql(u8, name, "basic_stats") or std.mem.eql(u8, name, "basic-stats")) {

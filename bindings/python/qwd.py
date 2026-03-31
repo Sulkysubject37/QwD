@@ -67,10 +67,11 @@ def qc(fastq_path, approx=False, threads=0, gzip_mode="auto", **kwargs):
     
     gz_map = {
         "auto": 0,
-        "libdeflate": 1,
-        "chunked": 2,
-        "compat": 3,
-        "qwd": 4
+        "native": 1,
+        "qwd": 1,
+        "libdeflate": 2,
+        "chunked": 3,
+        "compat": 4
     }
     gz_idx = gz_map.get(gzip_mode, 0)
     
