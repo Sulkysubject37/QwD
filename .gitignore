@@ -1,11 +1,21 @@
 context.md
-.zig-cache/
-zig-out/
-*.tar.xz
+
+# OS specific
 .DS_Store
 **/.DS_Store
+
+# Data & Benchmarks
 *.fastq
-*.bam
+*.fastq.gz
+*.bgzf.gz
+benchmark_1M.*
+res_*.json
+validation_results.csv
+generate_throughput_visual.py
+
+# Build & System
+.zig-cache/
+zig-out/
 test-results-*/
 run_*.txt
 bam_run*.txt
