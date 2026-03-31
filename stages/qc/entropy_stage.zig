@@ -41,9 +41,29 @@ pub const EntropyStage = struct {
 
     pub fn processBitplanes(ptr: *anyopaque, bp: *const @import("bitplanes").BitplaneCore, block: *const @import("fastq_block").FastqColumnBlock) !bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        _ = self; _ = bp; _ = block;
-        // Entropy is complex to calculate from bitplanes accurately without DTB.
-        // Fallback to process() via ColumnBlock mapping if needed.
+        _ = bp;
+        
+        for (0..block.read_count) |read_idx| {
+            const len = block.read_lengths[read_idx];
+            if (len == 0) continue;
+
+            var base_counts = [_]usize{0} ** 4;
+            for (0..len) |pos| {
+                const base = block.bases[pos][read_idx];
+                switch (base) {
+                    'A', 'a' => base_counts[0] += 1,
+                    'C', 'c' => base_counts[1] += 1,
+                    'G', 'g' => base_counts[2] += 1,
+                    'T', 't' => base_counts[3] += 1,
+                    else => {},
+                }
+            }
+
+            const entropy = entropy_lut_mod.global_lut.getEntropy(base_counts, len);
+            self.total_reads += 1;
+            self.total_entropy_sum += entropy;
+            if (entropy < 1.5) self.low_complexity_reads += 1;
+        }
         return true;
     }
 
