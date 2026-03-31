@@ -8,6 +8,12 @@ pub const PerBaseQualityStage = struct {
     base_count: [MAX_POS]u64 = [_]u64{0} ** MAX_POS,
     mean_quality: [MAX_POS]f64 = [_]f64{0.0} ** MAX_POS,
 
+    pub fn init(allocator: std.mem.Allocator) !*PerBaseQualityStage {
+        const self = try allocator.create(PerBaseQualityStage);
+        self.* = .{};
+        return self;
+    }
+
     pub fn process(ptr: *anyopaque, read: *const parser.Read) !bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         const limit = if (read.qual.len > MAX_POS) MAX_POS else read.qual.len;
@@ -97,9 +103,9 @@ pub const PerBaseQualityStage = struct {
         try writer.writeAll("] }");
     }
 
-    pub fn stage(self: *@This()) stage_mod.Stage {
+    pub fn stage(self: *const @This()) stage_mod.Stage {
         return .{
-            .ptr = self,
+            .ptr = @constCast(self),
             .vtable = &.{
                 .process = process,
                 .processRawBatch = processRawBatch,

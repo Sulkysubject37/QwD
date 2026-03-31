@@ -6,6 +6,12 @@ pub const GcDistributionStage = struct {
     // bins: 0-10, 10-20, ..., 90-100 (10 bins)
     histogram: [10]usize = [_]usize{0} ** 10,
 
+    pub fn init(allocator: std.mem.Allocator) !*GcDistributionStage {
+        const self = try allocator.create(GcDistributionStage);
+        self.* = .{};
+        return self;
+    }
+
     pub fn process(ptr: *anyopaque, read: *const parser.Read) !bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         const len = read.seq.len;
@@ -114,9 +120,9 @@ pub const GcDistributionStage = struct {
         try writer.writeAll("] }");
     }
 
-    pub fn stage(self: *@This()) stage_mod.Stage {
+    pub fn stage(self: *const @This()) stage_mod.Stage {
         return .{
-            .ptr = self,
+            .ptr = @constCast(self),
             .vtable = &.{
                 .process = process,
                 .processRawBatch = processRawBatch,

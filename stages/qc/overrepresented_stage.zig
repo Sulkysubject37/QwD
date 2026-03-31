@@ -9,12 +9,13 @@ pub const OverrepresentedStage = struct {
     total_reads: usize = 0,
     mode: mode_mod.Mode = .EXACT,
 
-    pub fn init(allocator: std.mem.Allocator, is_fast: bool) OverrepresentedStage {
-        return OverrepresentedStage{
+    pub fn init(allocator: std.mem.Allocator) !*OverrepresentedStage {
+        const self = try allocator.create(OverrepresentedStage);
+        self.* = .{
             .map = std.StringHashMap(u64).init(allocator),
             .allocator = allocator,
-            .mode = if (is_fast) .APPROX else .EXACT,
         };
+        return self;
     }
 
     pub fn deinit(self: *OverrepresentedStage) void {
@@ -211,9 +212,9 @@ pub const OverrepresentedStage = struct {
         , .{top_count});
     }
 
-    pub fn stage(self: *@This()) stage_mod.Stage {
+    pub fn stage(self: *const @This()) stage_mod.Stage {
         return .{
-            .ptr = self,
+            .ptr = @constCast(self),
             .vtable = &.{
                 .process = process,
                 .processRawBatch = processRawBatch,

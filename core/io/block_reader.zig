@@ -114,4 +114,34 @@ pub const BlockReader = struct {
 
         return total_read;
     }
+
+    pub fn readLine(self: *BlockReader) !?[]const u8 {
+        while (true) {
+            // Precise newline search in active window
+            const window = self.buffer[self.pos..self.end];
+            if (std.mem.indexOfScalar(u8, window, '\n')) |rel_idx| {
+                const line = window[0..rel_idx];
+                self.pos += rel_idx + 1;
+                // Strip optional CR
+                if (line.len > 0 and line[line.len - 1] == '\r') {
+                    return line[0 .. line.len - 1];
+                }
+                return line;
+            }
+            
+            // Refill
+            const n_read = try self.fill();
+            if (n_read == 0) {
+                if (self.pos < self.end) {
+                    const line = self.buffer[self.pos..self.end];
+                    self.pos = self.end;
+                    if (line.len > 0 and line[line.len - 1] == '\r') {
+                        return line[0 .. line.len - 1];
+                    }
+                    return line;
+                }
+                return null;
+            }
+        }
+    }
 };

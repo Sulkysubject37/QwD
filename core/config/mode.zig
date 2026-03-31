@@ -7,8 +7,8 @@ pub const Mode = enum {
 
 pub const GzipMode = enum {
     AUTO,
+    NATIVE,
     LIBDEFLATE,
     CHUNKED,
     COMPAT,
-    NATIVE_QWD, // Our pure-Zig engine
 };

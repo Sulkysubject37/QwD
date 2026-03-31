@@ -1,5 +1,5 @@
 const std = @import("std");
-const DeflateEngine = @import("../../core/io/custom_deflate.zig").DeflateEngine;
+const DeflateEngine = @import("custom_deflate").DeflateEngine;
 
 const BufferSink = struct {
     buf: std.ArrayList(u8),
@@ -26,7 +26,7 @@ test "DeflateEngine: decompress simple string" {
     var sink = BufferSink{ .buf = std.ArrayList(u8).init(allocator) };
     defer sink.buf.deinit();
     
-    try engine.decompressBlock(&sink);
+    try engine.decompress(&sink);
     
     try std.testing.expectEqualStrings("Hello QwD!", sink.buf.items);
 }

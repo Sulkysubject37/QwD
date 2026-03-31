@@ -1,32 +1,35 @@
 const std = @import("std");
 const scheduler_mod = @import("scheduler");
 const parallel_scheduler = @import("parallel_scheduler");
+const stage_mod = @import("stage");
 const read_batch = @import("read_batch");
 const simd_ops = @import("simd_ops");
 const base_decode = @import("base_decode");
 const memory_manager = @import("memory_manager");
 const stage_interface = @import("stage");
-const parser_mod = @import("parser");
-const block_reader = @import("block_reader");
-const raw_batch = @import("raw_batch");
-const chunk_builder = @import("chunk_builder");
-const read_graph = @import("read_graph");
-const prefetch = @import("prefetch");
 const pipeline_config = @import("pipeline_config");
 const mode_mod = @import("mode");
+const block_reader = @import("block_reader");
+const parser_mod = @import("parser");
+const fastq_block = @import("fastq_block");
+const bitplanes_mod = @import("bitplanes");
 
 pub const Pipeline = struct {
     arena: std.heap.ArenaAllocator,
     scheduler: ?scheduler_mod.Scheduler = null,
     parallel_scheduler: ?parallel_scheduler.ParallelScheduler = null,
     stage_names: std.ArrayList([]const u8),
+    stages: std.ArrayList(stage_mod.Stage),
     config: ?pipeline_config.PipelineConfig = null,
     mode: mode_mod.Mode = .EXACT,
+    gzip_mode: mode_mod.GzipMode = .AUTO,
+    read_count: usize = 0,
 
     pub fn init(allocator: std.mem.Allocator, config: ?pipeline_config.PipelineConfig) Pipeline {
         return Pipeline{
             .arena = std.heap.ArenaAllocator.init(allocator),
             .stage_names = std.ArrayList([]const u8).init(allocator),
+            .stages = std.ArrayList(stage_mod.Stage).init(allocator),
             .config = config,
             .mode = if (config) |c| c.mode else .EXACT,
         };
@@ -35,6 +38,7 @@ pub const Pipeline = struct {
     pub fn deinit(self: *Pipeline) void {
         if (self.parallel_scheduler) |*ps| ps.deinit();
         if (self.scheduler) |*s| s.deinit();
+        self.stages.deinit();
         self.stage_names.deinit();
         self.arena.deinit();
     }
@@ -44,109 +48,70 @@ pub const Pipeline = struct {
     }
 
     pub fn setupSchedulers(self: *Pipeline, num_threads: usize) !void {
-        if (num_threads >= 1) {
-            // Pass arena.child_allocator as sys_allocator so thread-local arenas
-            // and bookkeeping use the raw, uncapped allocator (GPA), not the
-            // GlobalAllocator with its memory cap. This prevents setup deadlock.
+        if (num_threads > 1) {
             self.parallel_scheduler = parallel_scheduler.ParallelScheduler.init(
-                self.arena.allocator(),
                 self.arena.child_allocator,
                 num_threads,
             );
             for (self.stage_names.items) |name| {
                 const stage = try self.createStageInstance(self.arena.allocator(), name);
-                try self.parallel_scheduler.?.registerStage(stage);
+                try self.stages.append(stage);
             }
         } else {
-            @panic("num_threads must be at least 1");
+            self.scheduler = scheduler_mod.Scheduler.init(self.arena.allocator());
+            for (self.stage_names.items) |name| {
+                const stage = try self.createStageInstance(self.arena.allocator(), name);
+                try self.scheduler.?.registerStage(stage);
+                try self.stages.append(stage);
+            }
         }
     }
 
-    pub fn setupOutputWriter(self: *Pipeline, writer: std.io.AnyWriter) void {
+    pub fn run(self: *Pipeline, input_file: std.fs.File, is_gz: bool) !void {
+        const allocator = self.arena.allocator();
+        var fr = input_file.reader();
+
         if (self.parallel_scheduler) |*ps| {
-            ps.output_writer = writer;
-        }
-    }
+            if (is_gz and (self.gzip_mode == .NATIVE or self.gzip_mode == .AUTO)) {
+                // Check if BGZF
+                try input_file.seekTo(0);
+                const is_bgzf = @import("bgzf_native_reader").BgzfNativeReader.isBgzf(input_file.reader());
+                try input_file.seekTo(0);
 
-    pub fn createStageInstance(self: *Pipeline, allocator: std.mem.Allocator, name: []const u8) !stage_interface.Stage {
-        // Backward compatibility for hyphenated names
-        var buf: [64]u8 = undefined;
-        var sanitized_name = name;
-        if (std.mem.indexOfScalar(u8, name, '-') != null) {
-            const copy_len = @min(name.len, buf.len);
-            @memcpy(buf[0..copy_len], name[0..copy_len]);
-            for (buf[0..copy_len]) |*c| {
-                if (c.* == '-') c.* = '_';
+                if (is_bgzf) {
+                    var native_reader = try @import("bgzf_native_reader").BgzfNativeReader.init(allocator, input_file.reader().any());
+                    defer native_reader.deinit();
+                    var chunk_builder = @import("bgzf_chunk_builder").BgzfChunkBuilder.init(allocator, &native_reader);
+                    try ps.run_chunked(&chunk_builder, self);
+                    return;
+                }
             }
-            sanitized_name = buf[0..copy_len];
-        }
 
-        if (std.mem.eql(u8, sanitized_name, "qc")) {
-            const qc = try allocator.create(@import("qc").QcStage);
-            qc.* = @import("qc").QcStage{};
-            return qc.stage();
-        } else if (std.mem.eql(u8, sanitized_name, "gc")) {
-            const gc = try allocator.create(@import("gc").GcStage);
-            gc.* = @import("gc").GcStage{};
-            return gc.stage();
-        } else if (std.mem.eql(u8, sanitized_name, "basic_stats")) {
-            const stage = try allocator.create(@import("basic_stats").BasicStatsStage);
-            stage.* = @import("basic_stats").BasicStatsStage{};
-            return stage.stage();
-        } else if (std.mem.eql(u8, sanitized_name, "per_base_quality")) {
-            const stage = try allocator.create(@import("per_base_quality").PerBaseQualityStage);
-            stage.* = @import("per_base_quality").PerBaseQualityStage{};
-            return stage.stage();
-        } else if (std.mem.eql(u8, sanitized_name, "nucleotide_composition")) {
-            const stage = try allocator.create(@import("nucleotide_composition").NucleotideCompositionStage);
-            stage.* = @import("nucleotide_composition").NucleotideCompositionStage{};
-            return stage.stage();
-        } else if (std.mem.eql(u8, sanitized_name, "gc_distribution")) {
-            const stage = try allocator.create(@import("gc_distribution").GcDistributionStage);
-            stage.* = @import("gc_distribution").GcDistributionStage{};
-            return stage.stage();
-        } else if (std.mem.eql(u8, sanitized_name, "length_distribution")) {
-            const stage = try allocator.create(@import("qc_length_dist").LengthDistributionStage);
-            stage.* = @import("qc_length_dist").LengthDistributionStage{};
-            return stage.stage();
-        } else if (std.mem.eql(u8, sanitized_name, "n_statistics")) {
-            const stage = try allocator.create(@import("n_statistics").NStatisticsStage);
-            stage.* = @import("n_statistics").NStatisticsStage{};
-            return stage.stage();
-        } else if (std.mem.eql(u8, sanitized_name, "entropy")) {
-            const stage = try allocator.create(@import("qc_entropy").EntropyStage);
-            stage.* = @import("qc_entropy").EntropyStage{};
-            return stage.stage();
-        } else if (std.mem.eql(u8, sanitized_name, "kmer_spectrum")) {
-            const stage = try allocator.create(@import("kmer_spectrum").KmerSpectrumStage);
-            stage.* = try @import("kmer_spectrum").KmerSpectrumStage.init(allocator);
-            return stage.stage();
-        } else if (std.mem.eql(u8, sanitized_name, "overrepresented")) {
-            const stage = try allocator.create(@import("overrepresented").OverrepresentedStage);
-            stage.* = @import("overrepresented").OverrepresentedStage.init(allocator, self.mode == .APPROX);
-            return stage.stage();
-        } else if (std.mem.eql(u8, sanitized_name, "duplication")) {
-            const stage = try allocator.create(@import("duplication").DuplicationStage);
-            stage.* = @import("duplication").DuplicationStage.init(allocator, self.mode == .APPROX);
-            return stage.stage();
-        } else if (std.mem.eql(u8, sanitized_name, "adapter_detect")) {
-            const stage = try allocator.create(@import("qc_adapter_detect").AdapterDetectionStage);
-            stage.* = try @import("qc_adapter_detect").AdapterDetectionStage.init(allocator);
-            return stage.stage();
-        } else if (std.mem.eql(u8, sanitized_name, "trim")) {
-            const stage = try allocator.create(@import("trim").TrimStage);
-            stage.* = @import("trim").TrimStage.init("AGATCGGAAGAGC");
-            return stage.stage();
-        } else if (std.mem.eql(u8, sanitized_name, "filter")) {
-            const stage = try allocator.create(@import("filter").FilterStage);
-            stage.* = @import("filter").FilterStage.init(20.0);
-            return stage.stage();
-        } else if (std.mem.eql(u8, sanitized_name, "kmer")) {
-            const stage = try allocator.create(@import("kmer").KmerStage);
-            stage.* = try @import("kmer").KmerStage.init(allocator, 5);
-            return stage.stage();
-        } else {
-            return error.UnknownStage;
+            var parser = if (is_gz)
+                try parser_mod.FastqParser.initGzip(allocator, fr.any(), 1024 * 1024, self.gzip_mode)
+            else if (self.mode == .APPROX)
+                try parser_mod.FastqParser.initMmap(allocator, input_file)
+            else
+                try parser_mod.FastqParser.init(allocator, fr.any(), 1024 * 1024);
+            defer parser.deinit();
+
+            try ps.run_parallel(&parser, self);
+        } else if (self.scheduler) |*s| {
+            var parser = if (is_gz)
+                try parser_mod.FastqParser.initGzip(allocator, fr.any(), 1024 * 1024, self.gzip_mode)
+            else if (self.mode == .APPROX)
+                try parser_mod.FastqParser.initMmap(allocator, input_file)
+            else
+                try parser_mod.FastqParser.init(allocator, fr.any(), 1024 * 1024);
+            defer parser.deinit();
+
+            const record_buffer = try allocator.alloc(u8, 1024 * 1024);
+            defer allocator.free(record_buffer);
+            while (try parser.next(record_buffer)) |read| {
+                try s.process(read);
+            }
+            self.read_count = s.read_count;
+            try s.finalize();
         }
     }
 
@@ -154,64 +119,24 @@ pub const Pipeline = struct {
         if (self.parallel_scheduler) |*ps| {
             try ps.run_chunked(chunk_builder_ptr, self);
         } else {
-            // Sequential fallback
-            const dummy_br = block_reader.BlockReader{
-                .reader = null,
-                .buffer = &[_]u8{},
-                .pos = 0,
-                .end = 0,
-                .mmap_handle = null,
-                .is_mmap = true,
-                .allocator = self.arena.child_allocator,
-            };
-
+            // Sequential fallback for chunked
+            const dummy_br = try self.arena.allocator().create(block_reader.BlockReader);
+            var fbs = std.io.fixedBufferStream(@constCast(&[_]u8{}));
+            dummy_br.* = try block_reader.BlockReader.init(self.arena.allocator(), fbs.reader().any(), 1024);
             var local_parser = parser_mod.FastqParser{
-                .br = dummy_br,
+                .reader = dummy_br,
                 .allocator = self.arena.child_allocator,
-                .eof = false,
             };
-            var dummy_out: [1]u8 = undefined;
 
             while (try chunk_builder_ptr.nextChunk()) |chunk| {
-                local_parser.br.buffer = @constCast(chunk);
-                local_parser.br.pos = 0;
-                local_parser.br.end = chunk.len;
-                local_parser.eof = false;
+                local_parser.reader.buffer = @constCast(chunk);
+                local_parser.reader.pos = 0;
+                local_parser.reader.end = chunk.len;
 
-                while (true) {
-                    var reads_array: [1024]parser_mod.Read = undefined;
-                    var rc: usize = 0;
-                    while (rc < 1024) {
-                        if (try local_parser.next(&dummy_out)) |read| {
-                            reads_array[rc] = read;
-                            rc += 1;
-                        } else break;
-                    }
-                    
-                    if (rc == 0) break;
-                    
-                    if (self.scheduler) |*s| {
-                        for (s.stages.items) |stage| {
-                            _ = try stage.processRawBatch(reads_array[0..rc]);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    pub fn run_batches(self: *Pipeline, builder: anytype) !void {
-        var batch = try read_batch.ReadBatch.init(self.arena.child_allocator, 1024);
-        defer batch.deinit(self.arena.child_allocator);
-
-        while (try builder.fillBatch(&batch)) {
-            if (self.parallel_scheduler) |*ps| {
-                // Not implemented for parallel_scheduler yet, use run_chunked
-                _ = ps;
-                return error.NotImplemented;
-            } else if (self.scheduler) |*s| {
-                for (0..batch.count) |i| {
-                    try s.process(batch.reads[i]);
+                const record_buffer = try self.arena.allocator().alloc(u8, 1024 * 1024);
+                while (try local_parser.next(record_buffer)) |read| {
+                    if (self.scheduler) |*s| try s.process(read);
+                    self.read_count += 1;
                 }
             }
         }
@@ -228,8 +153,62 @@ pub const Pipeline = struct {
     pub fn report(self: *Pipeline, writer: std.io.AnyWriter) void {
         if (self.parallel_scheduler) |*ps| {
             ps.report(writer);
-        } else if (self.scheduler) |*s| {
-            s.report(writer);
         }
+        for (self.stages.items) |stage| {
+            stage.report(writer);
+        }
+    }
+
+    pub fn createStageInstance(self: *Pipeline, allocator: std.mem.Allocator, name: []const u8) !stage_mod.Stage {
+        _ = self;
+        if (std.mem.eql(u8, name, "basic_stats") or std.mem.eql(u8, name, "basic-stats")) {
+            const s = try @import("basic_stats").BasicStatsStage.init(allocator);
+            return @constCast(s).stage();
+        }
+        if (std.mem.eql(u8, name, "nucleotide_composition") or std.mem.eql(u8, name, "nucleotide-composition")) {
+            const s = try @import("nucleotide_composition").NucleotideCompositionStage.init(allocator);
+            return @constCast(s).stage();
+        }
+        if (std.mem.eql(u8, name, "qc")) {
+            const s = try @import("qc").QcStage.init(allocator);
+            return @constCast(s).stage();
+        }
+        if (std.mem.eql(u8, name, "gc_distribution") or std.mem.eql(u8, name, "gc-distribution") or std.mem.eql(u8, name, "gc")) {
+            const s = try @import("gc_distribution").GcDistributionStage.init(allocator);
+            return @constCast(s).stage();
+        }
+        if (std.mem.eql(u8, name, "length_distribution") or std.mem.eql(u8, name, "length-distribution")) {
+            const s = try @import("qc_length_dist").LengthDistributionStage.init(allocator);
+            return @constCast(s).stage();
+        }
+        if (std.mem.eql(u8, name, "n_statistics") or std.mem.eql(u8, name, "n50")) {
+            const s = try @import("n_statistics").NStatisticsStage.init(allocator);
+            return @constCast(s).stage();
+        }
+        if (std.mem.eql(u8, name, "entropy") or std.mem.eql(u8, name, "qc_entropy")) {
+            const s = try @import("qc_entropy").EntropyStage.init(allocator);
+            return @constCast(s).stage();
+        }
+        if (std.mem.eql(u8, name, "kmer_spectrum") or std.mem.eql(u8, name, "kmer-spectrum") or std.mem.eql(u8, name, "kmer")) {
+            const s = try @import("kmer_spectrum").KmerSpectrumStage.init(allocator);
+            return @constCast(s).stage();
+        }
+        if (std.mem.eql(u8, name, "overrepresented")) {
+            const s = try @import("overrepresented").OverrepresentedStage.init(allocator);
+            return @constCast(s).stage();
+        }
+        if (std.mem.eql(u8, name, "duplication")) {
+            const s = try @import("duplication").DuplicationStage.init(allocator);
+            return @constCast(s).stage();
+        }
+        if (std.mem.eql(u8, name, "adapter_detect") or std.mem.eql(u8, name, "adapter-detect")) {
+            const s = try @import("qc_adapter_detect").AdapterDetectionStage.init(allocator);
+            return @constCast(s).stage();
+        }
+        if (std.mem.eql(u8, name, "per_base_quality") or std.mem.eql(u8, name, "quality-decay") or std.mem.eql(u8, name, "quality_decay")) {
+            const s = try @import("per_base_quality").PerBaseQualityStage.init(allocator);
+            return @constCast(s).stage();
+        }
+        return error.UnknownStage;
     }
 };

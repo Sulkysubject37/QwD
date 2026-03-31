@@ -11,6 +11,12 @@ pub const QcStage = struct {
     sum_quality: u64 = 0,
     mean_quality: f64 = 0.0,
 
+    pub fn init(allocator: std.mem.Allocator) !*QcStage {
+        const self = try allocator.create(QcStage);
+        self.* = .{};
+        return self;
+    }
+
     pub fn process(ptr: *anyopaque, read: *const parser.Read) !bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         self.total_reads += 1;
@@ -83,9 +89,9 @@ pub const QcStage = struct {
         , .{ self.total_reads, self.total_bases, self.mean_quality });
     }
 
-    pub fn stage(self: *@This()) stage_mod.Stage {
+    pub fn stage(self: *const @This()) stage_mod.Stage {
         return .{
-            .ptr = self,
+            .ptr = @constCast(self),
             .vtable = &.{
                 .process = process,
                 .processBlock = processBlock,

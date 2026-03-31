@@ -9,16 +9,18 @@ pub const KmerSpectrumStage = struct {
     counts: []u64,
     allocator: std.mem.Allocator,
 
-    pub fn init(allocator: std.mem.Allocator) !KmerSpectrumStage {
+    pub fn init(allocator: std.mem.Allocator) !*KmerSpectrumStage {
         const k: u8 = 5;
         const size = std.math.pow(usize, 4, k);
         const counts = try allocator.alloc(u64, size);
         @memset(counts, 0);
-        return KmerSpectrumStage{
+        const self = try allocator.create(KmerSpectrumStage);
+        self.* = KmerSpectrumStage{
             .k = k,
             .counts = counts,
             .allocator = allocator,
         };
+        return self;
     }
 
     pub fn deinit(self: *KmerSpectrumStage) void {
@@ -168,9 +170,9 @@ pub const KmerSpectrumStage = struct {
         try writer.writeAll("] }");
     }
 
-    pub fn stage(self: *@This()) stage_mod.Stage {
+    pub fn stage(self: *const @This()) stage_mod.Stage {
         return .{
-            .ptr = self,
+            .ptr = @constCast(self),
             .vtable = &.{
                 .process = process,
                 .processRawBatch = processRawBatch,

@@ -1,6 +1,8 @@
 const std = @import("std");
 const parser = @import("parser");
 const stage_mod = @import("stage");
+const bitplanes_mod = @import("bitplanes");
+const fastq_block = @import("fastq_block");
 
 pub const BasicStatsStage = struct {
     total_reads: usize = 0,
@@ -8,6 +10,12 @@ pub const BasicStatsStage = struct {
     min_read_length: usize = std.math.maxInt(usize),
     max_read_length: usize = 0,
     mean_read_length: f64 = 0.0,
+
+    pub fn init(allocator: std.mem.Allocator) !*BasicStatsStage {
+        const self = try allocator.create(BasicStatsStage);
+        self.* = .{};
+        return self;
+    }
 
     pub fn process(ptr: *anyopaque, read: *const parser.Read) !bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
@@ -19,33 +27,14 @@ pub const BasicStatsStage = struct {
         return true;
     }
 
-    pub fn processBitplanes(ptr: *anyopaque, bp: *const @import("bitplanes").BitplaneCore, block: *const @import("fastq_block").FastqColumnBlock) !bool {
+    pub fn processBitplanes(ptr: *anyopaque, bps: *const bitplanes_mod.BitplaneCore, block: *const fastq_block.FastqColumnBlock) !bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        const res = @constCast(bp).getFused(block.read_count);
+        const fused = @constCast(bps).getFused(block.read_count);
         self.total_reads += block.read_count;
-        self.total_bases += res.total_bases;
+        self.total_bases += fused.total_bases;
+        
         for (0..block.read_count) |i| {
             const len = block.read_lengths[i];
-            if (len < self.min_read_length) self.min_read_length = len;
-            if (len > self.max_read_length) self.max_read_length = len;
-        }
-        return true;
-    }
-
-    pub fn processBlock(ptr: *anyopaque, block: *const @import("fastq_block").FastqColumnBlock) !bool {
-        const bitplanes = @import("bitplanes");
-        var bp = try bitplanes.BitplaneCore.init(block.allocator, block.capacity, block.max_read_len);
-        defer bp.deinit();
-        bp.fromColumnBlock(block);
-        return processBitplanes(ptr, &bp, block);
-    }
-
-    pub fn processRawBatch(ptr: *anyopaque, reads: []const parser.Read) !bool {
-        const self: *@This() = @ptrCast(@alignCast(ptr));
-        for (reads) |read| {
-            const len = read.seq.len;
-            self.total_reads += 1;
-            self.total_bases += len;
             if (len < self.min_read_length) self.min_read_length = len;
             if (len > self.max_read_length) self.max_read_length = len;
         }
@@ -64,15 +53,18 @@ pub const BasicStatsStage = struct {
     pub fn merge(ptr: *anyopaque, other_ptr: *anyopaque) !void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         const other: *@This() = @ptrCast(@alignCast(other_ptr));
+        
+        // CRITICAL PARITY AGGREGATION
         self.total_reads += other.total_reads;
         self.total_bases += other.total_bases;
+        
         if (other.min_read_length < self.min_read_length) self.min_read_length = other.min_read_length;
         if (other.max_read_length > self.max_read_length) self.max_read_length = other.max_read_length;
     }
 
     pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        writer.print("Basic Statistics:\n", .{}) catch {};
+        writer.print("\n[Basic Statistics]\n", .{}) catch {};
         writer.print("  Total reads: {d}\n", .{self.total_reads}) catch {};
         writer.print("  Total bases: {d}\n", .{self.total_bases}) catch {};
         writer.print("  Min length:  {d}\n", .{self.min_read_length}) catch {};
@@ -83,13 +75,13 @@ pub const BasicStatsStage = struct {
     pub fn reportJson(ptr: *anyopaque, writer: std.io.AnyWriter) !void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         try writer.print(
-            \\"basic_stats": {{
-            \\  "total_reads": {d},
-            \\  "total_bases": {d},
-            \\  "min_length": {d},
-            \\  "max_length": {d},
-            \\  "mean_length": {d:.2}
-            \\}}
+            \\  "basic_stats": {{
+            \\    "total_reads": {d},
+            \\    "total_bases": {d},
+            \\    "min_read_length": {d},
+            \\    "max_read_length": {d},
+            \\    "mean_read_length": {d:.2}
+            \\  }}
         , .{
             self.total_reads,
             self.total_bases,
@@ -99,13 +91,11 @@ pub const BasicStatsStage = struct {
         });
     }
 
-    pub fn stage(self: *@This()) stage_mod.Stage {
+    pub fn stage(self: *const @This()) stage_mod.Stage {
         return .{
-            .ptr = self,
+            .ptr = @constCast(self),
             .vtable = &.{
                 .process = process,
-                .processRawBatch = processRawBatch,
-                .processBlock = processBlock,
                 .processBitplanes = processBitplanes,
                 .finalize = finalize,
                 .report = report,

@@ -1,126 +1,87 @@
 const std = @import("std");
 const block_reader = @import("block_reader");
-const newline_scan = @import("newline_scan");
+const mode_mod = @import("mode");
 
-/// A single sequencing read.
-/// All fields are slices referencing buffer memory to avoid copying.
 pub const Read = struct {
     id: []const u8,
     seq: []const u8,
     qual: []const u8,
-
-    /// Validates that the sequence and quality strings have the same length.
-    pub fn validate(self: Read) bool {
-        return self.seq.len == self.qual.len;
-    }
-};
-
-pub const ParserError = error{
-    InvalidFormat,
-    IncompleteRecord,
-    MismatchedSequenceQuality,
-    StreamError,
-    BufferTooSmall,
+    arena: ?*std.heap.ArenaAllocator = null,
 };
 
 pub const FastqParser = struct {
-    br: block_reader.BlockReader,
+    reader: *block_reader.BlockReader,
     allocator: std.mem.Allocator,
-    eof: bool = false,
 
-    pub fn init(allocator: std.mem.Allocator, reader: std.io.AnyReader, buffer_size: usize) !FastqParser {
+    pub fn init(allocator: std.mem.Allocator, reader: std.io.AnyReader, buf_size: usize) !FastqParser {
+        const br = try allocator.create(block_reader.BlockReader);
+        br.* = try block_reader.BlockReader.init(allocator, reader, buf_size);
         return FastqParser{
-            .br = try block_reader.BlockReader.init(allocator, reader, buffer_size),
+            .reader = br,
             .allocator = allocator,
         };
     }
 
-    pub fn initGzip(allocator: std.mem.Allocator, reader: std.io.AnyReader, buffer_size: usize, gzip_mode: @import("mode").GzipMode) !FastqParser {
+    pub fn initGzip(allocator: std.mem.Allocator, reader: std.io.AnyReader, buf_size: usize, gzip_mode: mode_mod.GzipMode) !FastqParser {
+        const br = try allocator.create(block_reader.BlockReader);
+        br.* = try block_reader.BlockReader.initGzip(allocator, reader, buf_size, gzip_mode);
         return FastqParser{
-            .br = try block_reader.BlockReader.initGzip(allocator, reader, buffer_size, gzip_mode),
+            .reader = br,
             .allocator = allocator,
         };
     }
 
     pub fn initMmap(allocator: std.mem.Allocator, file: std.fs.File) !FastqParser {
+        const br = try allocator.create(block_reader.BlockReader);
+        br.* = try block_reader.BlockReader.initMmap(allocator, file);
         return FastqParser{
-            .br = try block_reader.BlockReader.initMmap(allocator, file),
+            .reader = br,
             .allocator = allocator,
         };
     }
 
     pub fn deinit(self: *FastqParser) void {
-        self.br.deinit(self.allocator);
+        self.reader.deinit(self.allocator);
+        self.allocator.destroy(self.reader);
     }
 
-    fn readLine(self: *FastqParser, out_buffer: []u8) !?[]u8 {
-        _ = out_buffer; // We are reading directly from the block buffer now
-        
+    pub fn next(self: *FastqParser, buf: []u8) !?Read {
         while (true) {
-            // Search for newline in remaining buffer
-            if (newline_scan.indexOfNewline(self.br.buffer[self.br.pos..self.br.end])) |nl_idx| {
-                const line = self.br.buffer[self.br.pos .. self.br.pos + nl_idx];
-                self.br.pos += nl_idx + 1; // skip newline
-                
-                var trimmed = line;
-                if (trimmed.len > 0 and trimmed[trimmed.len - 1] == '\r') {
-                    trimmed = trimmed[0 .. trimmed.len - 1];
-                }
-                return trimmed;
-            }
+            const line1 = (try self.reader.readLine()) orelse return null;
+            if (line1.len == 0 or line1[0] != '@') continue;
             
-            if (self.eof) {
-                // If EOF and some data remains, return it as the last line
-                if (self.br.pos < self.br.end) {
-                    const line = self.br.buffer[self.br.pos..self.br.end];
-                    self.br.pos = self.br.end;
-                    return line;
-                }
-                return null;
-            }
+            const id_raw = line1[1..];
+            const seq_raw = (try self.reader.readLine()) orelse return null;
+            _ = (try self.reader.readLine()) orelse return null; // skip +
+            const qual_raw = (try self.reader.readLine()) orelse return null;
             
-            // If buffer is completely full and no newline, then it's too small
-            if (self.br.pos == 0 and self.br.end == self.br.buffer.len) {
-                return error.BufferTooSmall;
+            if (seq_raw.len != qual_raw.len) return error.MismatchedSequenceQuality;
+
+            if (buf.len < id_raw.len + seq_raw.len + qual_raw.len) {
+                // Return slices directly if buffer is too small, though this is less stable
+                return Read{
+                    .id = id_raw,
+                    .seq = seq_raw,
+                    .qual = qual_raw,
+                    .arena = null,
+                };
             }
-            
-            // Fill buffer and search again
-            const read_len = try self.br.fill();
-            if (read_len == 0) {
-                self.eof = true;
-            }
+
+            // Stable Copy into buf
+            @memcpy(buf[0..id_raw.len], id_raw);
+            @memcpy(buf[id_raw.len .. id_raw.len + seq_raw.len], seq_raw);
+            @memcpy(buf[id_raw.len + seq_raw.len .. id_raw.len + seq_raw.len + qual_raw.len], qual_raw);
+
+            const id = buf[0..id_raw.len];
+            const seq = buf[id_raw.len .. id_raw.len + seq_raw.len];
+            const qual = buf[id_raw.len + seq_raw.len .. id_raw.len + seq_raw.len + qual_raw.len];
+
+            return Read{
+                .id = id,
+                .seq = seq,
+                .qual = qual,
+                .arena = null,
+            };
         }
-    }
-
-    /// Parses the next FASTQ record from the stream.
-    pub fn next(self: *FastqParser, out_buffer: []u8) !?Read {
-        // Line 1: @ID
-        var id_line: []const u8 = undefined;
-        while (true) {
-            id_line = (try self.readLine(out_buffer)) orelse return null;
-            if (id_line.len > 0) break;
-        }
-        if (id_line[0] != '@') return ParserError.InvalidFormat;
-        const id = id_line[1..];
-
-        // Line 2: Sequence
-        const seq = (try self.readLine(out_buffer)) orelse return ParserError.IncompleteRecord;
-
-        // Line 3: +ID
-        const plus_line = (try self.readLine(out_buffer)) orelse return ParserError.IncompleteRecord;
-        if (plus_line.len == 0 or plus_line[0] != '+') return ParserError.InvalidFormat;
-
-        // Line 4: Quality
-        const qual = (try self.readLine(out_buffer)) orelse return ParserError.IncompleteRecord;
-
-        const read = Read{
-            .id = id,
-            .seq = seq,
-            .qual = qual,
-        };
-
-        if (!read.validate()) return ParserError.MismatchedSequenceQuality;
-
-        return read;
     }
 };

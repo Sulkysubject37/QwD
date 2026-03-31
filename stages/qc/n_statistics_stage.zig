@@ -11,6 +11,12 @@ pub const NStatisticsStage = struct {
     n75: usize = 0,
     n90: usize = 0,
 
+    pub fn init(allocator: std.mem.Allocator) !*NStatisticsStage {
+        const self = try allocator.create(NStatisticsStage);
+        self.* = .{};
+        return self;
+    }
+
     pub fn process(ptr: *anyopaque, read: *const parser.Read) !bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         const len = read.seq.len;
@@ -110,9 +116,9 @@ pub const NStatisticsStage = struct {
         , .{ self.n10, self.n25, self.n50, self.n75, self.n90 });
     }
 
-    pub fn stage(self: *@This()) stage_mod.Stage {
+    pub fn stage(self: *const @This()) stage_mod.Stage {
         return .{
-            .ptr = self,
+            .ptr = @constCast(self),
             .vtable = &.{
                 .process = process,
                 .processRawBatch = processRawBatch,

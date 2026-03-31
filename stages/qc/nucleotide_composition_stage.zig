@@ -1,134 +1,164 @@
 const std = @import("std");
 const parser = @import("parser");
 const stage_mod = @import("stage");
+const bitplanes_mod = @import("bitplanes");
+const fastq_block = @import("fastq_block");
 
 pub const NucleotideCompositionStage = struct {
     const MAX_POS = 10000;
     // Global counters for all positions combined
-    global_counts: [4]u64 = [_]u64{0} ** 4,
-    // Detailed per-position counters
-    base_counts: [MAX_POS][4]u64 = [_][4]u64{[_]u64{0} ** 4} ** MAX_POS,
+    a: usize = 0,
+    c: usize = 0,
+    g: usize = 0,
+    t: usize = 0,
+    n: usize = 0,
+    total_bases: usize = 0,
+
+    // Position-specific counters
+    pos_a: [MAX_POS]usize = [_]usize{0} ** MAX_POS,
+    pos_c: [MAX_POS]usize = [_]usize{0} ** MAX_POS,
+    pos_g: [MAX_POS]usize = [_]usize{0} ** MAX_POS,
+    pos_t: [MAX_POS]usize = [_]usize{0} ** MAX_POS,
+    pos_n: [MAX_POS]usize = [_]usize{0} ** MAX_POS,
+    max_len_seen: usize = 0,
+
+    pub fn init(allocator: std.mem.Allocator) !*NucleotideCompositionStage {
+        const self = try allocator.create(NucleotideCompositionStage);
+        self.* = .{};
+        return self;
+    }
 
     pub fn process(ptr: *anyopaque, read: *const parser.Read) !bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        const limit = if (read.seq.len > MAX_POS) MAX_POS else read.seq.len;
-        for (0..limit) |pos| {
-            switch (read.seq[pos]) {
-                'A', 'a' => self.base_counts[pos][0] += 1,
-                'C', 'c' => self.base_counts[pos][1] += 1,
-                'G', 'g' => self.base_counts[pos][2] += 1,
-                'T', 't' => self.base_counts[pos][3] += 1,
-                else => {},
+        const seq = read.seq;
+        self.total_bases += seq.len;
+        if (seq.len > self.max_len_seen) self.max_len_seen = seq.len;
+
+        for (seq, 0..) |base, i| {
+            if (i >= MAX_POS) break;
+            switch (base) {
+                'A', 'a' => {
+                    self.a += 1;
+                    self.pos_a[i] += 1;
+                },
+                'C', 'c' => {
+                    self.c += 1;
+                    self.pos_c[i] += 1;
+                },
+                'G', 'g' => {
+                    self.g += 1;
+                    self.pos_g[i] += 1;
+                },
+                'T', 't' => {
+                    self.t += 1;
+                    self.pos_t[i] += 1;
+                },
+                else => {
+                    self.n += 1;
+                    self.pos_n[i] += 1;
+                },
             }
         }
         return true;
     }
 
-    pub fn processBitplanes(ptr: *anyopaque, bp: *const @import("bitplanes").BitplaneCore, block: *const @import("fastq_block").FastqColumnBlock) !bool {
+    pub fn processBitplanes(ptr: *anyopaque, bps: *const bitplanes_mod.BitplaneCore, block: *const fastq_block.FastqColumnBlock) !bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
+        const fused = @constCast(bps).getFused(block.read_count);
         
-        // Use pre-computed fused results for global counters
-        const results = @constCast(bp).getFused(block.read_count);
-        _ = results; // We actually need per-position counts too, so we still iterate, 
-                     // but we can trust the results are cached if we used them elsewhere.
-        
-        for (0..block.max_read_len) |col| {
+        self.a += fused.a_count;
+        self.c += fused.c_count;
+        self.g += fused.g_count;
+        self.t += fused.t_count;
+        self.n += fused.n_count;
+        self.total_bases += fused.total_bases;
+
+        for (0..bps.max_read_len) |col| {
             if (col >= MAX_POS) break;
-            const col_offset = col * bp.u64_per_col;
+            const offset = col * bps.u64_per_col;
             const u64_count = (block.read_count + 63) / 64;
             
+            var col_a: usize = 0;
+            var col_c: usize = 0;
+            var col_g: usize = 0;
+            var col_t: usize = 0;
+            var col_n: usize = 0;
+
             for (0..u64_count) |i| {
-                const idx = col_offset + i;
-                self.base_counts[col][0] += @popCount(bp.plane_a[idx]);
-                self.base_counts[col][1] += @popCount(bp.plane_c[idx]);
-                self.base_counts[col][2] += @popCount(bp.plane_g[idx]);
-                self.base_counts[col][3] += @popCount(bp.plane_t[idx]);
+                col_a += @popCount(bps.plane_a[offset + i]);
+                col_c += @popCount(bps.plane_c[offset + i]);
+                col_g += @popCount(bps.plane_g[offset + i]);
+                col_t += @popCount(bps.plane_t[offset + i]);
+                col_n += @popCount(bps.plane_n[offset + i]);
             }
-        }
-
-        return true;
-    }
-
-    pub fn processBlock(ptr: *anyopaque, block: *const @import("fastq_block").FastqColumnBlock) !bool {
-        const bitplanes = @import("bitplanes");
-        var bp = try bitplanes.BitplaneCore.init(block.allocator, block.capacity, block.max_read_len);
-        defer bp.deinit();
-        bp.fromColumnBlock(block);
-        return processBitplanes(ptr, &bp, block);
-    }
-
-    pub fn processRawBatch(ptr: *anyopaque, reads: []const parser.Read) !bool {
-        const self: *@This() = @ptrCast(@alignCast(ptr));
-        for (reads) |read| {
-            const limit = if (read.seq.len > MAX_POS) MAX_POS else read.seq.len;
-            for (0..limit) |pos| {
-                switch (read.seq[pos]) {
-                    'A', 'a' => self.base_counts[pos][0] += 1,
-                    'C', 'c' => self.base_counts[pos][1] += 1,
-                    'G', 'g' => self.base_counts[pos][2] += 1,
-                    'T', 't' => self.base_counts[pos][3] += 1,
-                    else => {},
-                }
+            
+            self.pos_a[col] += col_a;
+            self.pos_c[col] += col_c;
+            self.pos_g[col] += col_g;
+            self.pos_t[col] += col_t;
+            self.pos_n[col] += col_n;
+            
+            if ((col_a | col_c | col_g | col_t | col_n) > 0) {
+                if (col + 1 > self.max_len_seen) self.max_len_seen = col + 1;
             }
         }
         return true;
     }
 
     pub fn finalize(ptr: *anyopaque) !void {
-        const self: *@This() = @ptrCast(@alignCast(ptr));
-        for (0..MAX_POS) |pos| {
-            self.global_counts[0] += self.base_counts[pos][0];
-            self.global_counts[1] += self.base_counts[pos][1];
-            self.global_counts[2] += self.base_counts[pos][2];
-            self.global_counts[3] += self.base_counts[pos][3];
-        }
+        _ = ptr;
     }
 
     pub fn merge(ptr: *anyopaque, other_ptr: *anyopaque) !void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         const other: *@This() = @ptrCast(@alignCast(other_ptr));
-        for (0..4) |i| self.global_counts[i] += other.global_counts[i];
-        for (0..MAX_POS) |i| {
-            for (0..4) |j| self.base_counts[i][j] += other.base_counts[i][j];
+        
+        self.a += other.a;
+        self.c += other.c;
+        self.g += other.g;
+        self.t += other.t;
+        self.n += other.n;
+        self.total_bases += other.total_bases;
+        if (other.max_len_seen > self.max_len_seen) self.max_len_seen = other.max_len_seen;
+
+        for (0..self.max_len_seen) |i| {
+            self.pos_a[i] += other.pos_a[i];
+            self.pos_c[i] += other.pos_c[i];
+            self.pos_g[i] += other.pos_g[i];
+            self.pos_t[i] += other.pos_t[i];
+            self.pos_n[i] += other.pos_n[i];
         }
     }
 
     pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        writer.print("Nucleotide Composition Report (Global):\n", .{}) catch {};
-        writer.print("  A={d}, C={d}, G={d}, T={d}\n", .{
-            self.global_counts[0], self.global_counts[1], self.global_counts[2], self.global_counts[3],
-        }) catch {};
+        writer.print("\n[Nucleotide Composition]\n", .{}) catch {};
+        writer.print("  A: {d} ({d:.2}%)\n", .{ self.a, if (self.total_bases > 0) @as(f64, @floatFromInt(self.a)) * 100.0 / @as(f64, @floatFromInt(self.total_bases)) else 0.0 }) catch {};
+        writer.print("  C: {d} ({d:.2}%)\n", .{ self.c, if (self.total_bases > 0) @as(f64, @floatFromInt(self.c)) * 100.0 / @as(f64, @floatFromInt(self.total_bases)) else 0.0 }) catch {};
+        writer.print("  G: {d} ({d:.2}%)\n", .{ self.g, if (self.total_bases > 0) @as(f64, @floatFromInt(self.g)) * 100.0 / @as(f64, @floatFromInt(self.total_bases)) else 0.0 }) catch {};
+        writer.print("  T: {d} ({d:.2}%)\n", .{ self.t, if (self.total_bases > 0) @as(f64, @floatFromInt(self.t)) * 100.0 / @as(f64, @floatFromInt(self.total_bases)) else 0.0 }) catch {};
+        writer.print("  N: {d} ({d:.2}%)\n", .{ self.n, if (self.total_bases > 0) @as(f64, @floatFromInt(self.n)) * 100.0 / @as(f64, @floatFromInt(self.total_bases)) else 0.0 }) catch {};
     }
 
     pub fn reportJson(ptr: *anyopaque, writer: std.io.AnyWriter) !void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        var total_bases: u64 = 0;
-        for (self.global_counts) |c| total_bases += c;
-        
         try writer.print(
-            \\"nucleotide_composition": {{
-            \\  "a": {d},
-            \\  "c": {d},
-            \\  "g": {d},
-            \\  "t": {d},
-            \\  "n": 0
-            \\}}
-        , .{
-            self.global_counts[0],
-            self.global_counts[1],
-            self.global_counts[2],
-            self.global_counts[3],
-        });
+            \\  "nucleotide_composition": {{
+            \\    "a": {d},
+            \\    "c": {d},
+            \\    "g": {d},
+            \\    "t": {d},
+            \\    "n": {d},
+            \\    "total_bases": {d}
+            \\  }}
+        , .{ self.a, self.c, self.g, self.t, self.n, self.total_bases });
     }
 
-    pub fn stage(self: *@This()) stage_mod.Stage {
+    pub fn stage(self: *const @This()) stage_mod.Stage {
         return .{
-            .ptr = self,
+            .ptr = @constCast(self),
             .vtable = &.{
                 .process = process,
-                .processRawBatch = processRawBatch,
-                .processBlock = processBlock,
                 .processBitplanes = processBitplanes,
                 .finalize = finalize,
                 .report = report,

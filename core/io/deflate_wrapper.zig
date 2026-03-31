@@ -1,59 +1,50 @@
 const std = @import("std");
+const build_options = @import("build_options");
+const DeflateEngine = @import("custom_deflate").DeflateEngine;
 
-pub const c = @cImport({
-    @cInclude("libdeflate.h");
-});
+pub const DeflateWrapper = struct {
+    pub fn decompressBgzfBlock(compressed: []const u8, decompressed: []u8) !usize {
+        if (build_options.HAVE_LIBDEFLATE) {
+            return decompressLibdeflate(compressed, decompressed);
+        }
 
-pub const Decompressor = struct {
-    handle: *c.libdeflate_decompressor,
-
-    pub fn init() !Decompressor {
-        const handle = c.libdeflate_alloc_decompressor() orelse return error.OutOfMemory;
-        return Decompressor{ .handle = handle };
+        // Fallback to std.compress.flate (faster than custom)
+        var fbs = std.io.fixedBufferStream(compressed);
+        var decompressor = std.compress.flate.decompressor(fbs.reader());
+        
+        return decompressor.read(decompressed);
     }
 
-    pub fn deinit(self: *Decompressor) void {
-        c.libdeflate_free_decompressor(self.handle);
-    }
-
-    pub fn decompress(self: *Decompressor, in: []const u8, out: []u8) !usize {
-        var actual_out_size: usize = 0;
-        const result = c.libdeflate_gzip_decompress(
-            self.handle,
-            in.ptr,
-            in.len,
-            out.ptr,
-            out.len,
-            &actual_out_size,
-        );
-
-        return switch (result) {
-            c.LIBDEFLATE_SUCCESS => actual_out_size,
-            c.LIBDEFLATE_BAD_DATA => error.BadData,
-            c.LIBDEFLATE_SHORT_OUTPUT => error.ShortOutput,
-            c.LIBDEFLATE_INSUFFICIENT_SPACE => error.InsufficientSpace,
-            else => error.UnknownError,
-        };
-    }
-    
-    /// For raw DEFLATE (e.g. inside GZIP blocks)
-    pub fn decompress_raw(self: *Decompressor, in: []const u8, out: []u8) !usize {
-        var actual_out_size: usize = 0;
+    fn decompressLibdeflate(compressed: []const u8, decompressed: []u8) !usize {
+        const c = @cImport({
+            @cInclude("libdeflate.h");
+        });
+        
+        const decompressor = c.libdeflate_alloc_decompressor() orelse return error.LibdeflateAllocFailed;
+        defer c.libdeflate_free_decompressor(decompressor);
+        
+        var actual_out_n: usize = 0;
         const result = c.libdeflate_deflate_decompress(
-            self.handle,
-            in.ptr,
-            in.len,
-            out.ptr,
-            out.len,
-            &actual_out_size,
+            decompressor,
+            compressed.ptr,
+            compressed.len,
+            decompressed.ptr,
+            decompressed.len,
+            &actual_out_n,
         );
-
-        return switch (result) {
-            c.LIBDEFLATE_SUCCESS => actual_out_size,
-            c.LIBDEFLATE_BAD_DATA => error.BadData,
-            c.LIBDEFLATE_SHORT_OUTPUT => error.ShortOutput,
-            c.LIBDEFLATE_INSUFFICIENT_SPACE => error.InsufficientSpace,
-            else => error.UnknownError,
-        };
+        
+        if (result != 0) return error.LibdeflateDecompressionFailed;
+        return actual_out_n;
     }
+
+    const BufferSink = struct {
+        buf: []u8,
+        pos: usize,
+
+        pub fn emit(self: *BufferSink, byte: u8) !void {
+            if (self.pos >= self.buf.len) return error.BufferOverflow;
+            self.buf[self.pos] = byte;
+            self.pos += 1;
+        }
+    };
 };

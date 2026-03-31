@@ -12,15 +12,12 @@ pub const DuplicationStage = struct {
     duplicate_reads: usize = 0,
     mode: mode_mod.Mode = .EXACT,
 
-    pub fn init(allocator: std.mem.Allocator, is_fast: bool) DuplicationStage {
-        var self = DuplicationStage{
+    pub fn init(allocator: std.mem.Allocator) !*DuplicationStage {
+        const self = try allocator.create(DuplicationStage);
+        self.* = .{
             .map = std.StringHashMap(void).init(allocator),
             .allocator = allocator,
-            .mode = if (is_fast) .APPROX else .EXACT,
         };
-        if (self.mode == .APPROX) {
-            self.bloom = bloom_mod.BloomFilter.init(allocator, 2 * 1024 * 1024) catch null;
-        }
         return self;
     }
 
@@ -215,9 +212,9 @@ pub const DuplicationStage = struct {
         , .{ self.total_reads, self.duplicate_reads, ratio });
     }
 
-    pub fn stage(self: *@This()) stage_mod.Stage {
+    pub fn stage(self: *const @This()) stage_mod.Stage {
         return .{
-            .ptr = self,
+            .ptr = @constCast(self),
             .vtable = &.{
                 .process = process,
                 .processRawBatch = processRawBatch,

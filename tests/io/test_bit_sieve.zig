@@ -1,5 +1,5 @@
 const std = @import("std");
-const BitSieve = @import("../../core/io/bit_sieve.zig").BitSieve;
+const BitSieve = @import("bit_sieve").BitSieve;
 
 test "BitSieve: basic bit extraction" {
     const data = [_]u8{ 0b10101010, 0b11001100 }; // 0xAA, 0xCC

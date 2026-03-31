@@ -9,14 +9,16 @@ pub const AdapterDetectionStage = struct {
     allocator: std.mem.Allocator,
     total_suffix_kmers: u64 = 0,
 
-    pub fn init(allocator: std.mem.Allocator) !AdapterDetectionStage {
+    pub fn init(allocator: std.mem.Allocator) !*AdapterDetectionStage {
         const size = std.math.pow(usize, 4, 8);
         const counts = try allocator.alloc(u64, size);
         @memset(counts, 0);
-        return AdapterDetectionStage{
+        const self = try allocator.create(AdapterDetectionStage);
+        self.* = .{
             .counts = counts,
             .allocator = allocator,
         };
+        return self;
     }
 
     pub fn deinit(self: *AdapterDetectionStage) void {
@@ -155,9 +157,9 @@ pub const AdapterDetectionStage = struct {
         , .{ self.total_suffix_kmers, max_count });
     }
 
-    pub fn stage(self: *@This()) stage_mod.Stage {
+    pub fn stage(self: *const @This()) stage_mod.Stage {
         return .{
-            .ptr = self,
+            .ptr = @constCast(self),
             .vtable = &.{
                 .process = process,
                 .processRawBatch = processRawBatch,

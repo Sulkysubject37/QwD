@@ -43,6 +43,8 @@ pub const BitplaneCore = struct {
 
     pub fn fromColumnBlock(self: *BitplaneCore, block: anytype) void {
         const count = block.read_count;
+        // CRITICAL: fromColumnBlock only clears up to 'count'.
+        // But computeFused must also respect this.
         self.clear(count);
         
         const vec_size = 32;
@@ -54,8 +56,6 @@ pub const BitplaneCore = struct {
         const cl_vec: @Vector(vec_size, u8) = @splat('c');
         const gl_vec: @Vector(vec_size, u8) = @splat('g');
         const tl_vec: @Vector(vec_size, u8) = @splat('t');
-        const n_vec: @Vector(vec_size, u8) = @splat('N');
-        const nl_vec: @Vector(vec_size, u8) = @splat('n');
         const ones: @Vector(vec_size, u8) = @splat(1);
         const zeros_u8: @Vector(vec_size, u8) = @splat(0);
 
@@ -71,13 +71,13 @@ pub const BitplaneCore = struct {
                 const mask_c = @select(u8, v == c_vec, ones, zeros_u8) | @select(u8, v == cl_vec, ones, zeros_u8);
                 const mask_g = @select(u8, v == g_vec, ones, zeros_u8) | @select(u8, v == gl_vec, ones, zeros_u8);
                 const mask_t = @select(u8, v == t_vec, ones, zeros_u8) | @select(u8, v == tl_vec, ones, zeros_u8);
-                const mask_n = @select(u8, v == n_vec, ones, zeros_u8) | @select(u8, v == nl_vec, ones, zeros_u8);
                 
                 const bits_a = @as(u32, @bitCast(mask_a != zeros_u8));
                 const bits_c = @as(u32, @bitCast(mask_c != zeros_u8));
                 const bits_g = @as(u32, @bitCast(mask_g != zeros_u8));
                 const bits_t = @as(u32, @bitCast(mask_t != zeros_u8));
-                const bits_n = @as(u32, @bitCast(mask_n != zeros_u8));
+                const bits_mask = @as(u32, @bitCast(v != zeros_u8));
+                const bits_n = bits_mask & ~(bits_a | bits_c | bits_g | bits_t);
 
                 const word_idx = read_idx >> 6;
                 const shift: u6 = @intCast(read_idx & 63);
@@ -87,10 +87,9 @@ pub const BitplaneCore = struct {
                 self.plane_g[col_offset + word_idx] |= @as(u64, bits_g) << shift;
                 self.plane_t[col_offset + word_idx] |= @as(u64, bits_t) << shift;
                 self.plane_n[col_offset + word_idx] |= @as(u64, bits_n) << shift;
-                self.plane_mask[col_offset + word_idx] |= @as(u64, @as(u32, @bitCast(v != zeros_u8))) << shift;
+                self.plane_mask[col_offset + word_idx] |= @as(u64, bits_mask) << shift;
             }
 
-            // Residual scalar population
             while (read_idx < count) : (read_idx += 1) {
                 const b = base_col[read_idx];
                 const word_idx = read_idx >> 6;
@@ -103,8 +102,7 @@ pub const BitplaneCore = struct {
                         'C', 'c' => self.plane_c[col_offset + word_idx] |= bit,
                         'G', 'g' => self.plane_g[col_offset + word_idx] |= bit,
                         'T', 't' => self.plane_t[col_offset + word_idx] |= bit,
-                        'N', 'n' => self.plane_n[col_offset + word_idx] |= bit,
-                        else => {},
+                        else => self.plane_n[col_offset + word_idx] |= bit,
                     }
                 }
             }
@@ -125,7 +123,6 @@ pub const BitplaneCore = struct {
         }
     }
 
-    /// Fused Analytics: Count everything in one bitwise pass
     pub const FusedResults = struct {
         gc_count: usize,
         a_count: usize,
@@ -149,16 +146,20 @@ pub const BitplaneCore = struct {
             .g_count = 0, .t_count = 0, .n_count = 0,
             .total_bases = 0 
         };
-        _ = read_count;
-
-        for (0..self.plane_a.len) |i| {
-            res.a_count += @popCount(self.plane_a[i]);
-            res.c_count += @popCount(self.plane_c[i]);
-            res.g_count += @popCount(self.plane_g[i]);
-            res.t_count += @popCount(self.plane_t[i]);
-            res.n_count += @popCount(self.plane_n[i]);
-            res.total_bases += @popCount(self.plane_mask[i]);
-            res.gc_count += @popCount(self.plane_g[i] | self.plane_c[i]);
+        
+        const u64_count = (read_count + 63) / 64;
+        for (0..self.max_read_len) |col| {
+            const offset = col * self.u64_per_col;
+            const limit = offset + u64_count;
+            for (offset..limit) |idx| {
+                res.a_count += @popCount(self.plane_a[idx]);
+                res.c_count += @popCount(self.plane_c[idx]);
+                res.g_count += @popCount(self.plane_g[idx]);
+                res.t_count += @popCount(self.plane_t[idx]);
+                res.n_count += @popCount(self.plane_n[idx]);
+                res.total_bases += @popCount(self.plane_mask[idx]);
+                res.gc_count += @popCount(self.plane_g[idx] | self.plane_c[idx]);
+            }
         }
         return res;
     }

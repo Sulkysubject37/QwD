@@ -37,10 +37,10 @@ pub export fn qwd_fastq_qc_ex(path: [*:0]const u8, threads: c_int, mode: c_int, 
 
     const analysis_mode: mode_mod.Mode = if (mode == 1) .APPROX else .EXACT;
     const gz_mode: mode_mod.GzipMode = switch (gzip_mode) {
-        1 => .LIBDEFLATE,
-        2 => .CHUNKED,
-        3 => .COMPAT,
-        4 => .NATIVE_QWD,
+        1 => .NATIVE,
+        2 => .LIBDEFLATE,
+        3 => .CHUNKED,
+        4 => .COMPAT,
         else => .AUTO,
     };
 

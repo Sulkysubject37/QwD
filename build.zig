@@ -4,659 +4,236 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    // Fundamental Modules
-    const mode_mod = b.addModule("mode", .{
-        .root_source_file = b.path("core/config/mode.zig"),
-    });
+    const with_libdeflate = b.option(bool, "with-libdeflate", "Build with libdeflate") orelse (target.result.os.tag != .windows);
+    const options = b.addOptions();
+    options.addOption(bool, "HAVE_LIBDEFLATE", with_libdeflate);
 
-    const ring_buffer_mod = b.addModule("ring_buffer", .{
-        .root_source_file = b.path("core/parallel/ring_buffer.zig"),
-    });
+    // --- Core Modules ---
+    const mode_mod = b.addModule("mode", .{ .root_source_file = b.path("core/config/mode.zig") });
+    const ring_buffer_mod = b.addModule("ring_buffer", .{ .root_source_file = b.path("core/parallel/ring_buffer.zig") });
+    const entropy_lut_mod = b.addModule("entropy_lut", .{ .root_source_file = b.path("core/entropy/entropy_lut.zig") });
+    const structured_output_mod = b.addModule("structured_output", .{ .root_source_file = b.path("core/output/structured_output.zig") });
+    const pipeline_config_mod = b.addModule("pipeline_config", .{ .root_source_file = b.path("core/config/pipeline_config.zig") });
+    pipeline_config_mod.addImport("mode", mode_mod);
+    const global_allocator_mod = b.addModule("global_allocator", .{ .root_source_file = b.path("core/memory/global_allocator.zig") });
+    const runtime_metrics_mod = b.addModule("runtime_metrics", .{ .root_source_file = b.path("core/metrics/runtime_metrics.zig") });
 
+    // SIMD & Transposition
+    const simd_ops_mod = b.addModule("simd_ops", .{ .root_source_file = b.path("core/simd/simd_ops.zig") });
+    const column_ops_mod = b.addModule("column_ops", .{ .root_source_file = b.path("core/vector/column_ops.zig") });
+    const simd_transpose_mod = b.addModule("simd_transpose", .{ .root_source_file = b.path("core/simd/simd_transpose.zig") });
+    const vertical_scanner_mod = b.addModule("vertical_scanner", .{ .root_source_file = b.path("core/simd/vertical_scanner.zig") });
+    const newline_scan_mod = b.addModule("newline_scan", .{ .root_source_file = b.path("core/simd/newline_scan.zig") });
 
-    // Core Modules
-    const deflate_wrapper_mod = b.addModule("deflate_wrapper", .{
-        .root_source_file = b.path("core/io/deflate_wrapper.zig"),
-    });
-    deflate_wrapper_mod.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
+    // Analytics Extras
+    const bloom_filter_mod = b.addModule("bloom_filter", .{ .root_source_file = b.path("core/analytics/bloom_filter.zig") });
+    const dna_2bit_mod = b.addModule("dna_2bit", .{ .root_source_file = b.path("core/encoding/dna_2bit.zig") });
+    const cigar_parser_mod = b.addModule("cigar_parser", .{ .root_source_file = b.path("core/cigar/cigar_parser.zig") });
+    const kmer_bitroll_mod = b.addModule("kmer_bitroll", .{ .root_source_file = b.path("core/simd/kmer_bitroll.zig") });
+    const kmer_columnar_mod = b.addModule("kmer_columnar", .{ .root_source_file = b.path("core/vector/kmer_columnar.zig") });
 
-    const gzip_reader_mod = b.addModule("gzip_reader", .{
-        .root_source_file = b.path("core/io/gzip_reader.zig"),
-    });
-    gzip_reader_mod.addImport("deflate_wrapper", deflate_wrapper_mod);
+    // GZIP Native Engine
+    const bit_sieve_mod = b.addModule("bit_sieve", .{ .root_source_file = b.path("core/io/bit_sieve.zig") });
+    const huffman_mod = b.addModule("huffman", .{ .root_source_file = b.path("core/io/huffman_decoder.zig") });
+    huffman_mod.addImport("bit_sieve", bit_sieve_mod);
+    const lz77_mod = b.addModule("lz77", .{ .root_source_file = b.path("core/io/lz77_engine.zig") });
+    const custom_deflate_mod = b.addModule("custom_deflate", .{ .root_source_file = b.path("core/io/custom_deflate.zig") });
+    custom_deflate_mod.addImport("bit_sieve", bit_sieve_mod);
+    custom_deflate_mod.addImport("huffman", huffman_mod);
+    custom_deflate_mod.addImport("lz77", lz77_mod);
+    const deflate_wrapper_mod = b.addModule("deflate_wrapper", .{ .root_source_file = b.path("core/io/deflate_wrapper.zig") });
+    deflate_wrapper_mod.addImport("custom_deflate", custom_deflate_mod);
+    deflate_wrapper_mod.addOptions("build_options", options);
+    if (with_libdeflate) {
+        if (target.result.os.tag == .macos) {
+            deflate_wrapper_mod.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
+        }
+    }
+    
+    const bgzf_native_reader_mod = b.addModule("bgzf_native_reader", .{ .root_source_file = b.path("core/io/bgzf_native_reader.zig") });
+    const gzip_reader_mod = b.addModule("gzip_reader", .{ .root_source_file = b.path("core/io/gzip_reader.zig") });
     gzip_reader_mod.addImport("mode", mode_mod);
     gzip_reader_mod.addImport("ring_buffer", ring_buffer_mod);
+    gzip_reader_mod.addImport("deflate_wrapper", deflate_wrapper_mod);
+    gzip_reader_mod.addImport("custom_deflate", custom_deflate_mod);
 
-
-    const block_reader_mod = b.addModule("block_reader", .{
-        .root_source_file = b.path("core/io/block_reader.zig"),
-    });
-    block_reader_mod.addImport("gzip_reader", gzip_reader_mod);
+    // Parsing
+    const block_reader_mod = b.addModule("block_reader", .{ .root_source_file = b.path("core/io/block_reader.zig") });
     block_reader_mod.addImport("mode", mode_mod);
-
-    const newline_scan_mod = b.addModule("newline_scan", .{
-        .root_source_file = b.path("core/simd/newline_scan.zig"),
-    });
-    const dna_2bit_mod = b.addModule("dna_2bit", .{
-        .root_source_file = b.path("core/encoding/dna_2bit.zig"),
-    });
-    const kmer_bitroll_mod = b.addModule("kmer_bitroll", .{
-        .root_source_file = b.path("core/simd/kmer_bitroll.zig"),
-    });
-    const entropy_lut_mod = b.addModule("entropy_lut", .{
-        .root_source_file = b.path("core/entropy/entropy_lut.zig"),
-    });
-    const bloom_filter_mod = b.addModule("bloom_filter", .{
-        .root_source_file = b.path("core/analytics/bloom_filter.zig"),
-    });
-
-    const simd_transpose_mod = b.addModule("simd_transpose", .{
-        .root_source_file = b.path("core/simd/simd_transpose.zig"),
-    });
-
-    const fastq_block_mod = b.addModule("fastq_block", .{
-        .root_source_file = b.path("core/columnar/fastq_block.zig"),
-    });
-    fastq_block_mod.addImport("simd_transpose", simd_transpose_mod);
-
-    // Parsers and core structures
-    const parser_mod = b.addModule("parser", .{
-        .root_source_file = b.path("core/parser/parser.zig"),
-    });
+    block_reader_mod.addImport("gzip_reader", gzip_reader_mod);
+    const parser_mod = b.addModule("parser", .{ .root_source_file = b.path("core/parser/parser.zig") });
     parser_mod.addImport("block_reader", block_reader_mod);
     parser_mod.addImport("newline_scan", newline_scan_mod);
     parser_mod.addImport("mode", mode_mod);
-
-    // Phase Q Hyperscale Modules
-    const chunk_builder_mod = b.addModule("chunk_builder", .{
-        .root_source_file = b.path("core/batch/chunk_builder.zig"),
-    });
-    chunk_builder_mod.addImport("block_reader", block_reader_mod);
-    chunk_builder_mod.addImport("parser", parser_mod);
-
-    const raw_batch_mod = b.addModule("raw_batch", .{
-        .root_source_file = b.path("core/batch/raw_batch.zig"),
-    });
-
-    const column_ops_mod = b.addModule("column_ops", .{
-        .root_source_file = b.path("core/vector/column_ops.zig"),
-    });
-    const bitplanes_mod = b.addModule("bitplanes", .{
-        .root_source_file = b.path("core/columnar/bitplane_core.zig"),
-    });
-    const kmer_columnar_mod = b.addModule("kmer_columnar", .{
-        .root_source_file = b.path("core/vector/kmer_columnar.zig"),
-    });
-    const read_graph_mod = b.addModule("read_graph", .{
-        .root_source_file = b.path("core/sketch/read_graph.zig"),
-    });
-    const prefetch_mod = b.addModule("prefetch", .{
-        .root_source_file = b.path("core/vector/prefetch.zig"),
-    });
-
-    // Batching and row-based fallback modules
-    const read_batch_mod = b.addModule("read_batch", .{
-        .root_source_file = b.path("core/batch/read_batch.zig"),
-    });
-    const batch_builder_mod = b.addModule("batch_builder", .{
-        .root_source_file = b.path("core/batch/batch_builder.zig"),
-    });
-    batch_builder_mod.addImport("parser", parser_mod);
-    batch_builder_mod.addImport("read_batch", read_batch_mod);
-    const base_decode_mod = b.addModule("base_decode", .{
-        .root_source_file = b.path("core/simd/base_decode.zig"),
-    });
     
-    const bam_reader_mod = b.addModule("bam_reader", .{
-        .root_source_file = b.path("io/bam/bam_reader.zig"),
-    });
+    const chunk_builder_mod = b.addModule("chunk_builder", .{ .root_source_file = b.path("core/batch/chunk_builder.zig") });
+    chunk_builder_mod.addImport("parser", parser_mod);
+    chunk_builder_mod.addImport("block_reader", block_reader_mod);
+    
+    const bgzf_chunk_builder_mod = b.addModule("bgzf_chunk_builder", .{ .root_source_file = b.path("core/batch/bgzf_chunk_builder.zig") });
+    bgzf_chunk_builder_mod.addImport("bgzf_native_reader", bgzf_native_reader_mod);
 
-    const cigar_parser_mod = b.addModule("cigar_parser", .{
-        .root_source_file = b.path("core/cigar/cigar_parser.zig"),
-    });
-
-    // Output and API Modules
-    const structured_output_mod = b.addModule("structured_output", .{
-        .root_source_file = b.path("core/output/structured_output.zig"),
-    });
-
-    const metrics_stream_mod = b.addModule("metrics_stream", .{
-        .root_source_file = b.path("core/api/metrics_stream.zig"),
-    });
-    metrics_stream_mod.addImport("structured_output", structured_output_mod);
-
-    // Stage interfaces
-    const stage_interface_mod = b.addModule("stage", .{
-        .root_source_file = b.path("core/stage/stage.zig"),
-    });
+    // Columnar
+    const bitplanes_mod = b.addModule("bitplanes", .{ .root_source_file = b.path("core/columnar/bitplane_core.zig") });
+    const fastq_block_mod = b.addModule("fastq_block", .{ .root_source_file = b.path("core/columnar/fastq_block.zig") });
+    fastq_block_mod.addImport("simd_transpose", simd_transpose_mod);
+    const stage_interface_mod = b.addModule("stage", .{ .root_source_file = b.path("core/stage/stage.zig") });
     stage_interface_mod.addImport("parser", parser_mod);
     stage_interface_mod.addImport("fastq_block", fastq_block_mod);
     stage_interface_mod.addImport("bitplanes", bitplanes_mod);
 
-    const bam_stage_interface_mod = b.addModule("bam_stage", .{
-        .root_source_file = b.path("core/stage/bam_stage.zig"),
-    });
-    bam_stage_interface_mod.addImport("bam_reader", bam_reader_mod);
+    // QC Stages
+    const qc_list = [_]struct { n: []const u8, p: []const u8 }{
+        .{ .n = "qc", .p = "stages/qc/qc_stage.zig" },
+        .{ .n = "gc", .p = "stages/gc/gc_stage.zig" },
+        .{ .n = "basic_stats", .p = "stages/qc/basic_stats_stage.zig" },
+        .{ .n = "per_base_quality", .p = "stages/qc/per_base_quality_stage.zig" },
+        .{ .n = "nucleotide_composition", .p = "stages/qc/nucleotide_composition_stage.zig" },
+        .{ .n = "gc_distribution", .p = "stages/qc/gc_distribution_stage.zig" },
+        .{ .n = "qc_length_dist", .p = "stages/qc/length_distribution_stage.zig" },
+        .{ .n = "n_statistics", .p = "stages/qc/n_statistics_stage.zig" },
+        .{ .n = "qc_entropy", .p = "stages/qc/entropy_stage.zig" },
+        .{ .n = "kmer_spectrum", .p = "stages/qc/kmer_spectrum_stage.zig" },
+        .{ .n = "overrepresented", .p = "stages/qc/overrepresented_stage.zig" },
+        .{ .n = "duplication", .p = "stages/qc/duplication_stage.zig" },
+        .{ .n = "qc_adapter_detect", .p = "stages/qc/adapter_detection_stage.zig" },
+        .{ .n = "trim", .p = "stages/trim/trim_stage.zig" },
+        .{ .n = "filter", .p = "stages/filter/filter_stage.zig" },
+        .{ .n = "kmer", .p = "stages/kmer/kmer_stage.zig" },
+    };
 
-    // Schedulers
-    const scheduler_mod = b.addModule("scheduler", .{
-        .root_source_file = b.path("core/scheduler/scheduler.zig"),
-    });
+    var stage_mods = std.StringHashMap(*std.Build.Module).init(b.allocator);
+    for (qc_list) |s| {
+        const mod = b.addModule(s.n, .{ .root_source_file = b.path(s.p) });
+        mod.addImport("stage", stage_interface_mod);
+        mod.addImport("parser", parser_mod);
+        mod.addImport("fastq_block", fastq_block_mod);
+        mod.addImport("bitplanes", bitplanes_mod);
+        mod.addImport("mode", mode_mod);
+        mod.addImport("simd_ops", simd_ops_mod);
+        mod.addImport("column_ops", column_ops_mod);
+        mod.addImport("structured_output", structured_output_mod);
+        if (std.mem.eql(u8, s.n, "qc_entropy")) mod.addImport("entropy_lut", entropy_lut_mod);
+        if (std.mem.eql(u8, s.n, "duplication")) mod.addImport("bloom_filter", bloom_filter_mod);
+        if (std.mem.eql(u8, s.n, "kmer_spectrum")) {
+            mod.addImport("kmer_bitroll", kmer_bitroll_mod);
+            mod.addImport("kmer_columnar", kmer_columnar_mod);
+            mod.addImport("dna_2bit", dna_2bit_mod);
+        }
+        if (std.mem.eql(u8, s.n, "kmer")) mod.addImport("kmer_columnar", kmer_columnar_mod);
+        stage_mods.put(s.n, mod) catch unreachable;
+    }
+
+    // BAM Stack
+    const bam_reader_mod = b.addModule("bam_reader", .{ .root_source_file = b.path("io/bam/bam_reader.zig") });
+    const bam_stage_mod = b.addModule("bam_stage", .{ .root_source_file = b.path("core/stage/bam_stage.zig") });
+    bam_stage_mod.addImport("bam_reader", bam_reader_mod);
+    const bam_scheduler_mod = b.addModule("bam_scheduler", .{ .root_source_file = b.path("core/scheduler/bam_scheduler.zig") });
+    bam_scheduler_mod.addImport("bam_reader", bam_reader_mod);
+    bam_scheduler_mod.addImport("bam_stage", bam_stage_mod);
+
+    const bam_stages = [_]struct { n: []const u8, p: []const u8 }{
+        .{ .n = "alignment_stats", .p = "stages/alignment/alignment_stats_stage.zig" },
+        .{ .n = "mapq_dist", .p = "stages/alignment/mapq_distribution_stage.zig" },
+        .{ .n = "insert_size", .p = "stages/alignment/insert_size_stage.zig" },
+        .{ .n = "coverage", .p = "stages/alignment/coverage_stage.zig" },
+        .{ .n = "error_rate", .p = "stages/alignment/error_rate_stage.zig" },
+        .{ .n = "soft_clip", .p = "stages/alignment/soft_clip_stage.zig" },
+    };
+
+    var bam_stage_mods = std.StringHashMap(*std.Build.Module).init(b.allocator);
+    for (bam_stages) |s| {
+        const mod = b.addModule(s.n, .{ .root_source_file = b.path(s.p) });
+        mod.addImport("bam_reader", bam_reader_mod);
+        mod.addImport("bam_stage", bam_stage_mod);
+        mod.addImport("cigar_parser", cigar_parser_mod);
+        bam_stage_mods.put(s.n, mod) catch unreachable;
+    }
+
+    const bam_pipeline_mod = b.addModule("bam_pipeline", .{ .root_source_file = b.path("core/pipeline/bam_pipeline.zig") });
+    bam_pipeline_mod.addImport("bam_reader", bam_reader_mod);
+    bam_pipeline_mod.addImport("bam_scheduler", bam_scheduler_mod);
+    bam_pipeline_mod.addImport("bam_stage", bam_stage_mod);
+    var bit = bam_stage_mods.iterator();
+    while (bit.next()) |e| bam_pipeline_mod.addImport(e.key_ptr.*, e.value_ptr.*);
+
+    // Pipeline & Schedulers
+    const scheduler_mod = b.addModule("scheduler", .{ .root_source_file = b.path("core/scheduler/scheduler.zig") });
     scheduler_mod.addImport("parser", parser_mod);
     scheduler_mod.addImport("stage", stage_interface_mod);
 
-    const bam_scheduler_mod = b.addModule("bam_scheduler", .{
-        .root_source_file = b.path("core/scheduler/bam_scheduler.zig"),
-    });
-    bam_scheduler_mod.addImport("bam_reader", bam_reader_mod);
-    bam_scheduler_mod.addImport("bam_stage", bam_stage_interface_mod);
-
-    const allocator_mod = b.addModule("allocator", .{
-        .root_source_file = b.path("core/allocator/allocator.zig"),
-    });
-
-    const memory_manager_mod = b.addModule("memory_manager", .{
-        .root_source_file = b.path("core/memory/memory_manager.zig"),
-    });
-
-    const global_allocator_mod = b.addModule("global_allocator", .{
-        .root_source_file = b.path("core/memory/global_allocator.zig"),
-    });
-
-    const simd_ops_mod = b.addModule("simd_ops", .{
-        .root_source_file = b.path("core/simd/simd_ops.zig"),
-    });
-
-    const vertical_scanner_mod = b.addModule("vertical_scanner", .{
-        .root_source_file = b.path("core/simd/vertical_scanner.zig"),
-    });
-
-    const kmer_direct_mod = b.addModule("kmer_direct", .{
-        .root_source_file = b.path("core/vector/kmer_direct.zig"),
-    });
-
-    const parallel_scheduler_mod = b.addModule("parallel_scheduler", .{
-        .root_source_file = b.path("core/parallel/parallel_scheduler.zig"),
-    });
+    const parallel_scheduler_mod = b.addModule("parallel_scheduler", .{ .root_source_file = b.path("core/parallel/parallel_scheduler.zig") });
     parallel_scheduler_mod.addImport("parser", parser_mod);
     parallel_scheduler_mod.addImport("stage", stage_interface_mod);
     parallel_scheduler_mod.addImport("ring_buffer", ring_buffer_mod);
     parallel_scheduler_mod.addImport("block_reader", block_reader_mod);
-    parallel_scheduler_mod.addImport("vertical_scanner", vertical_scanner_mod);
-    parallel_scheduler_mod.addImport("kmer_direct", kmer_direct_mod);
+    parallel_scheduler_mod.addImport("mode", mode_mod);
+    parallel_scheduler_mod.addImport("custom_deflate", custom_deflate_mod);
+    parallel_scheduler_mod.addImport("deflate_wrapper", deflate_wrapper_mod);
     parallel_scheduler_mod.addImport("fastq_block", fastq_block_mod);
-    parallel_scheduler_mod.addImport("simd_transpose", simd_transpose_mod);
     parallel_scheduler_mod.addImport("bitplanes", bitplanes_mod);
+    parallel_scheduler_mod.addImport("vertical_scanner", vertical_scanner_mod);
 
-    const pipeline_config_mod = b.addModule("pipeline_config", .{
-        .root_source_file = b.path("core/config/pipeline_config.zig"),
-    });
-    pipeline_config_mod.addImport("mode", mode_mod);
-
-    // Fastq Modules
-    const qc_mod = b.addModule("qc", .{
-        .root_source_file = b.path("stages/qc/qc_stage.zig"),
-    });
-    qc_mod.addImport("parser", parser_mod);
-    qc_mod.addImport("stage", stage_interface_mod);
-    qc_mod.addImport("simd_ops", simd_ops_mod);
-    qc_mod.addImport("column_ops", column_ops_mod);
-    qc_mod.addImport("fastq_block", fastq_block_mod);
-    qc_mod.addImport("bitplanes", bitplanes_mod);
-
-    const gc_mod = b.addModule("gc", .{
-        .root_source_file = b.path("stages/gc/gc_stage.zig"),
-    });
-    gc_mod.addImport("parser", parser_mod);
-    gc_mod.addImport("stage", stage_interface_mod);
-    gc_mod.addImport("simd_ops", simd_ops_mod);
-    gc_mod.addImport("column_ops", column_ops_mod);
-    gc_mod.addImport("bitplanes", bitplanes_mod);
-    gc_mod.addImport("fastq_block", fastq_block_mod);
-
-    const length_mod = b.addModule("length", .{
-        .root_source_file = b.path("stages/read_length/length_stage.zig"),
-    });
-    length_mod.addImport("parser", parser_mod);
-    length_mod.addImport("stage", stage_interface_mod);
-
-    const filter_mod = b.addModule("filter", .{
-        .root_source_file = b.path("stages/filter/filter_stage.zig"),
-    });
-    filter_mod.addImport("parser", parser_mod);
-    filter_mod.addImport("stage", stage_interface_mod);
-
-    const trim_mod = b.addModule("trim", .{
-        .root_source_file = b.path("stages/trim/trim_stage.zig"),
-    });
-    trim_mod.addImport("parser", parser_mod);
-    trim_mod.addImport("stage", stage_interface_mod);
-
-    const kmer_mod = b.addModule("kmer", .{
-        .root_source_file = b.path("stages/kmer/kmer_stage.zig"),
-    });
-    kmer_mod.addImport("parser", parser_mod);
-    kmer_mod.addImport("stage", stage_interface_mod);
-    kmer_mod.addImport("dna_2bit", dna_2bit_mod);
-    kmer_mod.addImport("kmer_columnar", kmer_columnar_mod);
-    kmer_mod.addImport("fastq_block", fastq_block_mod);
-    kmer_mod.addImport("bitplanes", bitplanes_mod);
-
-    const length_dist_mod = b.addModule("length_dist", .{
-        .root_source_file = b.path("stages/length_distribution/length_distribution_stage.zig"),
-    });
-    length_dist_mod.addImport("parser", parser_mod);
-    length_dist_mod.addImport("stage", stage_interface_mod);
-
-    const n50_mod = b.addModule("n50", .{
-        .root_source_file = b.path("stages/n50/n50_stage.zig"),
-    });
-    n50_mod.addImport("parser", parser_mod);
-    n50_mod.addImport("stage", stage_interface_mod);
-
-    const qual_decay_mod = b.addModule("qual_decay", .{
-        .root_source_file = b.path("stages/quality_decay/quality_decay_stage.zig"),
-    });
-    qual_decay_mod.addImport("parser", parser_mod);
-    qual_decay_mod.addImport("stage", stage_interface_mod);
-
-    const entropy_mod = b.addModule("entropy", .{
-        .root_source_file = b.path("stages/entropy/entropy_stage.zig"),
-    });
-    entropy_mod.addImport("parser", parser_mod);
-    entropy_mod.addImport("stage", stage_interface_mod);
-
-    const adapter_detect_mod = b.addModule("adapter_detect", .{
-        .root_source_file = b.path("stages/adapter_detect/adapter_detect_stage.zig"),
-    });
-    adapter_detect_mod.addImport("parser", parser_mod);
-    adapter_detect_mod.addImport("stage", stage_interface_mod);
-
-    // New Fastq Modules
-    const basic_stats_mod = b.addModule("basic_stats", .{
-        .root_source_file = b.path("stages/qc/basic_stats_stage.zig"),
-    });
-    basic_stats_mod.addImport("parser", parser_mod);
-    basic_stats_mod.addImport("stage", stage_interface_mod);
-    basic_stats_mod.addImport("fastq_block", fastq_block_mod);
-    basic_stats_mod.addImport("bitplanes", bitplanes_mod);
-
-    const per_base_quality_mod = b.addModule("per_base_quality", .{
-        .root_source_file = b.path("stages/qc/per_base_quality_stage.zig"),
-    });
-    per_base_quality_mod.addImport("parser", parser_mod);
-    per_base_quality_mod.addImport("stage", stage_interface_mod);
-    per_base_quality_mod.addImport("column_ops", column_ops_mod);
-    per_base_quality_mod.addImport("fastq_block", fastq_block_mod);
-
-    const nucleotide_composition_mod = b.addModule("nucleotide_composition", .{
-        .root_source_file = b.path("stages/qc/nucleotide_composition_stage.zig"),
-    });
-    nucleotide_composition_mod.addImport("parser", parser_mod);
-    nucleotide_composition_mod.addImport("stage", stage_interface_mod);
-    nucleotide_composition_mod.addImport("bitplanes", bitplanes_mod);
-    nucleotide_composition_mod.addImport("fastq_block", fastq_block_mod);
-
-    const gc_distribution_mod = b.addModule("gc_distribution", .{
-        .root_source_file = b.path("stages/qc/gc_distribution_stage.zig"),
-    });
-    gc_distribution_mod.addImport("parser", parser_mod);
-    gc_distribution_mod.addImport("stage", stage_interface_mod);
-    gc_distribution_mod.addImport("fastq_block", fastq_block_mod);
-    gc_distribution_mod.addImport("bitplanes", bitplanes_mod);
-
-    const qc_length_dist_mod = b.addModule("qc_length_dist", .{
-        .root_source_file = b.path("stages/qc/length_distribution_stage.zig"),
-    });
-    qc_length_dist_mod.addImport("parser", parser_mod);
-    qc_length_dist_mod.addImport("stage", stage_interface_mod);
-    qc_length_dist_mod.addImport("fastq_block", fastq_block_mod);
-
-    const n_statistics_mod = b.addModule("n_statistics", .{
-        .root_source_file = b.path("stages/qc/n_statistics_stage.zig"),
-    });
-    n_statistics_mod.addImport("parser", parser_mod);
-    n_statistics_mod.addImport("stage", stage_interface_mod);
-    n_statistics_mod.addImport("fastq_block", fastq_block_mod);
-    n_statistics_mod.addImport("bitplanes", bitplanes_mod);
-
-    const qc_entropy_mod = b.addModule("qc_entropy", .{
-        .root_source_file = b.path("stages/qc/entropy_stage.zig"),
-    });
-    qc_entropy_mod.addImport("parser", parser_mod);
-    qc_entropy_mod.addImport("stage", stage_interface_mod);
-    qc_entropy_mod.addImport("entropy_lut", entropy_lut_mod);
-    qc_entropy_mod.addImport("fastq_block", fastq_block_mod);
-    qc_entropy_mod.addImport("bitplanes", bitplanes_mod);
-
-    const kmer_spectrum_mod = b.addModule("kmer_spectrum", .{
-        .root_source_file = b.path("stages/qc/kmer_spectrum_stage.zig"),
-    });
-    kmer_spectrum_mod.addImport("parser", parser_mod);
-    kmer_spectrum_mod.addImport("stage", stage_interface_mod);
-    kmer_spectrum_mod.addImport("dna_2bit", dna_2bit_mod);
-    kmer_spectrum_mod.addImport("kmer_bitroll", kmer_bitroll_mod);
-    kmer_spectrum_mod.addImport("kmer_columnar", kmer_columnar_mod);
-    kmer_spectrum_mod.addImport("fastq_block", fastq_block_mod);
-    kmer_spectrum_mod.addImport("bitplanes", bitplanes_mod);
-
-    const overrepresented_mod = b.addModule("overrepresented", .{
-        .root_source_file = b.path("stages/qc/overrepresented_stage.zig"),
-    });
-    overrepresented_mod.addImport("parser", parser_mod);
-    overrepresented_mod.addImport("stage", stage_interface_mod);
-    overrepresented_mod.addImport("fastq_block", fastq_block_mod);
-    overrepresented_mod.addImport("bitplanes", bitplanes_mod);
-    overrepresented_mod.addImport("mode", mode_mod);
-    overrepresented_mod.addImport("structured_output", structured_output_mod);
-
-    const duplication_mod = b.addModule("duplication", .{
-        .root_source_file = b.path("stages/qc/duplication_stage.zig"),
-    });
-    duplication_mod.addImport("parser", parser_mod);
-    duplication_mod.addImport("stage", stage_interface_mod);
-    duplication_mod.addImport("bloom_filter", bloom_filter_mod);
-    duplication_mod.addImport("fastq_block", fastq_block_mod);
-    duplication_mod.addImport("bitplanes", bitplanes_mod);
-    duplication_mod.addImport("mode", mode_mod);
-
-    const qc_adapter_detect_mod = b.addModule("qc_adapter_detect", .{
-        .root_source_file = b.path("stages/qc/adapter_detection_stage.zig"),
-    });
-    qc_adapter_detect_mod.addImport("parser", parser_mod);
-    qc_adapter_detect_mod.addImport("stage", stage_interface_mod);
-    qc_adapter_detect_mod.addImport("fastq_block", fastq_block_mod);
-    qc_adapter_detect_mod.addImport("bitplanes", bitplanes_mod);
-
-    // BAM Analytics Modules
-    const alignment_stats_mod = b.addModule("alignment_stats", .{
-        .root_source_file = b.path("stages/alignment/alignment_stats_stage.zig"),
-    });
-    alignment_stats_mod.addImport("bam_reader", bam_reader_mod);
-    alignment_stats_mod.addImport("bam_stage", bam_stage_interface_mod);
-
-    const mapq_dist_mod = b.addModule("mapq_dist", .{
-        .root_source_file = b.path("stages/alignment/mapq_distribution_stage.zig"),
-    });
-    mapq_dist_mod.addImport("bam_reader", bam_reader_mod);
-    mapq_dist_mod.addImport("bam_stage", bam_stage_interface_mod);
-
-    const insert_size_mod = b.addModule("insert_size", .{
-        .root_source_file = b.path("stages/alignment/insert_size_stage.zig"),
-    });
-    insert_size_mod.addImport("bam_reader", bam_reader_mod);
-    insert_size_mod.addImport("bam_stage", bam_stage_interface_mod);
-
-    const coverage_mod = b.addModule("coverage", .{
-        .root_source_file = b.path("stages/alignment/coverage_stage.zig"),
-    });
-    coverage_mod.addImport("bam_reader", bam_reader_mod);
-    coverage_mod.addImport("bam_stage", bam_stage_interface_mod);
-    coverage_mod.addImport("cigar_parser", cigar_parser_mod);
-
-    const error_rate_mod = b.addModule("error_rate", .{
-        .root_source_file = b.path("stages/alignment/error_rate_stage.zig"),
-    });
-    error_rate_mod.addImport("bam_reader", bam_reader_mod);
-    error_rate_mod.addImport("bam_stage", bam_stage_interface_mod);
-    error_rate_mod.addImport("cigar_parser", cigar_parser_mod);
-
-    const soft_clip_mod = b.addModule("soft_clip", .{
-        .root_source_file = b.path("stages/alignment/soft_clip_stage.zig"),
-    });
-    soft_clip_mod.addImport("bam_reader", bam_reader_mod);
-    soft_clip_mod.addImport("bam_stage", bam_stage_interface_mod);
-    soft_clip_mod.addImport("cigar_parser", cigar_parser_mod);
-
-    const metrics_mod = b.addModule("metrics", .{
-        .root_source_file = b.path("core/metrics/metrics.zig"),
-    });
-    metrics_mod.addImport("scheduler", scheduler_mod);
-
-    const runtime_metrics_mod = b.addModule("runtime_metrics", .{
-        .root_source_file = b.path("core/metrics/runtime_metrics.zig"),
-    });
-
-    const pipeline_mod = b.addModule("pipeline", .{
-        .root_source_file = b.path("core/pipeline/pipeline.zig"),
-    });
-    pipeline_mod.addImport("scheduler", scheduler_mod);
+    const pipeline_mod = b.addModule("pipeline", .{ .root_source_file = b.path("core/pipeline/pipeline.zig") });
     pipeline_mod.addImport("parallel_scheduler", parallel_scheduler_mod);
-    pipeline_mod.addImport("read_batch", read_batch_mod);
-    pipeline_mod.addImport("simd_ops", simd_ops_mod);
-    pipeline_mod.addImport("base_decode", base_decode_mod);
-    pipeline_mod.addImport("memory_manager", memory_manager_mod);
-    pipeline_mod.addImport("stage", stage_interface_mod);
-    pipeline_mod.addImport("parser", parser_mod);
+    pipeline_mod.addImport("scheduler", scheduler_mod);
     pipeline_mod.addImport("block_reader", block_reader_mod);
-    pipeline_mod.addImport("raw_batch", raw_batch_mod);
-    pipeline_mod.addImport("chunk_builder", chunk_builder_mod);
-    pipeline_mod.addImport("read_graph", read_graph_mod);
-    pipeline_mod.addImport("prefetch", prefetch_mod);
-    pipeline_mod.addImport("qc", qc_mod);
-    pipeline_mod.addImport("gc", gc_mod);
-    pipeline_mod.addImport("length", length_mod);
-    pipeline_mod.addImport("filter", filter_mod);
-    pipeline_mod.addImport("trim", trim_mod);
-    pipeline_mod.addImport("kmer", kmer_mod);
-    pipeline_mod.addImport("length_dist", length_dist_mod);
-    pipeline_mod.addImport("n50", n50_mod);
-    pipeline_mod.addImport("qual_decay", qual_decay_mod);
-    pipeline_mod.addImport("entropy", entropy_mod);
-    pipeline_mod.addImport("adapter_detect", adapter_detect_mod);
-    pipeline_mod.addImport("pipeline_config", pipeline_config_mod);
+    pipeline_mod.addImport("parser", parser_mod);
     pipeline_mod.addImport("mode", mode_mod);
-    
-    // Add all QC modules to pipeline
-    pipeline_mod.addImport("basic_stats", basic_stats_mod);
-    pipeline_mod.addImport("per_base_quality", per_base_quality_mod);
-    pipeline_mod.addImport("nucleotide_composition", nucleotide_composition_mod);
-    pipeline_mod.addImport("gc_distribution", gc_distribution_mod);
-    pipeline_mod.addImport("qc_length_dist", qc_length_dist_mod);
-    pipeline_mod.addImport("n_statistics", n_statistics_mod);
-    pipeline_mod.addImport("qc_entropy", qc_entropy_mod);
-    pipeline_mod.addImport("kmer_spectrum", kmer_spectrum_mod);
-    pipeline_mod.addImport("overrepresented", overrepresented_mod);
-    pipeline_mod.addImport("duplication", duplication_mod);
-    pipeline_mod.addImport("qc_adapter_detect", qc_adapter_detect_mod);
+    pipeline_mod.addImport("pipeline_config", pipeline_config_mod);
+    pipeline_mod.addImport("stage", stage_interface_mod);
+    var it = stage_mods.iterator();
+    while (it.next()) |e| pipeline_mod.addImport(e.key_ptr.*, e.value_ptr.*);
 
-    const bam_pipeline_mod = b.addModule("bam_pipeline", .{
-        .root_source_file = b.path("core/pipeline/bam_pipeline.zig"),
-    });
-    bam_pipeline_mod.addImport("bam_scheduler", bam_scheduler_mod);
-    bam_pipeline_mod.addImport("bam_stage", bam_stage_interface_mod);
-    bam_pipeline_mod.addImport("bam_reader", bam_reader_mod);
-    bam_pipeline_mod.addImport("alignment_stats", alignment_stats_mod);
-    bam_pipeline_mod.addImport("mapq_dist", mapq_dist_mod);
-    bam_pipeline_mod.addImport("insert_size", insert_size_mod);
-    bam_pipeline_mod.addImport("coverage", coverage_mod);
-    bam_pipeline_mod.addImport("error_rate", error_rate_mod);
-    bam_pipeline_mod.addImport("soft_clip", soft_clip_mod);
+    // --- Artifacts ---
+    const artifacts = [_]*std.Build.Step.Compile{
+        b.addExecutable(.{ .name = "qwd", .root_source_file = b.path("apps/cli/main.zig"), .target = target, .optimize = optimize }),
+        b.addSharedLibrary(.{ .name = "qwd", .root_source_file = b.path("bindings/c/qwd_api.zig"), .target = target, .optimize = optimize }),
+    };
 
-    // CLI Executable
-    const exe = b.addExecutable(.{
-        .name = "qwd",
-        .root_source_file = b.path("apps/cli/main.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    exe.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
-    exe.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
-    exe.linkSystemLibrary("deflate");
-    exe.linkLibC();
-    exe.root_module.addImport("parser", parser_mod);
-    exe.root_module.addImport("block_reader", block_reader_mod);
-    exe.root_module.addImport("scheduler", scheduler_mod);
-    exe.root_module.addImport("parallel_scheduler", parallel_scheduler_mod);
-    exe.root_module.addImport("simd_ops", simd_ops_mod);
-    exe.root_module.addImport("allocator", allocator_mod);
-    exe.root_module.addImport("global_allocator", global_allocator_mod);
-    exe.root_module.addImport("batch_builder", batch_builder_mod);
-    exe.root_module.addImport("chunk_builder", chunk_builder_mod);
-    exe.root_module.addImport("read_graph", read_graph_mod);
-    exe.root_module.addImport("prefetch", prefetch_mod);
-    exe.root_module.addImport("pipeline", pipeline_mod);
-    exe.root_module.addImport("pipeline_config", pipeline_config_mod);
-    exe.root_module.addImport("mode", mode_mod);
-    exe.root_module.addImport("metrics", metrics_mod);
-    exe.root_module.addImport("runtime_metrics", runtime_metrics_mod);
-    exe.root_module.addImport("structured_output", structured_output_mod);
-    exe.root_module.addImport("entropy_lut", entropy_lut_mod);
-    exe.root_module.addImport("bam_reader", bam_reader_mod);
-    exe.root_module.addImport("bam_pipeline", bam_pipeline_mod);
-    b.installArtifact(exe);
-
-    const run_cmd = b.addRunArtifact(exe);
-    run_cmd.step.dependOn(b.getInstallStep());
-    if (b.args) |args| {
-        run_cmd.addArgs(args);
+    for (artifacts) |art| {
+        art.root_module.addImport("pipeline", pipeline_mod);
+        art.root_module.addImport("parser", parser_mod);
+        art.root_module.addImport("mode", mode_mod);
+        art.root_module.addImport("entropy_lut", entropy_lut_mod);
+        art.root_module.addImport("bam_pipeline", bam_pipeline_mod);
+        art.root_module.addImport("bam_reader", bam_reader_mod);
+        art.root_module.addImport("structured_output", structured_output_mod);
+        art.root_module.addImport("pipeline_config", pipeline_config_mod);
+        art.root_module.addImport("global_allocator", global_allocator_mod);
+        art.root_module.addImport("runtime_metrics", runtime_metrics_mod);
+        art.root_module.addImport("chunk_builder", chunk_builder_mod);
+        art.root_module.addImport("bgzf_chunk_builder", bgzf_chunk_builder_mod);
+        art.root_module.addImport("bgzf_native_reader", bgzf_native_reader_mod);
+        art.root_module.addOptions("build_options", options);
+        if (with_libdeflate) {
+            art.linkSystemLibrary("deflate");
+            if (target.result.os.tag == .macos) {
+                art.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
+                art.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
+            }
+        }
+        art.linkLibC();
+        b.installArtifact(art);
     }
-    const run_step = b.step("run", "Run the app");
-    run_step.dependOn(&run_cmd.step);
-
-    // C ABI Shared Library
-    const lib = b.addSharedLibrary(.{
-        .name = "qwd",
-        .root_source_file = b.path("bindings/c/qwd_api.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    lib.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
-    lib.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
-    lib.linkSystemLibrary("deflate");
-    lib.linkLibC();
-    lib.root_module.addImport("pipeline", pipeline_mod);
-    lib.root_module.addImport("pipeline_config", pipeline_config_mod);
-    lib.root_module.addImport("entropy_lut", entropy_lut_mod);
-    lib.root_module.addImport("parser", parser_mod);
-    lib.root_module.addImport("mode", mode_mod);
-    lib.root_module.addImport("bam_pipeline", bam_pipeline_mod);
-    lib.root_module.addImport("bam_reader", bam_reader_mod);
-    lib.root_module.addImport("allocator", allocator_mod);
-    lib.root_module.addImport("structured_output", structured_output_mod);
-    lib.root_module.addImport("batch_builder", batch_builder_mod);
-    lib.root_module.addImport("chunk_builder", chunk_builder_mod);
-    b.installArtifact(lib);
-
-    // Benchmarks
-    const simd_bench = b.addExecutable(.{
-        .name = "simd_bench",
-        .root_source_file = b.path("benchmarks/simd_bench.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    simd_bench.root_module.addImport("simd_ops", simd_ops_mod);
-    b.installArtifact(simd_bench);
-
-    const run_simd_bench = b.addRunArtifact(simd_bench);
-    const bench_step = b.step("bench", "Run SIMD benchmark");
-    bench_step.dependOn(&run_simd_bench.step);
-
-    const core_bench = b.addExecutable(.{
-        .name = "core_bench",
-        .root_source_file = b.path("benchmarks/core_bench.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    core_bench.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
-    core_bench.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
-    core_bench.linkSystemLibrary("deflate");
-    core_bench.linkLibC();
-    core_bench.root_module.addImport("parser", parser_mod);
-    core_bench.root_module.addImport("scheduler", scheduler_mod);
-    core_bench.root_module.addImport("parallel_scheduler", parallel_scheduler_mod);
-    b.installArtifact(core_bench);
-
-    const run_core_bench = b.addRunArtifact(core_bench);
-    const core_bench_step = b.step("bench-core", "Run Core scheduling benchmark");
-    core_bench_step.dependOn(&run_core_bench.step);
 
     const test_step = b.step("test", "Run unit tests");
-
-    // Tests
-    const fastq_tests = b.addTest(.{
-        .root_source_file = b.path("tests/fastq/fastq_test.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    fastq_tests.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
-    fastq_tests.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
-    fastq_tests.linkSystemLibrary("deflate");
-    fastq_tests.linkLibC();
-    fastq_tests.root_module.addImport("parser", parser_mod);
-    fastq_tests.root_module.addImport("qc_entropy", qc_entropy_mod);
-    fastq_tests.root_module.addImport("kmer_spectrum", kmer_spectrum_mod);
-    fastq_tests.root_module.addImport("gc_distribution", gc_distribution_mod);
-    fastq_tests.root_module.addImport("duplication", duplication_mod);
-    fastq_tests.root_module.addImport("qc_adapter_detect", qc_adapter_detect_mod);
-    const run_fastq_tests = b.addRunArtifact(fastq_tests);
-
-    const bam_tests = b.addTest(.{
-        .root_source_file = b.path("tests/bam/bam_test.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    bam_tests.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
-    bam_tests.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
-    bam_tests.linkSystemLibrary("deflate");
-    bam_tests.linkLibC();
-    bam_tests.root_module.addImport("bam_reader", bam_reader_mod);
-    bam_tests.root_module.addImport("alignment_stats", alignment_stats_mod);
-    bam_tests.root_module.addImport("mapq_dist", mapq_dist_mod);
-    bam_tests.root_module.addImport("coverage", coverage_mod);
-    bam_tests.root_module.addImport("error_rate", error_rate_mod);
-    bam_tests.root_module.addImport("soft_clip", soft_clip_mod);
-    const run_bam_tests = b.addRunArtifact(bam_tests);
-
-    const perf_tests = b.addTest(.{
-        .root_source_file = b.path("tests/performance/perf_test.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    perf_tests.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
-    perf_tests.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
-    perf_tests.linkSystemLibrary("deflate");
-    perf_tests.linkLibC();
-    const run_perf_tests = b.addRunArtifact(perf_tests);
-
-    const rep_tests = b.addTest(.{
-        .root_source_file = b.path("tests/reproducibility/rep_test.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    rep_tests.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
-    rep_tests.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
-    rep_tests.linkSystemLibrary("deflate");
-    rep_tests.linkLibC();
-    const run_rep_tests = b.addRunArtifact(rep_tests);
-
-    const fuzz_tests = b.addTest(.{
-        .root_source_file = b.path("tests/fuzz/fuzz_test.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    fuzz_tests.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
-    fuzz_tests.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
-    fuzz_tests.linkSystemLibrary("deflate");
-    fuzz_tests.linkLibC();
-    fuzz_tests.root_module.addImport("parser", parser_mod);
-    const run_fuzz_tests = b.addRunArtifact(fuzz_tests);
-
-    const stress_tests = b.addTest(.{
-        .root_source_file = b.path("tests/stress/stress_test.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    stress_tests.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
-    stress_tests.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
-    stress_tests.linkSystemLibrary("deflate");
-    stress_tests.linkLibC();
-    const run_stress_tests = b.addRunArtifact(stress_tests);
-
-    test_step.dependOn(&run_fastq_tests.step);
-    test_step.dependOn(&run_bam_tests.step);
-    test_step.dependOn(&run_perf_tests.step);
-    test_step.dependOn(&run_rep_tests.step);
-    test_step.dependOn(&run_fuzz_tests.step);
-    test_step.dependOn(&run_stress_tests.step);
+    const io_tests = [_][]const u8{ "tests/io/test_bit_sieve.zig", "tests/io/test_deflate_wrapper.zig" };
+    for (io_tests) |p| {
+        const t = b.addTest(.{ .root_source_file = b.path(p), .target = target, .optimize = optimize });
+        t.root_module.addImport("bit_sieve", bit_sieve_mod);
+        t.root_module.addImport("deflate_wrapper", deflate_wrapper_mod);
+        t.root_module.addOptions("build_options", options);
+        
+        if (with_libdeflate) {
+            t.linkSystemLibrary("deflate");
+            if (target.result.os.tag == .macos) {
+                t.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
+                t.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
+            }
+        }
+        t.linkLibC();
+        
+        test_step.dependOn(&b.addRunArtifact(t).step);
+    }
 }

@@ -6,6 +6,12 @@ pub const LengthDistributionStage = struct {
     read_count_per_bin: [6]usize = [_]usize{0} ** 6,
     total_reads: usize = 0,
 
+    pub fn init(allocator: std.mem.Allocator) !*LengthDistributionStage {
+        const self = try allocator.create(LengthDistributionStage);
+        self.* = .{};
+        return self;
+    }
+
     pub fn process(ptr: *anyopaque, read: *const parser.Read) !bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         const len = read.seq.len;
@@ -110,9 +116,9 @@ pub const LengthDistributionStage = struct {
         });
     }
 
-    pub fn stage(self: *@This()) stage_mod.Stage {
+    pub fn stage(self: *const @This()) stage_mod.Stage {
         return .{
-            .ptr = self,
+            .ptr = @constCast(self),
             .vtable = &.{
                 .process = process,
                 .processRawBatch = processRawBatch,
