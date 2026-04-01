@@ -184,7 +184,6 @@ pub const Pipeline = struct {
     }
 
     pub fn createStageInstance(self: *Pipeline, allocator: std.mem.Allocator, name: []const u8) !stage_mod.Stage {
-        _ = self;
         if (std.mem.eql(u8, name, "basic_stats") or std.mem.eql(u8, name, "basic-stats")) {
             const s = try @import("basic_stats").BasicStatsStage.init(allocator);
             return @constCast(s).stage();
