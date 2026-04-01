@@ -258,6 +258,8 @@ pub fn main() !void {
 
     if (output_format == .json) {
         try structured_output.writeJsonReport(&pipeline, stdout);
+    } else if (output_format == .ndjson) {
+        try structured_output.writeNdjsonReport(&pipeline, stdout);
     } else {
         if (!quiet_mode) {
             try stdout.print("\n--- QwD Execution Mode: {s} ---\n", .{@tagName(mode)});

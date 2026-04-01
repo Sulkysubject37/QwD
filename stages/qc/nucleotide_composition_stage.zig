@@ -142,16 +142,7 @@ pub const NucleotideCompositionStage = struct {
 
     pub fn reportJson(ptr: *anyopaque, writer: std.io.AnyWriter) !void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        try writer.print(
-            \\  "nucleotide_composition": {{
-            \\    "a": {d},
-            \\    "c": {d},
-            \\    "g": {d},
-            \\    "t": {d},
-            \\    "n": {d},
-            \\    "total_bases": {d}
-            \\  }}
-        , .{ self.a, self.c, self.g, self.t, self.n, self.total_bases });
+        try writer.print("\"nucleotide_composition\": {{\"a\": {d}, \"c\": {d}, \"g\": {d}, \"t\": {d}, \"n\": {d}, \"total_bases\": {d}}}", .{ self.a, self.c, self.g, self.t, self.n, self.total_bases });
     }
 
     pub fn stage(self: *const @This()) stage_mod.Stage {

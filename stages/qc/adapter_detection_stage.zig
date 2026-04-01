@@ -149,12 +149,7 @@ pub const AdapterDetectionStage = struct {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         var max_count: u64 = 0;
         for (self.counts) |count| if (count > max_count) { max_count = count; };
-        try writer.print(
-            \\"adapter_detection": {{
-            \\  "total_suffix_kmers": {d},
-            \\  "max_kmer_count": {d}
-            \\}}
-        , .{ self.total_suffix_kmers, max_count });
+        try writer.print("\"adapter_detection\": {{\"total_suffix_kmers\": {d}, \"max_kmer_count\": {d}}}", .{ self.total_suffix_kmers, max_count });
     }
 
     pub fn stage(self: *const @This()) stage_mod.Stage {

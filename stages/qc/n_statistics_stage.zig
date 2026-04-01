@@ -105,15 +105,7 @@ pub const NStatisticsStage = struct {
 
     pub fn reportJson(ptr: *anyopaque, writer: std.io.AnyWriter) !void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        try writer.print(
-            \\"n_statistics": {{
-            \\  "n10": {d},
-            \\  "n25": {d},
-            \\  "n50": {d},
-            \\  "n75": {d},
-            \\  "n90": {d}
-            \\}}
-        , .{ self.n10, self.n25, self.n50, self.n75, self.n90 });
+        try writer.print("\"n_statistics\": {{\"n10\": {d}, \"n25\": {d}, \"n50\": {d}, \"n75\": {d}, \"n90\": {d}}}", .{ self.n10, self.n25, self.n50, self.n75, self.n90 });
     }
 
     pub fn stage(self: *const @This()) stage_mod.Stage {

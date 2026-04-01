@@ -106,11 +106,7 @@ pub const LengthDistributionStage = struct {
 
     pub fn reportJson(ptr: *anyopaque, writer: std.io.AnyWriter) !void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        try writer.print(
-            \\"length_distribution": {{
-            \\  "bins": [{d}, {d}, {d}, {d}, {d}, {d}]
-            \\}}
-        , .{
+        try writer.print("\"length_distribution\": {{\"bins\": [{d}, {d}, {d}, {d}, {d}, {d}]}}", .{
             self.read_count_per_bin[0], self.read_count_per_bin[1], self.read_count_per_bin[2],
             self.read_count_per_bin[3], self.read_count_per_bin[4], self.read_count_per_bin[5],
         });

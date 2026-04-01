@@ -80,13 +80,7 @@ pub const QcStage = struct {
 
     pub fn reportJson(ptr: *anyopaque, writer: std.io.AnyWriter) !void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        try writer.print(
-            \\"qc": {{
-            \\  "total_reads": {d},
-            \\  "total_bases": {d},
-            \\  "mean_quality": {d:.2}
-            \\}}
-        , .{ self.total_reads, self.total_bases, self.mean_quality });
+        try writer.print("\"qc\": {{\"total_reads\": {d}, \"total_bases\": {d}, \"mean_quality\": {d:.2}}}", .{ self.total_reads, self.total_bases, self.mean_quality });
     }
 
     pub fn stage(self: *const @This()) stage_mod.Stage {

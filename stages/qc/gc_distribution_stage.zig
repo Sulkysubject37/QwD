@@ -112,12 +112,12 @@ pub const GcDistributionStage = struct {
 
     pub fn reportJson(ptr: *anyopaque, writer: std.io.AnyWriter) !void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        try writer.writeAll("\"gc_distribution\": { \"bins\": [");
+        try writer.writeAll("\"gc_distribution\": {\"bins\": [");
         for (self.histogram, 0..) |count, i| {
             if (i > 0) try writer.writeAll(", ");
             try writer.print("{d}", .{count});
         }
-        try writer.writeAll("] }");
+        try writer.writeAll("]}");
     }
 
     pub fn stage(self: *const @This()) stage_mod.Stage {

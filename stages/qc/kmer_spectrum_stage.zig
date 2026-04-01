@@ -162,12 +162,12 @@ pub const KmerSpectrumStage = struct {
 
     pub fn reportJson(ptr: *anyopaque, writer: std.io.AnyWriter) !void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        try writer.print("\"kmer_spectrum\": {{ \"k\": {d}, \"counts\": [", .{self.k});
+        try writer.print("\"kmer_spectrum\": {{\"k\": {d}, \"counts\": [", .{self.k});
         for (self.counts, 0..) |count, i| {
             if (i > 0) try writer.writeAll(", ");
             try writer.print("{d}", .{count});
         }
-        try writer.writeAll("] }");
+        try writer.writeAll("]}");
     }
 
     pub fn stage(self: *const @This()) stage_mod.Stage {
