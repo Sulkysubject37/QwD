@@ -219,10 +219,16 @@ pub const Pipeline = struct {
         }
         if (std.mem.eql(u8, name, "overrepresented")) {
             const s = try @import("overrepresented").OverrepresentedStage.init(allocator);
+            s.mode = self.mode;
             return @constCast(s).stage();
         }
         if (std.mem.eql(u8, name, "duplication")) {
             const s = try @import("duplication").DuplicationStage.init(allocator);
+            s.mode = self.mode;
+            if (self.mode == .APPROX) {
+                // Initialize 128MB Bloom Filter for duplication detection
+                s.bloom = try @import("bloom_filter").BloomFilter.init(allocator, 128 * 1024 * 1024);
+            }
             return @constCast(s).stage();
         }
         if (std.mem.eql(u8, name, "adapter_detect") or std.mem.eql(u8, name, "adapter-detect")) {

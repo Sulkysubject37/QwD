@@ -39,17 +39,7 @@ pub const CoverageStage = struct {
 
     pub fn reportJson(ptr: *anyopaque, writer: std.io.AnyWriter) !void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        try writer.print(
-            \\"coverage": {{
-            \\  "aligned_bases": {d},
-            \\  "reference_length": {d},
-            \\  "coverage_estimate": {d:.2}
-            \\}}
-        , .{
-            self.total_aligned_bases,
-            self.reference_length,
-            self.coverage_estimate,
-        });
+        try writer.print("\"coverage\": {{\"aligned_bases\": {d}, \"reference_length\": {d}, \"coverage_estimate\": {d:.2}}}", .{ self.total_aligned_bases, self.reference_length, self.coverage_estimate });
     }
 
     pub fn stage(self: *@This()) bam_stage.BamStage {

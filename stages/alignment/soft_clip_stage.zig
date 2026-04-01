@@ -32,12 +32,7 @@ pub const SoftClipStage = struct {
 
     pub fn reportJson(ptr: *anyopaque, writer: std.io.AnyWriter) !void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        try writer.print(
-            \\"soft_clipping": {{
-            \\  "soft_clipped_reads": {d},
-            \\  "soft_clipped_bases": {d}
-            \\}}
-        , .{ self.soft_clipped_reads, self.soft_clipped_bases });
+        try writer.print("\"soft_clipping\": {{\"soft_clipped_reads\": {d}, \"soft_clipped_bases\": {d}}}", .{ self.soft_clipped_reads, self.soft_clipped_bases });
     }
 
     pub fn stage(self: *@This()) bam_stage.BamStage {

@@ -41,19 +41,7 @@ pub const AlignmentStatsStage = struct {
 
     pub fn reportJson(ptr: *anyopaque, writer: std.io.AnyWriter) !void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        try writer.print(
-            \\"alignment_stats": {{
-            \\  "total_records": {d},
-            \\  "mapped_reads": {d},
-            \\  "unmapped_reads": {d},
-            \\  "mean_mapq": {d:.2}
-            \\}}
-        , .{
-            self.total_alignments,
-            self.mapped_reads,
-            self.unmapped_reads,
-            self.mean_mapping_quality,
-        });
+        try writer.print("\"alignment_stats\": {{\"total_records\": {d}, \"mapped_reads\": {d}, \"unmapped_reads\": {d}, \"mean_mapq\": {d:.2}}}", .{ self.total_alignments, self.mapped_reads, self.unmapped_reads, self.mean_mapping_quality });
     }
 
     pub fn stage(self: *@This()) bam_stage.BamStage {
