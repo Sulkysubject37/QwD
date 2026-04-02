@@ -23,11 +23,10 @@ pub fn writeJsonReport(scheduler: anytype, writer: std.io.AnyWriter) !void {
             scheduler.read_count.load(.monotonic) 
         else 
             scheduler.read_count;
-        try writer.print("\"read_count\": {d},", .{count});
     } else if (comptime @hasField(ChildT, "record_count")) {
         count = scheduler.record_count;
-        try writer.print("\"record_count\": {d},", .{count});
     }
+    try writer.print("\"read_count\": {d},", .{count});
     
     try writer.writeAll("\"stages\": {");
     

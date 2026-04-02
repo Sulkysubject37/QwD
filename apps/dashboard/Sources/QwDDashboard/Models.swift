@@ -18,6 +18,50 @@ public struct QCStages: Codable {
     public let entropy: EntropyStats?
     public let duplication: DuplicationStats?
     public let overrepresented: OverrepresentedStats?
+    
+    // BAM-specific stages
+    public let alignment_stats: AlignmentStats?
+    public let coverage: CoverageStats?
+    public let error_rate_stats: ErrorRateStats?
+    public let soft_clipping: SoftClippingStats?
+    public let mapq_distribution: MapqDistribution?
+    public let insert_size: InsertSizeStats?
+}
+
+public struct AlignmentStats: Codable {
+    public let total_records: Int
+    public let mapped_reads: Int
+    public let unmapped_reads: Int
+    public let mean_mapq: Double
+}
+
+public struct CoverageStats: Codable {
+    public let aligned_bases: Int
+    public let reference_length: Int
+    public let coverage_estimate: Double
+}
+
+public struct ErrorRateStats: Codable {
+    public let aligned_bases: Int
+    public let mismatches: Int
+    public let error_rate: Double
+}
+
+public struct SoftClippingStats: Codable {
+    public let soft_clipped_reads: Int
+    public let soft_clipped_bases: Int
+}
+
+public struct MapqDistribution: Codable {
+    public let histogram: [Int]
+}
+
+public struct InsertSizeStats: Codable {
+    public let pairs_analyzed: Int
+    public let min_insert: Int
+    public let max_insert: Int
+    public let mean_insert: Double
+    public let histogram_500bp_bins: [Int]
 }
 
 public struct BasicStats: Codable {

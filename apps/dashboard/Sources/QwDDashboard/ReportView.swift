@@ -33,6 +33,19 @@ struct ReportBodyView: View {
             HeaderBar(report: report, showingInspector: $showingInspector)
             MetricSummaryGrid(report: report)
             
+            if let alignment = report.stages.alignment_stats {
+                VStack(alignment: .leading, spacing: 16) {
+                    SectionLabel(text: "BAM Alignment Statistics")
+                    HStack(spacing: 20) {
+                        SummaryTile(label: "Mapped Reads", value: alignment.mapped_reads.compactFormatted, unit: "Reads", trend: .nominal)
+                        SummaryTile(label: "Mean MAPQ", value: String(format: "%.1f", alignment.mean_mapq), unit: "Quality", trend: .neutral)
+                        if let cov = report.stages.coverage {
+                            SummaryTile(label: "Est. Coverage", value: String(format: "%.2f", cov.coverage_estimate), unit: "x", trend: .nominal)
+                        }
+                    }
+                }
+            }
+            
             HStack(alignment: .top, spacing: 20) {
                 DistributionPanel(title: "GC Composition", icon: "leaf.fill") {
                     if let gc = report.stages.gc_distribution {
@@ -313,11 +326,17 @@ struct MetricSummaryGrid: View {
                 if let stats = report.stages.basic_stats {
                     SummaryTile(label: "Throughput", value: stats.total_bases.compactFormatted, unit: "Bases", trend: .nominal)
                     SummaryTile(label: "Avg. Length", value: String(format: "%.0f", stats.mean_length), unit: "bp", trend: .neutral)
+                } else if let alignment = report.stages.alignment_stats {
+                    SummaryTile(label: "Total Records", value: alignment.total_records.compactFormatted, unit: "Reads", trend: .neutral)
                 }
+                
                 if let n50 = report.stages.n_statistics?.n50 {
                     SummaryTile(label: "N50 Metric", value: "\(n50)", unit: "bp", trend: .nominal)
                 }
-                SummaryTile(label: "GC Content", value: String(format: "%.1f", calculateGC(report)), unit: "%", trend: .neutral)
+                
+                if report.stages.gc_distribution != nil {
+                    SummaryTile(label: "GC Content", value: String(format: "%.1f", calculateGC(report)), unit: "%", trend: .neutral)
+                }
             }
         }
     }

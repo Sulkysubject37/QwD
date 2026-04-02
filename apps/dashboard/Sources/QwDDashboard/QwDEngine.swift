@@ -53,9 +53,15 @@ public final class QwDEngine {
         }
         defer { self.isRunning = false }
         
+        let isBam = targetPath.lowercased().hasSuffix(".bam")
+        
         let result = await Task.detached(priority: .userInitiated) { () -> String? in
             return targetPath.withCString { cPath in
-                let resPtr = qwd_fastq_qc_ex(cPath, Int32(threads), modeInt, gzipModeInt)
+                let resPtr = if isBam {
+                    qwd_bam_stats(cPath)
+                } else {
+                    qwd_fastq_qc_ex(cPath, Int32(threads), modeInt, gzipModeInt)
+                }
                 guard let validPtr = resPtr else { return nil }
                 defer { qwd_free_string(validPtr) }
                 return String(cString: validPtr)
