@@ -45,7 +45,8 @@ pub const BloomFilter = struct {
     }
 
     pub fn merge(self: *BloomFilter, other: *const BloomFilter) void {
-        for (0..self.bits.len) |i| {
+        const len = @min(self.bits.len, other.bits.len);
+        for (0..len) |i| {
             self.bits[i] |= other.bits[i];
         }
     }

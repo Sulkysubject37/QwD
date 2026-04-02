@@ -54,13 +54,15 @@ pub const DuplicationStage = struct {
         var seq_to_hash = read.seq;
         if (self.mode == .APPROX and seq_to_hash.len > 50) seq_to_hash = seq_to_hash[0..50];
 
-        if (self.mode == .APPROX and self.bloom != null) {
-            if (self.bloom.?.contains(seq_to_hash)) {
-                self.duplicate_reads += 1;
-            } else {
-                self.bloom.?.add(seq_to_hash);
+        if (self.mode == .APPROX) {
+            if (self.bloom) |*b| {
+                if (b.contains(seq_to_hash)) {
+                    self.duplicate_reads += 1;
+                } else {
+                    b.add(seq_to_hash);
+                }
+                return true;
             }
-            return true;
         }
 
         if (self.mode == .EXACT or self.map.count() < 200000) {
@@ -99,15 +101,15 @@ pub const DuplicationStage = struct {
             var seq = seq_buf[0..len];
             if (self.mode == .APPROX and seq.len > 50) seq = seq[0..50];
 
-            if (self.mode == .APPROX and self.bloom != null) {
-
-
-                if (self.bloom.?.contains(seq)) {
-                    self.duplicate_reads += 1;
-                } else {
-                    self.bloom.?.add(seq);
+            if (self.mode == .APPROX) {
+                if (self.bloom) |*b| {
+                    if (b.contains(seq)) {
+                        self.duplicate_reads += 1;
+                    } else {
+                        b.add(seq);
+                    }
+                    continue;
                 }
-                continue;
             }
 
 
@@ -141,14 +143,15 @@ pub const DuplicationStage = struct {
             var seq_to_hash = read.seq;
             if (self.mode == .APPROX and seq_to_hash.len > 50) seq_to_hash = seq_to_hash[0..50];
 
-            if (self.mode == .APPROX and self.bloom != null) {
-
-                if (self.bloom.?.contains(seq_to_hash)) {
-                    self.duplicate_reads += 1;
-                } else {
-                    self.bloom.?.add(seq_to_hash);
+            if (self.mode == .APPROX) {
+                if (self.bloom) |*b| {
+                    if (b.contains(seq_to_hash)) {
+                        self.duplicate_reads += 1;
+                    } else {
+                        b.add(seq_to_hash);
+                    }
+                    continue;
                 }
-                continue;
             }
 
             if (self.mode == .EXACT or self.map.count() < 200000) {

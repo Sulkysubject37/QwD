@@ -18,7 +18,9 @@ pub const GzipReader = struct {
     // Stable streaming decompressor
     decompressor: ?std.compress.gzip.Decompressor(std.io.AnyReader) = null,
     deflate_wrapper: @import("deflate_wrapper").DeflateWrapper = .{},
-    proxy_ptr: *ProxyContext = undefined,
+    
+    // Stable proxy for AnyReader
+    proxy_ctx: *ProxyContext,
 
     // Async Prefetch State
     thread: ?std.Thread = null,
@@ -37,7 +39,7 @@ pub const GzipReader = struct {
     const ProxyContext = struct {
         parent: ?*GzipReader = null,
         pub fn read(ctx: *const anyopaque, b: []u8) anyerror!usize {
-            const self_p: *const ProxyContext = @ptrFromInt(@intFromPtr(ctx));
+            const self_p: *const ProxyContext = @ptrCast(@alignCast(ctx));
             const p = self_p.parent orelse return error.InvalidProxyContext;
             
             const buffered_rem = p.io_stream.buffer.len - p.io_stream.pos;
@@ -56,6 +58,9 @@ pub const GzipReader = struct {
         const io_buf = try allocator.alloc(u8, 1024 * 1024); 
         const worker_buf = try allocator.alloc(u8, 256 * 1024);
         
+        const proxy = try allocator.create(ProxyContext);
+        proxy.* = .{ .parent = null };
+
         var self = GzipReader{
             .inner_reader = reader,
             .io_buf = io_buf,
@@ -63,17 +68,16 @@ pub const GzipReader = struct {
             .current_worker_buf = worker_buf,
             .gzip_mode = gzip_mode,
             .allocator = allocator,
+            .proxy_ctx = proxy,
         };
         
-        self.proxy_ptr = try allocator.create(ProxyContext);
-        self.proxy_ptr.* = .{ .parent = null }; 
         self.queue = try RingBuffer(PrefetchBlock).init(allocator, 32);
         return self;
     }
 
     pub fn start(self: *GzipReader) !void {
         if (self.thread == null) {
-            self.proxy_ptr.parent = self;
+            self.proxy_ctx.parent = self;
             self.thread = try std.Thread.spawn(.{}, prefetchWorker, .{self});
         }
     }
@@ -82,13 +86,13 @@ pub const GzipReader = struct {
         self.background_eof.store(true, .release);
         if (self.thread) |t| t.join();
         if (self.queue) |q| {
-            while (q.pop()) |block| allocator.free(block.data);
+            while (q.pop()) |block| std.heap.c_allocator.free(block.data);
             q.deinit();
         }
-        if (self.current_block) |blk| allocator.free(blk.data);
+        if (self.current_block) |blk| std.heap.c_allocator.free(blk.data);
         allocator.free(self.current_worker_buf);
         allocator.free(self.io_buf);
-        allocator.destroy(self.proxy_ptr);
+        allocator.destroy(self.proxy_ctx);
     }
 
     fn prefetchWorker(self: *GzipReader) void {
@@ -103,7 +107,8 @@ pub const GzipReader = struct {
                 break;
             };
             if (n > 0) {
-                const stable_data = self.allocator.alloc(u8, n) catch {
+                // Use c_allocator for thread-safe background allocations
+                const stable_data = std.heap.c_allocator.alloc(u8, n) catch {
                     self.background_error.store(true, .release);
                     break;
                 };
@@ -111,7 +116,7 @@ pub const GzipReader = struct {
                 const pb = PrefetchBlock{ .data = stable_data, .len = n };
                 while (!self.queue.?.push(pb)) {
                     if (self.background_eof.load(.acquire)) {
-                        self.allocator.free(stable_data);
+                        std.heap.c_allocator.free(stable_data);
                         return;
                     }
                     std.Thread.yield() catch {};
@@ -157,11 +162,7 @@ pub const GzipReader = struct {
             const buf = self.io_buf[self.io_stream.pos..];
             if (buf[0] != 0x1F or buf[1] != 0x8B) { self.eof = true; return; }
             
-            // Check if we can use deflate_wrapper for this block
-            // Gzip member starts here.
-            // For now, we'll stick to std.compress.gzip for robustness in streaming
-            // but wrapped in the prefetch worker.
-            const any_pr = std.io.AnyReader{ .context = self.proxy_ptr, .readFn = ProxyContext.read };
+            const any_pr = std.io.AnyReader{ .context = self.proxy_ctx, .readFn = ProxyContext.read };
             self.decompressor = std.compress.gzip.decompressor(any_pr);
         }
     }
@@ -181,7 +182,7 @@ pub const GzipReader = struct {
                 self.decomp_pos += can_read;
                 return can_read;
             } else {
-                self.allocator.free(blk.data);
+                std.heap.c_allocator.free(blk.data);
                 self.current_block = null;
             }
         }
@@ -212,7 +213,7 @@ pub const GzipReader = struct {
     }
 
     fn readAny(context: *const anyopaque, dest: []u8) anyerror!usize {
-        const self: *GzipReader = @ptrFromInt(@intFromPtr(context));
+        const self: *GzipReader = @ptrCast(@alignCast(context));
         return self.read(dest);
     }
 };
