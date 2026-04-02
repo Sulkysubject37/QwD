@@ -15,7 +15,7 @@ pub fn writeJsonReport(scheduler: anytype, writer: std.io.AnyWriter) !void {
     };
     
     try writer.writeAll("{");
-    try writer.writeAll("\"version\": \"1.0.0\",");
+    try writer.writeAll("\"version\": \"1.1.0\",");
     
     var count: usize = 0;
     if (comptime @hasField(ChildT, "read_count")) {

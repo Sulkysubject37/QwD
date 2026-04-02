@@ -154,6 +154,7 @@ pub fn build(b: *std.Build) void {
     bam_pipeline_mod.addImport("bam_reader", bam_reader_mod);
     bam_pipeline_mod.addImport("bam_scheduler", bam_scheduler_mod);
     bam_pipeline_mod.addImport("bam_stage", bam_stage_mod);
+    bam_pipeline_mod.addImport("structured_output", structured_output_mod);
     var bit = bam_stage_mods.iterator();
     while (bit.next()) |e| bam_pipeline_mod.addImport(e.key_ptr.*, e.value_ptr.*);
 
@@ -185,6 +186,7 @@ pub fn build(b: *std.Build) void {
     pipeline_mod.addImport("bgzf_native_reader", bgzf_native_reader_mod);
     pipeline_mod.addImport("bgzf_chunk_builder", bgzf_chunk_builder_mod);
     pipeline_mod.addImport("bloom_filter", bloom_filter_mod);
+    pipeline_mod.addImport("structured_output", structured_output_mod);
     var it = stage_mods.iterator();
     while (it.next()) |e| pipeline_mod.addImport(e.key_ptr.*, e.value_ptr.*);
 
