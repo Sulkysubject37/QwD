@@ -203,6 +203,16 @@ pub const OverrepresentedStage = struct {
         try @import("structured_output").writeJsonEscaped(writer, top_seq);
         try writer.print("\", \"most_frequent_count\": {d}}}", .{top_count});
     }
+    pub fn clone(ptr: *anyopaque, allocator: std.mem.Allocator) anyerror!*anyopaque {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        const new_self = try allocator.create(@This());
+        new_self.* = .{
+            .map = std.StringHashMap(u64).init(allocator),
+            .allocator = allocator,
+            .mode = self.mode,
+        };
+        return new_self;
+    }
 
     pub fn stage(self: *const @This()) stage_mod.Stage {
         return .{
@@ -216,6 +226,7 @@ pub const OverrepresentedStage = struct {
                 .report = report,
                 .reportJson = reportJson,
                 .merge = merge,
+                .clone = clone,
             },
         };
     }

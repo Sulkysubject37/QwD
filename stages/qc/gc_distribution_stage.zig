@@ -120,6 +120,13 @@ pub const GcDistributionStage = struct {
         try writer.writeAll("]}");
     }
 
+    pub fn clone(ptr: *anyopaque, allocator: std.mem.Allocator) anyerror!*anyopaque {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        const new_self = try allocator.create(@This());
+        new_self.* = self.*;
+        return new_self;
+    }
+
     pub fn stage(self: *const @This()) stage_mod.Stage {
         return .{
             .ptr = @constCast(self),
@@ -132,6 +139,7 @@ pub const GcDistributionStage = struct {
                 .report = report,
                 .reportJson = reportJson,
                 .merge = merge,
+                .clone = clone,
             },
         };
     }

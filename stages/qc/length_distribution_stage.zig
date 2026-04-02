@@ -111,6 +111,17 @@ pub const LengthDistributionStage = struct {
             self.read_count_per_bin[3], self.read_count_per_bin[4], self.read_count_per_bin[5],
         });
     }
+    pub fn processBitplanes(ptr: *anyopaque, bp: *const @import("bitplanes").BitplaneCore, block: *const @import("fastq_block").FastqColumnBlock) !bool {
+        _ = bp;
+        return processBlock(ptr, block);
+    }
+
+    pub fn clone(ptr: *anyopaque, allocator: std.mem.Allocator) anyerror!*anyopaque {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        const new_self = try allocator.create(@This());
+        new_self.* = self.*;
+        return new_self;
+    }
 
     pub fn stage(self: *const @This()) stage_mod.Stage {
         return .{
@@ -119,10 +130,12 @@ pub const LengthDistributionStage = struct {
                 .process = process,
                 .processRawBatch = processRawBatch,
                 .processBlock = processBlock,
+                .processBitplanes = processBitplanes,
                 .finalize = finalize,
                 .report = report,
                 .reportJson = reportJson,
                 .merge = merge,
+                .clone = clone,
             },
         };
     }

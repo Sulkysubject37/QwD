@@ -97,6 +97,13 @@ pub const EntropyStage = struct {
         try writer.print("\"entropy\": {{\"mean_entropy\": {d:.4}, \"low_complexity_reads\": {d}}}", .{ self.mean_entropy, self.low_complexity_reads });
     }
 
+    pub fn clone(ptr: *anyopaque, allocator: std.mem.Allocator) anyerror!*anyopaque {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        const new_self = try allocator.create(@This());
+        new_self.* = self.*;
+        return new_self;
+    }
+
     pub fn stage(self: *const @This()) stage_mod.Stage {
         return .{
             .ptr = @constCast(self),
@@ -107,6 +114,7 @@ pub const EntropyStage = struct {
                 .report = report,
                 .reportJson = reportJson,
                 .merge = merge,
+                .clone = clone,
             },
         };
     }

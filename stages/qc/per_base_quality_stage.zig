@@ -3,10 +3,11 @@ const parser = @import("parser");
 const stage_mod = @import("stage");
 
 pub const PerBaseQualityStage = struct {
-    const MAX_POS = 10000;
-    quality_sum: [MAX_POS]u64 = [_]u64{0} ** MAX_POS,
-    base_count: [MAX_POS]u64 = [_]u64{0} ** MAX_POS,
-    mean_quality: [MAX_POS]f64 = [_]f64{0.0} ** MAX_POS,
+    total_reads: usize = 0,
+    mean_quality: [MAX_POS]f64 = [_]f64{0} ** MAX_POS,
+    base_count: [MAX_POS]usize = [_]usize{0} ** MAX_POS,
+
+    const MAX_POS = 1024;
 
     pub fn init(allocator: std.mem.Allocator) !*PerBaseQualityStage {
         const self = try allocator.create(PerBaseQualityStage);
@@ -16,11 +17,11 @@ pub const PerBaseQualityStage = struct {
 
     pub fn process(ptr: *anyopaque, read: *const parser.Read) !bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        const limit = if (read.qual.len > MAX_POS) MAX_POS else read.qual.len;
-        for (0..limit) |pos| {
-            const q = read.qual[pos];
-            const phred = if (q >= 33) q - 33 else 0;
-            self.quality_sum[pos] += phred;
+        self.total_reads += 1;
+        const len = @min(read.seq.len, MAX_POS);
+        for (0..len) |pos| {
+            const q = @as(f64, @floatFromInt(read.qual[pos] - 33));
+            self.mean_quality[pos] = (self.mean_quality[pos] * @as(f64, @floatFromInt(self.base_count[pos])) + q) / @as(f64, @floatFromInt(self.base_count[pos] + 1));
             self.base_count[pos] += 1;
         }
         return true;
@@ -28,33 +29,12 @@ pub const PerBaseQualityStage = struct {
 
     pub fn processBlock(ptr: *anyopaque, block: *const @import("fastq_block").FastqColumnBlock) !bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        const column_ops = @import("column_ops");
-        
-        for (0..block.max_read_len) |col| {
-            if (col >= MAX_POS) break;
-            
-            // Count how many reads actually cover this position
-            var coverage: usize = 0;
-            for (0..block.read_count) |i| {
-                if (block.read_lengths[i] > col) coverage += 1;
-            }
-            
-            if (coverage > 0) {
-                self.quality_sum[col] += column_ops.sumQualityColumn(block.qualities[col], block.read_count);
-                self.base_count[col] += coverage;
-            }
-        }
-        return true;
-    }
-
-    pub fn processRawBatch(ptr: *anyopaque, reads: []const parser.Read) !bool {
-        const self: *@This() = @ptrCast(@alignCast(ptr));
-        for (reads) |read| {
-            const limit = if (read.qual.len > MAX_POS) MAX_POS else read.qual.len;
-            for (0..limit) |pos| {
-                const q = read.qual[pos];
-                const phred = if (q >= 33) q - 33 else 0;
-                self.quality_sum[pos] += phred;
+        for (0..block.read_count) |read_idx| {
+            self.total_reads += 1;
+            const len = @min(block.read_lengths[read_idx], MAX_POS);
+            for (0..len) |pos| {
+                const q = @as(f64, @floatFromInt(block.qualities[pos][read_idx]));
+                self.mean_quality[pos] = (self.mean_quality[pos] * @as(f64, @floatFromInt(self.base_count[pos])) + q) / @as(f64, @floatFromInt(self.base_count[pos] + 1));
                 self.base_count[pos] += 1;
             }
         }
@@ -62,31 +42,28 @@ pub const PerBaseQualityStage = struct {
     }
 
     pub fn finalize(ptr: *anyopaque) !void {
-        const self: *@This() = @ptrCast(@alignCast(ptr));
-        for (0..MAX_POS) |pos| {
-            if (self.base_count[pos] > 0) {
-                self.mean_quality[pos] = @as(f64, @floatFromInt(self.quality_sum[pos])) / @as(f64, @floatFromInt(self.base_count[pos]));
-            }
-        }
+        _ = ptr;
     }
 
     pub fn merge(ptr: *anyopaque, other_ptr: *anyopaque) !void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         const other: *@This() = @ptrCast(@alignCast(other_ptr));
-        for (0..MAX_POS) |i| {
-            self.quality_sum[i] += other.quality_sum[i];
-            self.base_count[i] += other.base_count[i];
+        self.total_reads += other.total_reads;
+        for (0..MAX_POS) |pos| {
+            const total_bases = self.base_count[pos] + other.base_count[pos];
+            if (total_bases > 0) {
+                self.mean_quality[pos] = (self.mean_quality[pos] * @as(f64, @floatFromInt(self.base_count[pos])) + other.mean_quality[pos] * @as(f64, @floatFromInt(other.base_count[pos]))) / @as(f64, @floatFromInt(total_bases));
+                self.base_count[pos] = total_bases;
+            }
         }
     }
 
     pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        writer.print("Per-base Quality Report (first 10 positions):\n", .{}) catch {};
-        const limit = if (MAX_POS > 10) 10 else MAX_POS;
-        for (0..limit) |pos| {
-            if (self.base_count[pos] > 0) {
-                writer.print("  Pos {d}: {d:.2}\n", .{ pos, self.mean_quality[pos] }) catch {};
-            }
+        writer.print("Per-base Quality Report:\n", .{}) catch {};
+        for (0..@min(10, MAX_POS)) |pos| {
+            if (self.base_count[pos] == 0) break;
+            writer.print("  Pos {d}: {d:.2}\n", .{ pos + 1, self.mean_quality[pos] }) catch {};
         }
     }
 
@@ -103,17 +80,29 @@ pub const PerBaseQualityStage = struct {
         try writer.writeAll("]}");
     }
 
+    pub fn processBitplanes(ptr: *anyopaque, bp: *const @import("bitplanes").BitplaneCore, block: *const @import("fastq_block").FastqColumnBlock) !bool {
+        _ = bp;
+        return processBlock(ptr, block);
+    }
+
+    pub fn clone(ptr: *anyopaque, allocator: std.mem.Allocator) anyerror!*anyopaque {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        const new_self = try allocator.create(@This());
+        new_self.* = self.*;
+        return new_self;
+    }
+
     pub fn stage(self: *const @This()) stage_mod.Stage {
         return .{
             .ptr = @constCast(self),
             .vtable = &.{
                 .process = process,
-                .processRawBatch = processRawBatch,
-                .processBlock = processBlock,
+                .processBitplanes = processBitplanes,
                 .finalize = finalize,
                 .report = report,
                 .reportJson = reportJson,
                 .merge = merge,
+                .clone = clone,
             },
         };
     }

@@ -32,8 +32,9 @@ pub const DuplicationStage = struct {
         }
     }
 
-    pub fn clone(self: *DuplicationStage, allocator: std.mem.Allocator) !*DuplicationStage {
-        const new_self = try allocator.create(DuplicationStage);
+    pub fn clone(ptr: *anyopaque, allocator: std.mem.Allocator) anyerror!*anyopaque {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        const new_self = try allocator.create(@This());
         new_self.* = .{
             .map = std.StringHashMap(void).init(allocator),
             .allocator = allocator,
@@ -243,7 +244,7 @@ pub const DuplicationStage = struct {
                 .report = report,
                 .reportJson = reportJson,
                 .merge = merge,
-                .clone = @ptrCast(&clone),
+                .clone = clone,
             },
         };
     }

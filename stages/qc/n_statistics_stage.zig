@@ -108,6 +108,13 @@ pub const NStatisticsStage = struct {
         try writer.print("\"n_statistics\": {{\"n10\": {d}, \"n25\": {d}, \"n50\": {d}, \"n75\": {d}, \"n90\": {d}}}", .{ self.n10, self.n25, self.n50, self.n75, self.n90 });
     }
 
+    pub fn clone(ptr: *anyopaque, allocator: std.mem.Allocator) anyerror!*anyopaque {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        const new_self = try allocator.create(@This());
+        new_self.* = self.*;
+        return new_self;
+    }
+
     pub fn stage(self: *const @This()) stage_mod.Stage {
         return .{
             .ptr = @constCast(self),
@@ -120,6 +127,7 @@ pub const NStatisticsStage = struct {
                 .report = report,
                 .reportJson = reportJson,
                 .merge = merge,
+                .clone = clone,
             },
         };
     }

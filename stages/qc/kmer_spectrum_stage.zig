@@ -7,6 +7,7 @@ const kmer_bitroll = @import("kmer_bitroll");
 pub const KmerSpectrumStage = struct {
     k: u8 = 5,
     counts: []u64,
+    total_kmers: u64 = 0,
     allocator: std.mem.Allocator,
 
     pub fn init(allocator: std.mem.Allocator) !*KmerSpectrumStage {
@@ -18,6 +19,7 @@ pub const KmerSpectrumStage = struct {
         self.* = KmerSpectrumStage{
             .k = k,
             .counts = counts,
+            .total_kmers = 0,
             .allocator = allocator,
         };
         return self;
@@ -170,6 +172,19 @@ pub const KmerSpectrumStage = struct {
         try writer.writeAll("]}");
     }
 
+    pub fn clone(ptr: *anyopaque, allocator: std.mem.Allocator) anyerror!*anyopaque {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        const new_self = try allocator.create(@This());
+        new_self.* = .{
+            .k = self.k,
+            .counts = try allocator.alloc(u64, self.counts.len),
+            .total_kmers = 0,
+            .allocator = allocator,
+        };
+        @memset(new_self.counts, 0);
+        return new_self;
+    }
+
     pub fn stage(self: *const @This()) stage_mod.Stage {
         return .{
             .ptr = @constCast(self),
@@ -182,6 +197,7 @@ pub const KmerSpectrumStage = struct {
                 .report = report,
                 .reportJson = reportJson,
                 .merge = merge,
+                .clone = clone,
             },
         };
     }

@@ -145,6 +145,13 @@ pub const NucleotideCompositionStage = struct {
         try writer.print("\"nucleotide_composition\": {{\"a\": {d}, \"c\": {d}, \"g\": {d}, \"t\": {d}, \"n\": {d}, \"total_bases\": {d}}}", .{ self.a, self.c, self.g, self.t, self.n, self.total_bases });
     }
 
+    pub fn clone(ptr: *anyopaque, allocator: std.mem.Allocator) anyerror!*anyopaque {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        const new_self = try allocator.create(@This());
+        new_self.* = self.*;
+        return new_self;
+    }
+
     pub fn stage(self: *const @This()) stage_mod.Stage {
         return .{
             .ptr = @constCast(self),
@@ -155,6 +162,7 @@ pub const NucleotideCompositionStage = struct {
                 .report = report,
                 .reportJson = reportJson,
                 .merge = merge,
+                .clone = clone,
             },
         };
     }

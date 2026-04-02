@@ -83,17 +83,24 @@ pub const QcStage = struct {
         try writer.print("\"qc\": {{\"total_reads\": {d}, \"total_bases\": {d}, \"mean_quality\": {d:.2}}}", .{ self.total_reads, self.total_bases, self.mean_quality });
     }
 
+    pub fn clone(ptr: *anyopaque, allocator: std.mem.Allocator) anyerror!*anyopaque {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        const new_self = try allocator.create(@This());
+        new_self.* = self.*;
+        return new_self;
+    }
+
     pub fn stage(self: *const @This()) stage_mod.Stage {
         return .{
             .ptr = @constCast(self),
             .vtable = &.{
                 .process = process,
-                .processBlock = processBlock,
                 .processBitplanes = processBitplanes,
                 .finalize = finalize,
                 .report = report,
                 .reportJson = reportJson,
                 .merge = merge,
+                .clone = clone,
             },
         };
     }

@@ -152,6 +152,13 @@ pub const AdapterDetectionStage = struct {
         try writer.print("\"adapter_detection\": {{\"total_suffix_kmers\": {d}, \"max_kmer_count\": {d}}}", .{ self.total_suffix_kmers, max_count });
     }
 
+    pub fn clone(ptr: *anyopaque, allocator: std.mem.Allocator) anyerror!*anyopaque {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        const new_self = try allocator.create(@This());
+        new_self.* = self.*;
+        return new_self;
+    }
+
     pub fn stage(self: *const @This()) stage_mod.Stage {
         return .{
             .ptr = @constCast(self),
@@ -164,6 +171,7 @@ pub const AdapterDetectionStage = struct {
                 .report = report,
                 .reportJson = reportJson,
                 .merge = merge,
+                .clone = clone,
             },
         };
     }
