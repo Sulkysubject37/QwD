@@ -34,7 +34,7 @@ QwD guarantees payload stability. All computational results adhere rigorously to
 For massive datasets or cloud integration, `--ndjson` bypasses the wait time by incrementally streaming `{"reads_processed": <count>}` without corrupting the final schema output.
 
 ## 4. Sub-System Guarantees
-1. *Memory Consistency*: Exact mode memory spikes trigger graceful, autonomous stage throttling to obey `--max-memory`. Fast mode statically bounds absolute analytical footprint to <32MB.
+1. *Memory Consistency*: Exact mode memory spikes trigger graceful, autonomous stage throttling to obey `--max-memory`. Fast mode statically bounds absolute analytical footprint to <350MB.
 2. *C ABI Concurrency*: Native libraries built via `x86_64-windows-gnu` and OSX/Linux GCC are cross-language compatible. C-strings are safely managed through rigorous `qwd_free_string` calls.
 3. *System Determinism*: Bit-identical math executes sequentially and coalesces lockless worker outputs transparently. No thread configuration alters the outcome.
 

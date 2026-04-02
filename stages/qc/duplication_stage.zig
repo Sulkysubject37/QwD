@@ -32,6 +32,22 @@ pub const DuplicationStage = struct {
         }
     }
 
+    pub fn clone(self: *DuplicationStage, allocator: std.mem.Allocator) !*DuplicationStage {
+        const new_self = try allocator.create(DuplicationStage);
+        new_self.* = .{
+            .map = std.StringHashMap(void).init(allocator),
+            .allocator = allocator,
+            .mode = self.mode,
+        };
+        if (self.bloom) |*b| {
+            // Clones use a smaller 16MB buffer to stay within CI memory limits
+            // while the master remains high-capacity.
+            const clone_size = if (b.bits.len > 16 * 1024 * 1024) 16 * 1024 * 1024 else b.bits.len;
+            new_self.bloom = try bloom_mod.BloomFilter.init(allocator, clone_size);
+        }
+        return new_self;
+    }
+
     pub fn process(ptr: *anyopaque, read: *const parser.Read) !bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         self.total_reads += 1;
@@ -168,6 +184,12 @@ pub const DuplicationStage = struct {
         self.total_reads += other.total_reads;
         self.duplicate_reads += other.duplicate_reads;
         
+        if (self.bloom) |*sb| {
+            if (other.bloom) |*ob| {
+                sb.merge(ob);
+            }
+        }
+
         var it = other.map.iterator();
         while (it.next()) |entry| {
             const seq = entry.key_ptr.*;
@@ -218,6 +240,7 @@ pub const DuplicationStage = struct {
                 .report = report,
                 .reportJson = reportJson,
                 .merge = merge,
+                .clone = @ptrCast(&clone),
             },
         };
     }

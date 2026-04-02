@@ -36,11 +36,13 @@ QwD features a smart probe (`isBgzf`) that inspects the first 20 bytes of a Gzip
 - **Path Selection**: Automatically chooses full parallel decompression for BGZF files or async prefetch sequential decompression for standard GZ files.
 
 ## Performance Profile (1M Reads)
-| Backend | Throughput | Memory Overhead |
+| Backend | Throughput | Memory Overhead (Backend Only) |
 | :--- | :--- | :--- |
 | **libdeflate (SIMD C)** | **~5.8M reads/sec** | ~2MB RSS per thread |
 | **QwD Native (Zig)** | **~5.3M reads/sec** | ~2MB RSS per thread |
 | **Standard GZ (Compat)** | **~3.1M reads/sec** | ~4MB RSS total |
+
+*Note: Total system footprint in `APPROX` mode is strictly governed at ~350MB RSS due to tiered Bloom Filters.*
 
 ## Future: Fused Decompression
 The roadmap includes **Fused Decompression (DTB)**. This will allow the `DeflateEngine` to decompress symbols directly into the 2-bit DNA bitplanes, bypassing the ASCII string stage entirely, projected to reach **>10M reads/sec**.

@@ -250,7 +250,7 @@ pub fn main() !void {
         while (try parser.next(record_buffer)) |read| {
             pipeline.read_count += 1;
             for (pipeline.stages.items) |stage| {
-                _ = try stage.process(&read);
+                _ = try stage.processRead(&read);
             }
         }
         try pipeline.finalize();

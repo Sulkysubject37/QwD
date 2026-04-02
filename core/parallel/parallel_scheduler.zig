@@ -169,8 +169,9 @@ pub const ParallelScheduler = struct {
             arena.* = std.heap.ArenaAllocator.init(self.sys_allocator);
 
             var t_stages = std.ArrayList(stage_mod.Stage).init(arena.allocator());
-            for (pipeline_ptr.stage_names.items) |name| {
-                try t_stages.append(try pipeline_ptr.createStageInstance(arena.allocator(), name));
+            for (pipeline_ptr.stages.items) |master_stage| {
+                const cloned = try master_stage.clone(arena.allocator());
+                try t_stages.append(cloned orelse try pipeline_ptr.createStageInstance(arena.allocator(), pipeline_ptr.stage_names.items[t_stages.items.len]));
             }
 
             const col_block = try arena.allocator().create(fastq_block.FastqColumnBlock);
@@ -303,8 +304,9 @@ pub const ParallelScheduler = struct {
             arena.* = std.heap.ArenaAllocator.init(self.sys_allocator);
 
             var t_stages = std.ArrayList(stage_mod.Stage).init(arena.allocator());
-            for (pipeline_ptr.stage_names.items) |name| {
-                try t_stages.append(try pipeline_ptr.createStageInstance(arena.allocator(), name));
+            for (pipeline_ptr.stages.items) |master_stage| {
+                const cloned = try master_stage.clone(arena.allocator());
+                try t_stages.append(cloned orelse try pipeline_ptr.createStageInstance(arena.allocator(), pipeline_ptr.stage_names.items[t_stages.items.len]));
             }
 
             const col_block = try arena.allocator().create(fastq_block.FastqColumnBlock);

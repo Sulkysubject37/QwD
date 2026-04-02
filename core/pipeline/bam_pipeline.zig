@@ -68,4 +68,28 @@ pub const BamPipeline = struct {
         self.scheduler.report(writer);
         try writer.print("=========================\n", .{});
     }
+
+    pub fn reportJson(self: *BamPipeline, writer: std.io.AnyWriter) !void {
+        try writer.print(
+            \\{{
+            \\  "version": "1.1.0",
+            \\  "record_count": {d},
+            \\  "stages": {{
+        , .{self.scheduler.record_count});
+
+        for (self.scheduler.stages.items, 0..) |stage, i| {
+            if (i > 0) try writer.writeAll(",");
+            try writer.writeAll("\n");
+            try stage.reportJson(writer);
+        }
+
+        try writer.writeAll("\n  }\n}\n");
+    }
+
+    pub fn reportJsonAlloc(self: *BamPipeline, allocator: std.mem.Allocator) ![*:0]const u8 {
+        var list = std.ArrayList(u8).init(allocator);
+        errdefer list.deinit();
+        try self.reportJson(list.writer().any());
+        return try list.toOwnedSliceSentinel(0);
+    }
 };

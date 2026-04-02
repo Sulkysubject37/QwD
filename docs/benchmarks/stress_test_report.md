@@ -22,7 +22,7 @@ To simulate high-density clinical sequencing runs, we generated a 1-Million read
 A critical requirement for this stress test was verifying the **Ordered Parity** of the parallel engine.
 
 *   **Bit-Exact Core:** The reconstruction of the FASTQ stream from the 11GB BGZF container achieved **100% fidelity**. Total read counts (100,000,000) and base counts (400,000,000) were bit-exact across all thread counts (T=1 through T=8). This confirms that records spanning BGZF block boundaries are handled correctly.
-*   **Probabilistic Metrics:** Because the test was conducted in **`APPROX` mode**, duplication detection utilized a **128MB Bloom Filter**. While the results are deterministic (consistent across runs), they are **probabilistic approximations** with a calculated false-positive rate, rather than absolute counts. This trade-off is required to maintain the O(1) memory bound at this scale.
+*   **Probabilistic Metrics:** Because the test was conducted in **`APPROX` mode**, duplication detection utilized a tiered Bloom Filter architecture. The **Master Stage** maintains a high-capacity **128MB Bloom Filter**, while individual worker threads utilize **16MB thread-local clones** which are bitwise-merged during the reduction phase. This ensures high-fidelity duplication detection while maintaining a low per-thread memory footprint.
 
 ---
 
@@ -41,11 +41,11 @@ As the dataset size increased from 10M to 100M, the scaling efficiency improved 
 
 ---
 
-## 3. Memory Footprint & Stability
+## 4. Memory Footprint & Stability
 One of the core innovations of QwD is the **O(1) Memory Bounding** in probabilistic mode. Despite a **10x increase** in data volume, the memory usage remained stable.
 
 - **Peak RSS (Observed):** ~350 MB
-- **Allocated Structures:** 128 MB (Bloom Filter) + 64 MB (Parallel Slots) + 40 MB (Maps)
+- **Allocated Structures:** 128 MB (Master Bloom Filter) + 16 MB per worker (Thread-Local Bloom Filters) + 64 MB (Parallel Slots) + 40 MB (Maps)
 - **Memory Leak Check:** The System/Real ratio remained proportional, confirming that all memory is strictly recycled within the `RingBuffer` and `Arena` lifecycle.
 
 ---

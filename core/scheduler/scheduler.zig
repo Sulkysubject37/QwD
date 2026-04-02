@@ -28,7 +28,7 @@ pub const Scheduler = struct {
         self.read_count += 1;
         var r = read; // Local copy allows stages to modify slices in-place
         for (self.stages.items) |stage| {
-            const continue_processing = try stage.process(&r);
+            const continue_processing = try stage.processRead(&r);
             if (!continue_processing) break;
         }
     }

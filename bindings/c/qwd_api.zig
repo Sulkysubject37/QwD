@@ -91,11 +91,7 @@ pub export fn qwd_bam_stats(path: [*:0]const u8) [*:0]const u8 {
     }
     bam_pipeline.finalize() catch return allocError(allocator, "BAM Finalize failed");
 
-    var buffer = std.ArrayList(u8).init(allocator);
-    defer buffer.deinit();
-    structured_output.writeJsonReport(bam_pipeline.scheduler, buffer.writer().any()) catch return allocError(allocator, "JSON report failed");
-
-    return std.fmt.allocPrintZ(allocator, "{s}", .{buffer.items}) catch return "{\"error\":\"final alloc failure\"}";
+    return bam_pipeline.reportJsonAlloc(allocator) catch return allocError(allocator, "JSON allocation failed");
 }
 
 pub export fn qwd_pipeline(config_path: [*:0]const u8, input_path: [*:0]const u8) [*:0]const u8 {
