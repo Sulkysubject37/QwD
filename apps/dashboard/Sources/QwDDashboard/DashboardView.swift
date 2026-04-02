@@ -109,7 +109,9 @@ struct ConfigurationView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         PresetTile(title: "Analytical Mode", icon: "bolt.shield", value: UserDefaults.standard.string(forKey: "qwd_analysis_mode") ?? "Exact")
                         PresetTile(title: "Decompression", icon: "shippingbox.and.arrow.backward", value: UserDefaults.standard.string(forKey: "qwd_gzip_mode") ?? "Auto")
-                        PresetTile(title: "Concurrency", icon: "cpu", value: "\(UserDefaults.standard.integer(forKey: "qwd_thread_count")) Threads")
+                        
+                        let tCount = UserDefaults.standard.integer(forKey: "qwd_thread_count")
+                        PresetTile(title: "Concurrency", icon: "cpu", value: "\(tCount == 0 ? 4 : tCount) Threads")
                     }
                     
                     Text("Change these in global Settings if needed.")

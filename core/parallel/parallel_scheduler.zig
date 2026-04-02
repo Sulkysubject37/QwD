@@ -15,7 +15,7 @@ pub const ParallelScheduler = struct {
     read_count: usize = 0,
 
     pub const Chunk = struct {
-        kind: enum { columnar, bitplane_batch, raw_bgzf },
+        kind: enum { columnar, bitplane_batch, raw_bgzf, raw_batch },
         data: union {
             columnar: struct {
                 plane_a: []u64,
@@ -36,6 +36,10 @@ pub const ParallelScheduler = struct {
             raw_bgzf: struct {
                 compressed: []u8,
                 slot_idx: usize,
+            },
+            raw_batch: struct {
+                reads: []parser_mod.Read,
+                count: usize,
             },
         },
     };
@@ -85,6 +89,40 @@ pub const ParallelScheduler = struct {
         while (true) {
             if (ctx_ptr.work_queue.pop()) |chunk| {
                 switch (chunk.kind) {
+                    .raw_batch => {
+                        const batch = chunk.data.raw_batch;
+                        ctx_ptr.local_read_count += batch.count;
+                        
+                        // Transpose raw reads into columnar block in the worker thread
+                        ctx_ptr.col_block.read_count = batch.count;
+                        for (batch.reads[0..batch.count], 0..) |read, rc| {
+                            const seq_len = @min(read.seq.len, ctx_ptr.col_block.max_read_len);
+                            for (0..seq_len) |p| {
+                                ctx_ptr.col_block.bases[p][rc] = read.seq[p];
+                                ctx_ptr.col_block.qualities[p][rc] = read.qual[p];
+                            }
+                            for (seq_len..ctx_ptr.col_block.max_read_len) |p| {
+                                ctx_ptr.col_block.bases[p][rc] = 0;
+                                ctx_ptr.col_block.qualities[p][rc] = 0;
+                            }
+                            ctx_ptr.col_block.read_lengths[rc] = @intCast(seq_len);
+                        }
+
+                        ctx_ptr.bitplanes.fromColumnBlock(ctx_ptr.col_block);
+                        ctx_ptr.bitplanes.cached_fused = null;
+
+                        for (ctx_ptr.stages) |stage| {
+                            _ = stage.processBitplanes(ctx_ptr.bitplanes, ctx_ptr.col_block) catch break;
+                        }
+
+                        // Free the raw read strings (they were duped by the producer)
+                        for (batch.reads[0..batch.count]) |read| {
+                            ctx_ptr.scheduler.sys_allocator.free(read.id);
+                            ctx_ptr.scheduler.sys_allocator.free(read.seq);
+                            ctx_ptr.scheduler.sys_allocator.free(read.qual);
+                        }
+                        ctx_ptr.scheduler.sys_allocator.free(batch.reads);
+                    },
                     .columnar => {
                         const col = chunk.data.columnar;
                         ctx_ptr.local_read_count += col.read_count;
@@ -195,47 +233,31 @@ pub const ParallelScheduler = struct {
         const record_buffer = try self.sys_allocator.alloc(u8, 1024 * 1024);
         defer self.sys_allocator.free(record_buffer);
 
-        var staging_col = try fastq_block.FastqColumnBlock.init(self.sys_allocator, batch_size, max_read_len);
-        defer staging_col.deinit();
-        var staging_bps = try bitplanes_mod.BitplaneCore.init(self.sys_allocator, batch_size, max_read_len);
-        defer staging_bps.deinit();
-
         while (true) {
+            var reads = try self.sys_allocator.alloc(parser_mod.Read, batch_size);
             var rc: usize = 0;
             while (rc < batch_size) : (rc += 1) {
                 const read = (try parser.next(record_buffer)) orelse break;
-                const seq_len = @min(read.seq.len, max_read_len);
-                for (0..seq_len) |p| {
-                    staging_col.bases[p][rc] = read.seq[p];
-                    staging_col.qualities[p][rc] = read.qual[p];
-                }
-                for (seq_len..max_read_len) |p| {
-                    staging_col.bases[p][rc] = 0;
-                    staging_col.qualities[p][rc] = 0;
-                }
-                staging_col.read_lengths[rc] = @intCast(seq_len);
+                // Dupe the read data because the worker loop needs stable strings
+                reads[rc] = .{
+                    .id = try self.sys_allocator.dupe(u8, read.id),
+                    .seq = try self.sys_allocator.dupe(u8, read.seq),
+                    .qual = try self.sys_allocator.dupe(u8, read.qual),
+                    .arena = null,
+                };
             }
 
-            if (rc == 0) break;
+            if (rc == 0) {
+                self.sys_allocator.free(reads);
+                break;
+            }
 
-            staging_col.read_count = rc;
-            staging_bps.fromColumnBlock(staging_col);
-
-            const total_bytes = max_read_len * batch_size;
             const c = Chunk{ 
-                .kind = .columnar,
+                .kind = .raw_batch,
                 .data = .{
-                    .columnar = .{
-                        .plane_a = try self.sys_allocator.dupe(u64, staging_bps.plane_a),
-                        .plane_c = try self.sys_allocator.dupe(u64, staging_bps.plane_c),
-                        .plane_g = try self.sys_allocator.dupe(u64, staging_bps.plane_g),
-                        .plane_t = try self.sys_allocator.dupe(u64, staging_bps.plane_t),
-                        .plane_n = try self.sys_allocator.dupe(u64, staging_bps.plane_n),
-                        .plane_mask = try self.sys_allocator.dupe(u64, staging_bps.plane_mask),
-                        .bases = try self.sys_allocator.dupe(u8, staging_col.bases[0].ptr[0..total_bytes]),
-                        .qualities = try self.sys_allocator.dupe(u8, staging_col.qualities[0].ptr[0..total_bytes]),
-                        .read_lengths = try self.sys_allocator.dupe(u16, staging_col.read_lengths),
-                        .read_count = rc,
+                    .raw_batch = .{
+                        .reads = reads,
+                        .count = rc,
                     },
                 },
             };

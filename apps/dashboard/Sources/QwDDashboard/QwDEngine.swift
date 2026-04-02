@@ -58,7 +58,7 @@ public final class QwDEngine {
         let result = await Task.detached(priority: .userInitiated) { () -> String? in
             return targetPath.withCString { cPath in
                 let resPtr = if isBam {
-                    qwd_bam_stats(cPath)
+                    qwd_bam_stats(cPath, Int32(threads))
                 } else {
                     qwd_fastq_qc_ex(cPath, Int32(threads), modeInt, gzipModeInt)
                 }

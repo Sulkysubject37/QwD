@@ -69,7 +69,8 @@ pub export fn qwd_fastq_qc_ex(path: [*:0]const u8, threads: c_int, mode: c_int, 
     return pipeline.reportJsonAlloc(allocator) catch return allocError(allocator, "JSON allocation failed");
 }
 
-pub export fn qwd_bam_stats(path: [*:0]const u8) [*:0]const u8 {
+pub export fn qwd_bam_stats(path: [*:0]const u8, threads: c_int) [*:0]const u8 {
+    _ = threads;
     const allocator = std.heap.c_allocator;
     var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();
@@ -179,7 +180,7 @@ pub export fn qwd_fastq_qc_ex_r(path: [*c]const [*c]const u8, threads: [*c]const
 
 pub export fn qwd_bam_stats_r(path: [*c]const [*c]const u8, out: [*c]u8, max_len: [*c]const c_int) void {
     const p = path[0];
-    const res = qwd_bam_stats(p);
+    const res = qwd_bam_stats(p, 1);
     defer qwd_free_string(res);
 
     const len = std.mem.indexOfSentinel(u8, 0, res);

@@ -6,6 +6,7 @@ import Foundation
 
 public struct QCReport: Codable {
     public let version: String
+    public let thread_count: Int
     public let read_count: Int
     public let stages: QCStages
 }

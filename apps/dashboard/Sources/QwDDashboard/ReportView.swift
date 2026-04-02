@@ -192,7 +192,7 @@ struct HeaderBar: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Quality Control Report")
                     .font(.system(size: 28, weight: .bold, design: .rounded))
-                Text("Engine v\(report.version) • \(report.read_count.formatted()) Sequences")
+                Text("Engine v\(report.version) • \(report.read_count.formatted()) Sequences • \(report.thread_count) Threads")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
