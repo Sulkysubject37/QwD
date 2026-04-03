@@ -7,49 +7,7 @@ pub const OutputFormat = enum {
     ndjson,
 };
 
-pub fn writeJsonReport(scheduler: anytype, writer: std.io.AnyWriter) !void {
-    const T = @TypeOf(scheduler);
-    const ChildT = switch (@typeInfo(T)) {
-        .Pointer => |ptr_info| ptr_info.child,
-        else => T,
-    };
-    
-    try writer.writeAll("{");
-    try writer.writeAll("\"version\": \"1.1.0\",");
-    
-    var count: usize = 0;
-    if (comptime @hasField(ChildT, "read_count")) {
-        count = if (@TypeOf(scheduler.read_count) == std.atomic.Value(usize)) 
-            scheduler.read_count.load(.monotonic) 
-        else 
-            scheduler.read_count;
-    } else if (comptime @hasField(ChildT, "record_count")) {
-        count = scheduler.record_count;
-    }
-    try writer.print("\"read_count\": {d},", .{count});
-    
-    try writer.writeAll("\"stages\": {");
-    
-    var first = true;
-    if (comptime @hasField(ChildT, "master_stages")) {
-        for (scheduler.master_stages.items) |stage| {
-            if (!first) try writer.writeAll(",");
-            try stage.reportJson(writer);
-            first = false;
-        }
-    } else if (comptime @hasField(ChildT, "stages")) {
-        for (scheduler.stages.items) |stage| {
-            if (!first) try writer.writeAll(",");
-            try stage.reportJson(writer);
-            first = false;
-        }
-    }
-    
-    try writer.writeAll("}");
-    try writer.writeAll("}");
-}
-
-pub fn writeNdjsonReport(scheduler: anytype, writer: std.io.AnyWriter) !void {
+pub fn writeNdjsonReport(scheduler: anytype, writer: std.io.AnyWriter) anyerror!void {
     const T = @TypeOf(scheduler);
     const ChildT = switch (@typeInfo(T)) {
         .Pointer => |ptr_info| ptr_info.child,
@@ -66,7 +24,7 @@ pub fn writeNdjsonReport(scheduler: anytype, writer: std.io.AnyWriter) !void {
         try writer.print("\"read_count\": {d}", .{count});
     } else if (comptime @hasField(ChildT, "record_count")) {
         count = scheduler.record_count;
-        try writer.print("\"record_count\": {d}", .{count});
+        try writer.print("\"read_count\": {d}", .{count});
     }
     try writer.writeAll("}\n");
 
