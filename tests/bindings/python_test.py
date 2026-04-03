@@ -36,8 +36,8 @@ class TestPythonBindings(unittest.TestCase):
         res = qwd.bamstats(self.bam_path)
         # Note: BamReader stub returns predefined records, ignoring the actual file content for now,
         # but the file needs to exist to pass the openFile check.
-        self.assertIn("record_count", res)
-        self.assertGreaterEqual(res["record_count"], 0)
+        self.assertIn("read_count", res)
+        self.assertGreaterEqual(res["read_count"], 0)
 
 if __name__ == '__main__':
     unittest.main()
