@@ -1,0 +1,78 @@
+name: QwD Ecosystem (Bindings)
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'core/**'
+      - 'bindings/**'
+      - 'tests/bindings/**'
+      - '.github/workflows/bindings.yml'
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-python:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: ""
+          - os: macos-latest
+            target: ""
+          - os: windows-latest
+            target: "-Dtarget=x86_64-windows-gnu"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v1
+        with:
+          version: 0.13.0
+      - name: Install libdeflate (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y libdeflate-dev
+      - name: Install libdeflate (macOS)
+        if: matrix.os == 'macos-latest'
+        run: brew install libdeflate
+      - name: Build Shared Library
+        run: zig build -Doptimize=ReleaseFast ${{ matrix.target }}
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+      - name: Run Python Tests
+        run: |
+          python -m pip install --upgrade pip pytest
+          pip install ./bindings/python
+          pytest tests/bindings/
+
+  test-r:
+    # R CI is usually more stable on Unix runners
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v1
+        with:
+          version: 0.13.0
+      - name: Install libdeflate
+        run: sudo apt-get update && sudo apt-get install -y libdeflate-dev
+      - name: Build Shared Library
+        run: zig build -Doptimize=ReleaseFast
+      - name: Set up R
+        uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+      - name: Install R dependencies
+        uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::rcmdcheck, any::jsonlite
+          needs: check
+          working-directory: bindings/r
+      - name: Run R Tests
+        uses: r-lib/actions/check-r-package@v2
+        with:
+          working-directory: bindings/r
+          error-on: '"error"'

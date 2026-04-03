@@ -1,0 +1,66 @@
+name: QwD Core (Zig)
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'core/**'
+      - 'stages/**'
+      - 'bindings/c/**'
+      - 'build.zig'
+      - '.github/workflows/core.yml'
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build_and_test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: ""
+          - os: macos-latest
+            target: ""
+          - os: windows-latest
+            target: "-Dtarget=x86_64-windows-gnu"
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v1
+        with:
+          version: 0.13.0
+
+      - name: Install libdeflate (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y libdeflate-dev
+
+      - name: Install libdeflate (macOS)
+        if: matrix.os == 'macos-latest'
+        run: brew install libdeflate
+
+      - name: Generate Test Data
+        run: python3 scripts/gen_test_data.py
+
+      - name: Build Core
+        run: zig build -Doptimize=ReleaseSafe ${{ matrix.target }}
+
+      - name: Run Unit Tests
+        run: zig build test --summary all ${{ matrix.target }}
+
+      - name: JSON Contract Validation (Unix)
+        if: matrix.os != 'windows-latest'
+        run: |
+          ./zig-out/bin/qwd qc tests/fixtures/sample.fastq.gz --mode exact --json > report.json
+          python3 -c "import json; json.load(open('report.json'))"
+          echo "JSON Schema Validated"
+
+      - name: JSON Contract Validation (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          .\zig-out\bin\qwd.exe qc tests/fixtures/sample.fastq.gz --mode exact --json | Out-File -FilePath report.json -Encoding utf8
+          python3 -c "import json; json.load(open('report.json'))"
+          echo "JSON Schema Validated"
