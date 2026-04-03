@@ -76,18 +76,20 @@ pub const InsertSizeStage = struct {
             try writer.print("{d}", .{bin_sum});
             first = false;
         }
-        try writer.writeAll("]}}");
+        try writer.writeAll("]}");
     }
+
+    const VTABLE = bam_stage.BamStage.VTable{
+        .process = process,
+        .finalize = finalize,
+        .report = report,
+        .reportJson = reportJson,
+    };
 
     pub fn stage(self: *@This()) bam_stage.BamStage {
         return .{
             .ptr = self,
-            .vtable = &.{
-                .process = process,
-                .finalize = finalize,
-                .report = report,
-                .reportJson = reportJson,
-            },
+            .vtable = &VTABLE,
         };
     }
 };

@@ -11,12 +11,14 @@ pub const DuplicationStage = struct {
     total_reads: usize = 0,
     duplicate_reads: usize = 0,
     mode: mode_mod.Mode = .EXACT,
+    seq_buf: []u8,
 
     pub fn init(allocator: std.mem.Allocator) !*DuplicationStage {
         const self = try allocator.create(DuplicationStage);
         self.* = .{
             .map = std.StringHashMap(void).init(allocator),
             .allocator = allocator,
+            .seq_buf = try allocator.alloc(u8, 1024 * 1024),
         };
         return self;
     }
@@ -30,6 +32,7 @@ pub const DuplicationStage = struct {
         if (self.bloom) |*b| {
             b.deinit(self.allocator);
         }
+        self.allocator.free(self.seq_buf);
     }
 
     pub fn clone(ptr: *anyopaque, allocator: std.mem.Allocator) anyerror!*anyopaque {
@@ -39,10 +42,9 @@ pub const DuplicationStage = struct {
             .map = std.StringHashMap(void).init(allocator),
             .allocator = allocator,
             .mode = self.mode,
+            .seq_buf = try allocator.alloc(u8, self.seq_buf.len),
         };
         if (self.bloom) |*b| {
-            // Clones use a smaller 16MB buffer to stay within CI memory limits
-            // while the master remains high-capacity.
             const clone_size = if (b.bits.len > 16 * 1024 * 1024) 16 * 1024 * 1024 else b.bits.len;
             new_self.bloom = try bloom_mod.BloomFilter.init(allocator, clone_size);
         }
@@ -93,13 +95,14 @@ pub const DuplicationStage = struct {
 
     pub fn processBlock(ptr: *anyopaque, block: *const @import("fastq_block").FastqColumnBlock) !bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        var seq_buf: [1024]u8 = undefined;
 
         for (0..block.read_count) |read_idx| {
             self.total_reads += 1;
             const len = block.read_lengths[read_idx];
-            for (0..len) |i| seq_buf[i] = block.bases[i][read_idx];
-            var seq = seq_buf[0..len];
+            if (len > self.seq_buf.len) continue;
+
+            for (0..len) |i| self.seq_buf[i] = block.bases[i][read_idx];
+            var seq = self.seq_buf[0..len];
             if (self.mode == .APPROX and seq.len > 50) seq = seq[0..50];
 
             if (self.mode == .APPROX) {
@@ -112,7 +115,6 @@ pub const DuplicationStage = struct {
                     continue;
                 }
             }
-
 
             if (self.mode == .EXACT or self.map.count() < 200000) {
                 if (self.map.contains(seq)) {
@@ -202,7 +204,7 @@ pub const DuplicationStage = struct {
                 // We must count it as a duplicate now.
                 self.duplicate_reads += 1;
             } else {
-                const duped = self.allocator.dupe(u8, seq) catch continue;
+                const duped = try self.allocator.dupe(u8, seq);
                 const gop = self.map.getOrPut(duped) catch {
                     self.allocator.free(duped);
                     continue;
@@ -232,20 +234,22 @@ pub const DuplicationStage = struct {
         try writer.print("\"duplication\": {{\"total_reads\": {d}, \"duplicate_reads\": {d}, \"duplication_ratio\": {d:.4}}}", .{ self.total_reads, self.duplicate_reads, ratio });
     }
 
+    const VTABLE = stage_mod.Stage.VTable{
+        .process = process,
+        .processRawBatch = processRawBatch,
+        .processBlock = processBlock,
+        .processBitplanes = processBitplanes,
+        .finalize = finalize,
+        .report = report,
+        .reportJson = reportJson,
+        .merge = merge,
+        .clone = clone,
+    };
+
     pub fn stage(self: *const @This()) stage_mod.Stage {
         return .{
             .ptr = @constCast(self),
-            .vtable = &.{
-                .process = process,
-                .processRawBatch = processRawBatch,
-                .processBlock = processBlock,
-                .processBitplanes = processBitplanes,
-                .finalize = finalize,
-                .report = report,
-                .reportJson = reportJson,
-                .merge = merge,
-                .clone = clone,
-            },
+            .vtable = &VTABLE,
         };
     }
 };

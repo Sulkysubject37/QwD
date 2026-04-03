@@ -42,15 +42,17 @@ pub const CoverageStage = struct {
         try writer.print("\"coverage\": {{\"aligned_bases\": {d}, \"reference_length\": {d}, \"coverage_estimate\": {d:.2}}}", .{ self.total_aligned_bases, self.reference_length, self.coverage_estimate });
     }
 
+    const VTABLE = bam_stage.BamStage.VTable{
+        .process = process,
+        .finalize = finalize,
+        .report = report,
+        .reportJson = reportJson,
+    };
+
     pub fn stage(self: *@This()) bam_stage.BamStage {
         return .{
             .ptr = self,
-            .vtable = &.{
-                .process = process,
-                .finalize = finalize,
-                .report = report,
-                .reportJson = reportJson,
-            },
+            .vtable = &VTABLE,
         };
     }
 };

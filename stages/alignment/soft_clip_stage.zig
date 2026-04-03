@@ -35,15 +35,17 @@ pub const SoftClipStage = struct {
         try writer.print("\"soft_clipping\": {{\"soft_clipped_reads\": {d}, \"soft_clipped_bases\": {d}}}", .{ self.soft_clipped_reads, self.soft_clipped_bases });
     }
 
+    const VTABLE = bam_stage.BamStage.VTable{
+        .process = process,
+        .finalize = finalize,
+        .report = report,
+        .reportJson = reportJson,
+    };
+
     pub fn stage(self: *@This()) bam_stage.BamStage {
         return .{
             .ptr = self,
-            .vtable = &.{
-                .process = process,
-                .finalize = finalize,
-                .report = report,
-                .reportJson = reportJson,
-            },
+            .vtable = &VTABLE,
         };
     }
 };

@@ -41,15 +41,17 @@ pub const ErrorRateStage = struct {
         try writer.print("\"error_rate_stats\": {{\"aligned_bases\": {d}, \"mismatches\": {d}, \"error_rate\": {d:.6}}}", .{ self.aligned_bases, self.mismatches, self.error_rate });
     }
 
+    const VTABLE = bam_stage.BamStage.VTable{
+        .process = process,
+        .finalize = finalize,
+        .report = report,
+        .reportJson = reportJson,
+    };
+
     pub fn stage(self: *@This()) bam_stage.BamStage {
         return .{
             .ptr = self,
-            .vtable = &.{
-                .process = process,
-                .finalize = finalize,
-                .report = report,
-                .reportJson = reportJson,
-            },
+            .vtable = &VTABLE,
         };
     }
 };

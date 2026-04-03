@@ -16,6 +16,7 @@ const bitplanes_mod = @import("bitplanes");
 
 pub const Pipeline = struct {
     arena: std.heap.ArenaAllocator,
+    sys_allocator: std.mem.Allocator,
     scheduler: ?scheduler_mod.Scheduler = null,
     parallel_scheduler: ?parallel_scheduler.ParallelScheduler = null,
     stage_names: std.ArrayList([]const u8),
@@ -28,6 +29,7 @@ pub const Pipeline = struct {
     pub fn init(allocator: std.mem.Allocator, config: ?pipeline_config.PipelineConfig) Pipeline {
         return Pipeline{
             .arena = std.heap.ArenaAllocator.init(allocator),
+            .sys_allocator = allocator,
             .stage_names = std.ArrayList([]const u8).init(allocator),
             .stages = std.ArrayList(stage_mod.Stage).init(allocator),
             .config = config,
@@ -38,8 +40,8 @@ pub const Pipeline = struct {
     pub fn deinit(self: *Pipeline) void {
         if (self.parallel_scheduler) |*ps| ps.deinit();
         if (self.scheduler) |*s| s.deinit();
-        self.stages.deinit();
         self.stage_names.deinit();
+        self.stages.deinit();
         self.arena.deinit();
     }
 
@@ -72,16 +74,16 @@ pub const Pipeline = struct {
         var fr = input_file.reader();
 
         if (self.parallel_scheduler) |*ps| {
-            if (is_gz and (self.gzip_mode == .NATIVE or self.gzip_mode == .AUTO)) {
+            if (is_gz and (self.gzip_mode == .NATIVE or self.gzip_mode == .AUTO or self.gzip_mode == .LIBDEFLATE)) {
                 // Check if BGZF
                 try input_file.seekTo(0);
                 const is_bgzf = @import("bgzf_native_reader").BgzfNativeReader.isBgzf(input_file.reader());
                 try input_file.seekTo(0);
 
                 if (is_bgzf) {
-                    var native_reader = try @import("bgzf_native_reader").BgzfNativeReader.init(allocator, input_file.reader().any());
+                    var native_reader = try @import("bgzf_native_reader").BgzfNativeReader.init(self.sys_allocator, input_file.reader().any());
                     defer native_reader.deinit();
-                    var chunk_builder = @import("bgzf_chunk_builder").BgzfChunkBuilder.init(allocator, &native_reader);
+                    var chunk_builder = @import("bgzf_chunk_builder").BgzfChunkBuilder.init(self.sys_allocator, &native_reader);
                     try ps.run_chunked(&chunk_builder, self);
                     return;
                 }
@@ -160,11 +162,22 @@ pub const Pipeline = struct {
     }
 
     pub fn reportJson(self: *Pipeline, writer: std.io.AnyWriter) !void {
-        if (self.parallel_scheduler) |*ps| {
-            try @import("structured_output").writeJsonReport(ps, writer);
-        } else if (self.scheduler) |*s| {
-            try @import("structured_output").writeJsonReport(s, writer);
+        const thread_count: usize = if (self.parallel_scheduler) |ps| ps.num_threads else 1;
+        try writer.print(
+            \\{{
+            \\  "version": "1.1.0",
+            \\  "thread_count": {d},
+            \\  "read_count": {d},
+            \\  "stages": {{
+        , .{ thread_count, self.read_count });
+
+        for (self.stages.items, 0..) |stage, i| {
+            if (i > 0) try writer.writeAll(",");
+            try writer.writeAll("\n    ");
+            try stage.reportJson(writer);
         }
+
+        try writer.writeAll("\n  }\n}\n");
     }
 
     pub fn reportJsonAlloc(self: *Pipeline, allocator: std.mem.Allocator) ![*:0]const u8 {

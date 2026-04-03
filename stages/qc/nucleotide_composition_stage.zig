@@ -152,18 +152,20 @@ pub const NucleotideCompositionStage = struct {
         return new_self;
     }
 
+    const VTABLE = stage_mod.Stage.VTable{
+        .process = process,
+        .processBitplanes = processBitplanes,
+        .finalize = finalize,
+        .report = report,
+        .reportJson = reportJson,
+        .merge = merge,
+        .clone = clone,
+    };
+
     pub fn stage(self: *const @This()) stage_mod.Stage {
         return .{
             .ptr = @constCast(self),
-            .vtable = &.{
-                .process = process,
-                .processBitplanes = processBitplanes,
-                .finalize = finalize,
-                .report = report,
-                .reportJson = reportJson,
-                .merge = merge,
-                .clone = clone,
-            },
+            .vtable = &VTABLE,
         };
     }
 };

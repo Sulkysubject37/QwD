@@ -111,15 +111,15 @@ jobs:
         if: "!matrix.is_windows"
         run: |
           QWD="./zig-out/bin/qwd"
-          $QWD qc --mode approx tests/fixtures/sample.fastq --threads 1 > res_1t_approx.txt
-          $QWD qc --mode approx tests/fixtures/sample.fastq --threads 8 > res_8t_approx.txt
+          $QWD qc tests/fixtures/sample.fastq --mode approx --threads 1 > res_1t_approx.txt
+          $QWD qc tests/fixtures/sample.fastq --mode approx --threads 8 > res_8t_approx.txt
 
       - name: Approx Mode Validation (Windows)
         if: matrix.is_windows
         run: |
           $QWD = ".\zig-out\bin\qwd.exe"
-          & $QWD qc --mode approx tests/fixtures/sample.fastq --threads 1 | Out-File -FilePath res_1t_approx.txt -Encoding utf8
-          & $QWD qc --mode approx tests/fixtures/sample.fastq --threads 8 | Out-File -FilePath res_8t_approx.txt -Encoding utf8
+          & $QWD qc tests/fixtures/sample.fastq --mode approx --threads 1 | Out-File -FilePath res_1t_approx.txt -Encoding utf8
+          & $QWD qc tests/fixtures/sample.fastq --mode approx --threads 8 | Out-File -FilePath res_8t_approx.txt -Encoding utf8
 
       - name: Phase Q Memory Bounding (Unix)
         if: "!matrix.is_windows"

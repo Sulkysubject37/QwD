@@ -8,12 +8,14 @@ pub const OverrepresentedStage = struct {
     allocator: std.mem.Allocator,
     total_reads: usize = 0,
     mode: mode_mod.Mode = .EXACT,
+    seq_buf: []u8,
 
     pub fn init(allocator: std.mem.Allocator) !*OverrepresentedStage {
         const self = try allocator.create(OverrepresentedStage);
         self.* = .{
             .map = std.StringHashMap(u64).init(allocator),
             .allocator = allocator,
+            .seq_buf = try allocator.alloc(u8, 1024 * 1024),
         };
         return self;
     }
@@ -24,6 +26,7 @@ pub const OverrepresentedStage = struct {
             self.allocator.free(key_ptr.*);
         }
         self.map.deinit();
+        self.allocator.free(self.seq_buf);
     }
 
     pub fn process(ptr: *anyopaque, read: *const parser.Read) !bool {
@@ -64,15 +67,16 @@ pub const OverrepresentedStage = struct {
 
     pub fn processBlock(ptr: *anyopaque, block: *const @import("fastq_block").FastqColumnBlock) !bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        var seq_buf: [1024]u8 = undefined;
 
         for (0..block.read_count) |read_idx| {
             self.total_reads += 1;
             if (self.mode == .APPROX and self.total_reads > 50_000) continue;
 
             const len = block.read_lengths[read_idx];
-            for (0..len) |i| seq_buf[i] = block.bases[i][read_idx];
-            const seq = seq_buf[0..len];
+            if (len > self.seq_buf.len) continue;
+
+            for (0..len) |i| self.seq_buf[i] = block.bases[i][read_idx];
+            const seq = self.seq_buf[0..len];
 
             if (self.mode == .EXACT or self.map.count() < 100000) {
                 if (self.map.getPtr(seq)) |v| {
@@ -144,7 +148,7 @@ pub const OverrepresentedStage = struct {
             if (self.map.getPtr(entry.key_ptr.*)) |v| {
                 v.* += entry.value_ptr.*;
             } else {
-                const duped_seq = self.allocator.dupe(u8, entry.key_ptr.*) catch continue;
+                const duped_seq = try self.allocator.dupe(u8, entry.key_ptr.*);
                 const v = self.map.getOrPut(duped_seq) catch {
                     self.allocator.free(duped_seq);
                     continue;
@@ -203,6 +207,7 @@ pub const OverrepresentedStage = struct {
         try @import("structured_output").writeJsonEscaped(writer, top_seq);
         try writer.print("\", \"most_frequent_count\": {d}}}", .{top_count});
     }
+
     pub fn clone(ptr: *anyopaque, allocator: std.mem.Allocator) anyerror!*anyopaque {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         const new_self = try allocator.create(@This());
@@ -210,24 +215,27 @@ pub const OverrepresentedStage = struct {
             .map = std.StringHashMap(u64).init(allocator),
             .allocator = allocator,
             .mode = self.mode,
+            .seq_buf = try allocator.alloc(u8, self.seq_buf.len),
         };
         return new_self;
     }
 
+    const VTABLE = stage_mod.Stage.VTable{
+        .process = process,
+        .processRawBatch = processRawBatch,
+        .processBlock = processBlock,
+        .processBitplanes = processBitplanes,
+        .finalize = finalize,
+        .report = report,
+        .reportJson = reportJson,
+        .merge = merge,
+        .clone = clone,
+    };
+
     pub fn stage(self: *const @This()) stage_mod.Stage {
         return .{
             .ptr = @constCast(self),
-            .vtable = &.{
-                .process = process,
-                .processRawBatch = processRawBatch,
-                .processBlock = processBlock,
-                .processBitplanes = processBitplanes,
-                .finalize = finalize,
-                .report = report,
-                .reportJson = reportJson,
-                .merge = merge,
-                .clone = clone,
-            },
+            .vtable = &VTABLE,
         };
     }
 };

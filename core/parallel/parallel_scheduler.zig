@@ -1,17 +1,13 @@
 const std = @import("std");
-const parser_mod = @import("parser");
-const stage_mod = @import("stage");
-const fastq_block = @import("fastq_block");
 const ring_buffer_mod = @import("ring_buffer");
+const fastq_block = @import("fastq_block");
 const bitplanes_mod = @import("bitplanes");
-const mode_mod = @import("mode");
+const stage_mod = @import("stage");
+const parser_mod = @import("parser");
 
 pub const ParallelScheduler = struct {
-    num_threads: usize,
     sys_allocator: std.mem.Allocator,
-    gzip_mode: mode_mod.GzipMode = .AUTO,
-    
-    // REDUCER STATE
+    num_threads: usize,
     read_count: usize = 0,
 
     pub const Chunk = struct {
@@ -52,9 +48,9 @@ pub const ParallelScheduler = struct {
     };
 
     pub fn init(sys_allocator: std.mem.Allocator, num_threads: usize) ParallelScheduler {
-        return ParallelScheduler{
-            .num_threads = if (num_threads == 0) 1 else num_threads,
+        return .{
             .sys_allocator = sys_allocator,
+            .num_threads = num_threads,
         };
     }
 
@@ -62,38 +58,34 @@ pub const ParallelScheduler = struct {
         _ = self;
     }
 
-    pub fn registerStage(self: *ParallelScheduler, stage: stage_mod.Stage) !void {
-        _ = self; _ = stage;
-    }
-
-    pub fn process(self: *ParallelScheduler, read: parser_mod.Read) !void {
-        _ = self; _ = read;
-    }
-
     const ThreadContext = struct {
         scheduler: *ParallelScheduler,
         work_queue: *ring_buffer_mod.RingBuffer(Chunk),
+        bgzf_queue: ?*ring_buffer_mod.RingBuffer(Chunk) = null,
         done_flag: *std.atomic.Value(bool),
         stages: []stage_mod.Stage,
         arena: *std.heap.ArenaAllocator,
-        local_read_count: usize = 0,
-        
         bitplanes: *bitplanes_mod.BitplaneCore,
         col_block: *fastq_block.FastqColumnBlock,
-        
-        // Parallel BGZF Decompression
         slots: []DecompSlot,
+        local_read_count: usize = 0,
     };
 
     fn workerLoop(ctx_ptr: *ThreadContext) void {
+        const allocator = ctx_ptr.scheduler.sys_allocator;
         while (true) {
-            if (ctx_ptr.work_queue.pop()) |chunk| {
+            var chunk_opt = ctx_ptr.work_queue.pop();
+            // Prioritize decompressed/ready work, then bgzf decompression work
+            if (chunk_opt == null and ctx_ptr.bgzf_queue != null) {
+                chunk_opt = ctx_ptr.bgzf_queue.?.pop();
+            }
+
+            if (chunk_opt) |chunk| {
                 switch (chunk.kind) {
                     .raw_batch => {
                         const batch = chunk.data.raw_batch;
                         ctx_ptr.local_read_count += batch.count;
                         
-                        // Transpose raw reads into columnar block in the worker thread
                         ctx_ptr.col_block.read_count = batch.count;
                         for (batch.reads[0..batch.count], 0..) |read, rc| {
                             const seq_len = @min(read.seq.len, ctx_ptr.col_block.max_read_len);
@@ -115,13 +107,12 @@ pub const ParallelScheduler = struct {
                             _ = stage.processBitplanes(ctx_ptr.bitplanes, ctx_ptr.col_block) catch break;
                         }
 
-                        // Free the raw read strings (they were duped by the producer)
                         for (batch.reads[0..batch.count]) |read| {
-                            ctx_ptr.scheduler.sys_allocator.free(read.id);
-                            ctx_ptr.scheduler.sys_allocator.free(read.seq);
-                            ctx_ptr.scheduler.sys_allocator.free(read.qual);
+                            allocator.free(read.id);
+                            allocator.free(read.seq);
+                            allocator.free(read.qual);
                         }
-                        ctx_ptr.scheduler.sys_allocator.free(batch.reads);
+                        allocator.free(batch.reads);
                     },
                     .columnar => {
                         const col = chunk.data.columnar;
@@ -133,32 +124,26 @@ pub const ParallelScheduler = struct {
                         @memcpy(ctx_ptr.bitplanes.plane_t, col.plane_t);
                         @memcpy(ctx_ptr.bitplanes.plane_n, col.plane_n);
                         @memcpy(ctx_ptr.bitplanes.plane_mask, col.plane_mask);
-                        
-                        @memcpy(ctx_ptr.col_block.read_lengths[0..col.read_count], col.read_lengths[0..col.read_count]);
-                        
-                        // Copy raw bases and qualities
-                        const total_raw = col.read_count * ctx_ptr.col_block.max_read_len;
-                        const dest_bases = ctx_ptr.col_block.bases[0].ptr[0..total_raw];
-                        const dest_quals = ctx_ptr.col_block.qualities[0].ptr[0..total_raw];
-                        @memcpy(dest_bases, col.bases[0..total_raw]);
-                        @memcpy(dest_quals, col.qualities[0..total_raw]);
-                        
+                        @memcpy(ctx_ptr.col_block.read_lengths, col.read_lengths);
                         ctx_ptr.col_block.read_count = col.read_count;
-                        ctx_ptr.bitplanes.cached_fused = null;
+                        
+                        const total_bytes = ctx_ptr.col_block.max_read_len * 1024;
+                        @memcpy(ctx_ptr.col_block.bases[0].ptr[0..total_bytes], col.bases);
+                        @memcpy(ctx_ptr.col_block.qualities[0].ptr[0..total_bytes], col.qualities);
 
                         for (ctx_ptr.stages) |stage| {
                             _ = stage.processBitplanes(ctx_ptr.bitplanes, ctx_ptr.col_block) catch break;
                         }
                         
-                        ctx_ptr.scheduler.sys_allocator.free(col.plane_a);
-                        ctx_ptr.scheduler.sys_allocator.free(col.plane_c);
-                        ctx_ptr.scheduler.sys_allocator.free(col.plane_g);
-                        ctx_ptr.scheduler.sys_allocator.free(col.plane_t);
-                        ctx_ptr.scheduler.sys_allocator.free(col.plane_n);
-                        ctx_ptr.scheduler.sys_allocator.free(col.plane_mask);
-                        ctx_ptr.scheduler.sys_allocator.free(col.bases);
-                        ctx_ptr.scheduler.sys_allocator.free(col.qualities);
-                        ctx_ptr.scheduler.sys_allocator.free(col.read_lengths);
+                        allocator.free(col.plane_a);
+                        allocator.free(col.plane_c);
+                        allocator.free(col.plane_g);
+                        allocator.free(col.plane_t);
+                        allocator.free(col.plane_n);
+                        allocator.free(col.plane_mask);
+                        allocator.free(col.bases);
+                        allocator.free(col.qualities);
+                        allocator.free(col.read_lengths);
                     },
                     .bitplane_batch => {
                         const batch = chunk.data.bitplane_batch;
@@ -171,6 +156,12 @@ pub const ParallelScheduler = struct {
                         const bgzf = chunk.data.raw_bgzf;
                         const slot = &ctx_ptr.slots[bgzf.slot_idx];
                         
+                        if (bgzf.compressed.len == 0) {
+                            slot.actual_len = 0;
+                            slot.ready.store(true, .release);
+                            continue;
+                        }
+
                         const actual_len = @import("deflate_wrapper").DeflateWrapper.decompressBgzfBlock(
                             bgzf.compressed, 
                             slot.decompressed
@@ -178,12 +169,13 @@ pub const ParallelScheduler = struct {
                         
                         slot.actual_len = actual_len;
                         slot.ready.store(true, .release);
-                        ctx_ptr.scheduler.sys_allocator.free(bgzf.compressed);
+                        allocator.free(bgzf.compressed);
                     }
                 }
             } else {
                 if (ctx_ptr.done_flag.load(.acquire)) break;
-                std.Thread.yield() catch {};
+                // Backoff to prevent high CPU usage when waiting for work
+                std.time.sleep(100 * 1000); // 100 microseconds
             }
         }
     }
@@ -208,8 +200,8 @@ pub const ParallelScheduler = struct {
 
             var t_stages = std.ArrayList(stage_mod.Stage).init(arena.allocator());
             for (pipeline_ptr.stages.items) |master_stage| {
-                const cloned = try master_stage.clone(arena.allocator());
-                try t_stages.append(cloned orelse try pipeline_ptr.createStageInstance(arena.allocator(), pipeline_ptr.stage_names.items[t_stages.items.len]));
+                const cloned = (try master_stage.clone(arena.allocator())) orelse try pipeline_ptr.createStageInstance(arena.allocator(), pipeline_ptr.stage_names.items[t_stages.items.len]);
+                try t_stages.append(cloned);
             }
 
             const col_block = try arena.allocator().create(fastq_block.FastqColumnBlock);
@@ -238,7 +230,6 @@ pub const ParallelScheduler = struct {
             var rc: usize = 0;
             while (rc < batch_size) : (rc += 1) {
                 const read = (try parser.next(record_buffer)) orelse break;
-                // Dupe the read data because the worker loop needs stable strings
                 reads[rc] = .{
                     .id = try self.sys_allocator.dupe(u8, read.id),
                     .seq = try self.sys_allocator.dupe(u8, read.seq),
@@ -263,14 +254,13 @@ pub const ParallelScheduler = struct {
             };
 
             while (!work_queue.push(c)) {
-                std.Thread.yield() catch {};
+                std.time.sleep(10 * 1000); // Backoff if queue is full
             }
         }
 
         done_flag.store(true, .release);
         for (0..self.num_threads) |i| threads[i].join();
         
-        // --- REDUCE: MERGE WORKER STATE INTO MASTER PIPELINE ---
         pipeline_ptr.read_count = 0;
         for (0..self.num_threads) |i| {
             var ctx = &thread_contexts[i];
@@ -281,19 +271,19 @@ pub const ParallelScheduler = struct {
             ctx.arena.deinit();
             self.sys_allocator.destroy(ctx.arena);
         }
-        
         self.read_count = pipeline_ptr.read_count;
-        
-        // Finalize Master Stages
-        for (pipeline_ptr.stages.items) |stage| {
-            try stage.finalize();
-        }
+        for (pipeline_ptr.stages.items) |stage| try stage.finalize();
     }
 
     pub fn run_chunked(self: *ParallelScheduler, chunk_builder: anytype, pipeline_ptr: anytype) !void {
         const queue_depth = 128;
+        // work_queue handles decompressed batches (analysis)
         var work_queue = try ring_buffer_mod.RingBuffer(Chunk).init(self.sys_allocator, queue_depth);
         defer work_queue.deinit();
+        
+        // bgzf_queue handles compressed blocks (decompression)
+        var bgzf_queue = try ring_buffer_mod.RingBuffer(Chunk).init(self.sys_allocator, queue_depth);
+        defer bgzf_queue.deinit();
         
         var done_flag = std.atomic.Value(bool).init(false);
         var threads = try self.sys_allocator.alloc(std.Thread, self.num_threads);
@@ -301,13 +291,11 @@ pub const ParallelScheduler = struct {
         var thread_contexts = try self.sys_allocator.alloc(ThreadContext, self.num_threads);
         defer self.sys_allocator.free(thread_contexts);
 
-        // Ordered Decompression Slots
         const num_slots = self.num_threads * 4;
         const slots = try self.sys_allocator.alloc(DecompSlot, num_slots);
-        defer self.sys_allocator.free(slots);
         for (slots) |*slot| {
             slot.* = .{
-                .decompressed = try self.sys_allocator.alloc(u8, 128 * 1024),
+                .decompressed = try self.sys_allocator.alloc(u8, 256 * 1024),
                 .actual_len = 0,
                 .ready = std.atomic.Value(bool).init(false),
                 .claimed = std.atomic.Value(bool).init(false),
@@ -315,20 +303,20 @@ pub const ParallelScheduler = struct {
         }
         defer {
             for (slots) |slot| self.sys_allocator.free(slot.decompressed);
+            self.sys_allocator.free(slots);
         }
 
         const batch_size = 1024;
         const max_read_len = 1024;
 
-        // Init Workers
         for (0..self.num_threads) |t_idx| {
             var arena = try self.sys_allocator.create(std.heap.ArenaAllocator);
             arena.* = std.heap.ArenaAllocator.init(self.sys_allocator);
 
             var t_stages = std.ArrayList(stage_mod.Stage).init(arena.allocator());
             for (pipeline_ptr.stages.items) |master_stage| {
-                const cloned = try master_stage.clone(arena.allocator());
-                try t_stages.append(cloned orelse try pipeline_ptr.createStageInstance(arena.allocator(), pipeline_ptr.stage_names.items[t_stages.items.len]));
+                const cloned = (try master_stage.clone(arena.allocator())) orelse try pipeline_ptr.createStageInstance(arena.allocator(), pipeline_ptr.stage_names.items[t_stages.items.len]);
+                try t_stages.append(cloned);
             }
 
             const col_block = try arena.allocator().create(fastq_block.FastqColumnBlock);
@@ -339,6 +327,7 @@ pub const ParallelScheduler = struct {
             thread_contexts[t_idx] = .{
                 .scheduler = self,
                 .work_queue = work_queue, 
+                .bgzf_queue = bgzf_queue,
                 .done_flag = &done_flag,
                 .stages = try t_stages.toOwnedSlice(),
                 .arena = arena,
@@ -349,39 +338,33 @@ pub const ParallelScheduler = struct {
             threads[t_idx] = try std.Thread.spawn(.{}, workerLoop, .{ &thread_contexts[t_idx] });
         }
 
-        // Background thread to fill slots
-        var producer_slot: usize = 0;
         const Feeder = struct {
-            pub fn run(builder: anytype, queue: *ring_buffer_mod.RingBuffer(Chunk), p_slot: *usize, n_slots: usize, s_list: []DecompSlot) void {
+            pub fn run(builder: anytype, queue: *ring_buffer_mod.RingBuffer(Chunk), s_list: []DecompSlot) void {
+                var p_slot: usize = 0;
                 while (true) {
                     const chunk_data = builder.nextChunk() catch null orelse {
-                        // EOF block
-                        const slot = &s_list[p_slot.*];
-                        // WAIT for slot to be unclaimed
-                        while (slot.claimed.load(.acquire)) std.Thread.yield() catch {};
-                        slot.claimed.store(true, .release);
-                        
-                        const c = Chunk{ .kind = .raw_bgzf, .data = .{ .raw_bgzf = .{ .compressed = &.{}, .slot_idx = p_slot.* } } };
-                        while (!queue.push(c)) std.Thread.yield() catch {};
+                        const slot = &s_list[p_slot];
+                        while (slot.claimed.load(.acquire)) std.time.sleep(10 * 1000);
+                        slot.actual_len = 0;
+                        slot.ready.store(true, .release);
                         return;
                     };
                     
-                    const slot = &s_list[p_slot.*];
-                    // WAIT for slot to be available
-                    while (slot.claimed.load(.acquire)) std.Thread.yield() catch {};
+                    const slot = &s_list[p_slot];
+                    while (slot.claimed.load(.acquire)) std.time.sleep(10 * 1000);
                     slot.claimed.store(true, .release);
+                    slot.ready.store(false, .release);
                     
-                    const c = Chunk{ .kind = .raw_bgzf, .data = .{ .raw_bgzf = .{ .compressed = chunk_data, .slot_idx = p_slot.* } } };
-                    while (!queue.push(c)) std.Thread.yield() catch {};
+                    const c = Chunk{ .kind = .raw_bgzf, .data = .{ .raw_bgzf = .{ .compressed = chunk_data, .slot_idx = p_slot } } };
+                    while (!queue.push(c)) std.time.sleep(10 * 1000);
                     
-                    p_slot.* = (p_slot.* + 1) % n_slots;
+                    p_slot = (p_slot + 1) % s_list.len;
                 }
             }
         };
 
-        const feeder = try std.Thread.spawn(.{}, Feeder.run, .{ chunk_builder, work_queue, &producer_slot, num_slots, slots });
+        const feeder = try std.Thread.spawn(.{}, Feeder.run, .{ chunk_builder, bgzf_queue, slots });
 
-        // Main Parser Loop (Sequential parsing from ordered decompressed stream)
         var consumer_slot: usize = 0;
         const ProxyReader = struct {
             slots: []DecompSlot,
@@ -395,7 +378,7 @@ pub const ParallelScheduler = struct {
                 
                 const slot = &self_p.slots[self_p.c_slot.*];
                 while (!slot.ready.load(.acquire)) {
-                    std.Thread.yield() catch {};
+                    std.time.sleep(10 * 1000);
                 }
                 
                 if (slot.actual_len == 0) { self_p.eof = true; return 0; }
@@ -408,7 +391,7 @@ pub const ParallelScheduler = struct {
                 if (self_p.pos == slot.actual_len) {
                     self_p.pos = 0;
                     slot.ready.store(false, .release);
-                    slot.claimed.store(false, .release); // Release for recycling
+                    slot.claimed.store(false, .release); 
                     self_p.c_slot.* = (self_p.c_slot.* + 1) % self_p.slots.len;
                 }
                 return n;
@@ -426,57 +409,43 @@ pub const ParallelScheduler = struct {
         const record_buffer = try self.sys_allocator.alloc(u8, 1024 * 1024);
         defer self.sys_allocator.free(record_buffer);
 
-        var staging_col = try fastq_block.FastqColumnBlock.init(self.sys_allocator, batch_size, max_read_len);
-        defer staging_col.deinit();
-        var staging_bps = try bitplanes_mod.BitplaneCore.init(self.sys_allocator, batch_size, max_read_len);
-        defer staging_bps.deinit();
-
         while (true) {
+            var reads = try self.sys_allocator.alloc(parser_mod.Read, batch_size);
             var rc: usize = 0;
             while (rc < batch_size) : (rc += 1) {
                 const read = (try p.next(record_buffer)) orelse break;
-                const seq_len = @min(read.seq.len, max_read_len);
-                for (0..seq_len) |pos| {
-                    staging_col.bases[pos][rc] = read.seq[pos];
-                    staging_col.qualities[pos][rc] = read.qual[pos];
-                }
-                for (seq_len..max_read_len) |pos| {
-                    staging_col.bases[pos][rc] = 0;
-                    staging_col.qualities[pos][rc] = 0;
-                }
-                staging_col.read_lengths[rc] = @intCast(seq_len);
+                reads[rc] = .{
+                    .id = try self.sys_allocator.dupe(u8, read.id),
+                    .seq = try self.sys_allocator.dupe(u8, read.seq),
+                    .qual = try self.sys_allocator.dupe(u8, read.qual),
+                    .arena = null,
+                };
             }
-            if (rc == 0) break;
 
-            staging_col.read_count = rc;
-            staging_bps.fromColumnBlock(staging_col);
+            if (rc == 0) {
+                self.sys_allocator.free(reads);
+                break;
+            }
 
-            const total_bytes = max_read_len * batch_size;
-            const c = Chunk{
-                .kind = .columnar,
+            const c = Chunk{ 
+                .kind = .raw_batch,
                 .data = .{
-                    .columnar = .{
-                        .plane_a = try self.sys_allocator.dupe(u64, staging_bps.plane_a),
-                        .plane_c = try self.sys_allocator.dupe(u64, staging_bps.plane_c),
-                        .plane_g = try self.sys_allocator.dupe(u64, staging_bps.plane_g),
-                        .plane_t = try self.sys_allocator.dupe(u64, staging_bps.plane_t),
-                        .plane_n = try self.sys_allocator.dupe(u64, staging_bps.plane_n),
-                        .plane_mask = try self.sys_allocator.dupe(u64, staging_bps.plane_mask),
-                        .bases = try self.sys_allocator.dupe(u8, staging_col.bases[0].ptr[0..total_bytes]),
-                        .qualities = try self.sys_allocator.dupe(u8, staging_col.qualities[0].ptr[0..total_bytes]),
-                        .read_lengths = try self.sys_allocator.dupe(u16, staging_col.read_lengths),
-                        .read_count = rc,
+                    .raw_batch = .{
+                        .reads = reads,
+                        .count = rc,
                     },
                 },
             };
-            while (!work_queue.push(c)) std.Thread.yield() catch {};
+
+            while (!work_queue.push(c)) {
+                std.time.sleep(10 * 1000);
+            }
         }
 
         feeder.join();
         done_flag.store(true, .release);
         for (0..self.num_threads) |i| threads[i].join();
         
-        // --- REDUCE ---
         pipeline_ptr.read_count = 0;
         for (0..self.num_threads) |i| {
             var ctx = &thread_contexts[i];
@@ -487,11 +456,8 @@ pub const ParallelScheduler = struct {
             ctx.arena.deinit();
             self.sys_allocator.destroy(ctx.arena);
         }
-        
         self.read_count = pipeline_ptr.read_count;
-        for (pipeline_ptr.stages.items) |stage| {
-            try stage.finalize();
-        }
+        for (pipeline_ptr.stages.items) |stage| try stage.finalize();
     }
 
     pub fn finalize(self: *ParallelScheduler) !void {
@@ -501,5 +467,4 @@ pub const ParallelScheduler = struct {
     pub fn report(self: *ParallelScheduler, writer: std.io.AnyWriter) void {
         _ = self; _ = writer;
     }
-
 };

@@ -44,15 +44,17 @@ pub const AlignmentStatsStage = struct {
         try writer.print("\"alignment_stats\": {{\"total_records\": {d}, \"mapped_reads\": {d}, \"unmapped_reads\": {d}, \"mean_mapq\": {d:.2}}}", .{ self.total_alignments, self.mapped_reads, self.unmapped_reads, self.mean_mapping_quality });
     }
 
+    const VTABLE = bam_stage.BamStage.VTable{
+        .process = process,
+        .finalize = finalize,
+        .report = report,
+        .reportJson = reportJson,
+    };
+
     pub fn stage(self: *@This()) bam_stage.BamStage {
         return .{
             .ptr = self,
-            .vtable = &.{
-                .process = process,
-                .finalize = finalize,
-                .report = report,
-                .reportJson = reportJson,
-            },
+            .vtable = &VTABLE,
         };
     }
 };

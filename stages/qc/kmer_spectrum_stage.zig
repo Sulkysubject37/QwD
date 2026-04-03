@@ -185,20 +185,22 @@ pub const KmerSpectrumStage = struct {
         return new_self;
     }
 
+    const VTABLE = stage_mod.Stage.VTable{
+        .process = process,
+        .processRawBatch = processRawBatch,
+        .processBlock = processBlock,
+        .processBitplanes = processBitplanes,
+        .finalize = finalize,
+        .report = report,
+        .reportJson = reportJson,
+        .merge = merge,
+        .clone = clone,
+    };
+
     pub fn stage(self: *const @This()) stage_mod.Stage {
         return .{
             .ptr = @constCast(self),
-            .vtable = &.{
-                .process = process,
-                .processRawBatch = processRawBatch,
-                .processBlock = processBlock,
-                .processBitplanes = processBitplanes,
-                .finalize = finalize,
-                .report = report,
-                .reportJson = reportJson,
-                .merge = merge,
-                .clone = clone,
-            },
+            .vtable = &VTABLE,
         };
     }
 };

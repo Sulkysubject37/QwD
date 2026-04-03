@@ -70,7 +70,21 @@ pub const BamPipeline = struct {
     }
 
     pub fn reportJson(self: *BamPipeline, writer: std.io.AnyWriter) !void {
-        try @import("structured_output").writeJsonReport(self.scheduler, writer);
+        try writer.print(
+            \\{{
+            \\  "version": "1.1.0",
+            \\  "thread_count": 1,
+            \\  "read_count": {d},
+            \\  "stages": {{
+        , .{self.scheduler.record_count});
+
+        for (self.scheduler.stages.items, 0..) |stage, i| {
+            if (i > 0) try writer.writeAll(",");
+            try writer.writeAll("\n    ");
+            try stage.reportJson(writer);
+        }
+
+        try writer.writeAll("\n  }\n}\n");
     }
 
     pub fn reportJsonAlloc(self: *BamPipeline, allocator: std.mem.Allocator) ![*:0]const u8 {

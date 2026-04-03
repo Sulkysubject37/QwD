@@ -23,9 +23,6 @@ pub export fn qwd_fastq_qc_fast(path: [*:0]const u8, threads: c_int) [*:0]const 
 
 pub export fn qwd_fastq_qc_ex(path: [*:0]const u8, threads: c_int, mode: c_int, gzip_mode: c_int) [*:0]const u8 {
     const allocator = std.heap.c_allocator;
-    var arena = std.heap.ArenaAllocator.init(allocator);
-    defer arena.deinit();
-    const arena_allocator = arena.allocator();
     const file_path = std.mem.span(path);
     @import("entropy_lut").initGlobal();
     
@@ -41,10 +38,9 @@ pub export fn qwd_fastq_qc_ex(path: [*:0]const u8, threads: c_int, mode: c_int, 
         else => .AUTO,
     };
 
-    var pipeline = pipeline_mod.Pipeline.init(arena_allocator, null);
+    var pipeline = pipeline_mod.Pipeline.init(allocator, null);
     pipeline.mode = analysis_mode;
     pipeline.gzip_mode = gz_mode;
-    // We don't defer pipeline.deinit() here because we are using an arena for everything except the final string
     
     pipeline.addStage("basic_stats") catch return allocError(allocator, "Stage init failed");
     pipeline.addStage("per_base_quality") catch return allocError(allocator, "Stage init failed");
@@ -66,48 +62,49 @@ pub export fn qwd_fastq_qc_ex(path: [*:0]const u8, threads: c_int, mode: c_int, 
 
     pipeline.finalize() catch return allocError(allocator, "Pipeline finalize error");
 
-    return pipeline.reportJsonAlloc(allocator) catch return allocError(allocator, "JSON allocation failed");
+    const json = pipeline.reportJsonAlloc(allocator) catch return allocError(allocator, "JSON allocation failed");
+    pipeline.deinit();
+    return json;
 }
 
 pub export fn qwd_bam_stats(path: [*:0]const u8, threads: c_int) [*:0]const u8 {
     _ = threads;
     const allocator = std.heap.c_allocator;
-    var arena = std.heap.ArenaAllocator.init(allocator);
-    defer arena.deinit();
-    const arena_allocator = arena.allocator();
     const file_path = std.mem.span(path);
 
     var file = std.fs.cwd().openFile(file_path, .{}) catch return allocError(allocator, "File not found");
     defer file.close();
 
-    var bam_pipeline = bam_pipeline_mod.BamPipeline.init(arena_allocator);
+    var bam_pipeline = bam_pipeline_mod.BamPipeline.init(allocator);
     bam_pipeline.addDefaultStages() catch return allocError(allocator, "BAM stage setup failed");
 
-    var reader = bam_reader_mod.BamReader.init(arena_allocator, file.reader().any()) catch return allocError(allocator, "BAM Reader Init failed");
+    var reader = bam_reader_mod.BamReader.init(allocator, file.reader().any()) catch return allocError(allocator, "BAM Reader Init failed");
     defer reader.deinit();
 
-    const record_buffer = arena_allocator.alloc(u8, 1024 * 1024) catch return allocError(allocator, "BAM buffer alloc failed");
+    const record_buffer = allocator.alloc(u8, 1024 * 1024) catch return allocError(allocator, "BAM buffer alloc failed");
+    defer allocator.free(record_buffer);
     while (reader.next(record_buffer) catch return allocError(allocator, "BAM read failed")) |record| {
         bam_pipeline.run(record) catch return allocError(allocator, "BAM processing failed");
     }
     bam_pipeline.finalize() catch return allocError(allocator, "BAM Finalize failed");
 
-    return bam_pipeline.reportJsonAlloc(allocator) catch return allocError(allocator, "JSON allocation failed");
+    const json = bam_pipeline.reportJsonAlloc(allocator) catch return allocError(allocator, "JSON allocation failed");
+    bam_pipeline.deinit();
+    return json;
 }
 
 pub export fn qwd_pipeline(config_path: [*:0]const u8, input_path: [*:0]const u8) [*:0]const u8 {
     const allocator = std.heap.c_allocator;
-    var arena = std.heap.ArenaAllocator.init(allocator);
-    defer arena.deinit();
-    const arena_allocator = arena.allocator();
     const c_path = std.mem.span(config_path);
     const i_path = std.mem.span(input_path);
     @import("entropy_lut").initGlobal();
 
-    const config_data = std.fs.cwd().readFileAlloc(arena_allocator, c_path, 1024 * 1024) catch return allocError(allocator, "Config file not found");
-    const config = pipeline_config_mod.PipelineConfig.parseJson(arena_allocator, config_data) catch return allocError(allocator, "Invalid config JSON");
+    const config_data = std.fs.cwd().readFileAlloc(allocator, c_path, 1024 * 1024) catch return allocError(allocator, "Config file not found");
+    defer allocator.free(config_data);
+    const config = pipeline_config_mod.PipelineConfig.parseJson(allocator, config_data) catch return allocError(allocator, "Invalid config JSON");
+    defer config.deinit();
 
-    var pipeline = pipeline_mod.Pipeline.init(arena_allocator, config.value);
+    var pipeline = pipeline_mod.Pipeline.init(allocator, config.value);
     
     for (config.value.pipeline) |stage_name| {
         pipeline.addStage(stage_name) catch return allocError(allocator, "Stage init failed");
@@ -123,7 +120,9 @@ pub export fn qwd_pipeline(config_path: [*:0]const u8, input_path: [*:0]const u8
 
     pipeline.finalize() catch return allocError(allocator, "Pipeline finalize error");
 
-    return pipeline.reportJsonAlloc(allocator) catch return allocError(allocator, "JSON allocation failed");
+    const json = pipeline.reportJsonAlloc(allocator) catch return allocError(allocator, "JSON allocation failed");
+    pipeline.deinit();
+    return json;
 }
 
 pub export fn qwd_free_string(ptr: [*:0]const u8) void {

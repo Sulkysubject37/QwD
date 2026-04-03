@@ -3,55 +3,14 @@ const parser_mod = @import("parser");
 const allocator_mod = @import("allocator");
 const pipeline_mod = @import("pipeline");
 const pipeline_config_mod = @import("pipeline_config");
-const metrics_mod = @import("metrics");
+const metrics_stream = @import("metrics_stream");
 const structured_output = @import("structured_output");
-const runtime_metrics = @import("runtime_metrics");
 const mode_mod = @import("mode");
-const bgzf_native_reader = @import("bgzf_native_reader");
-const bgzf_chunk_builder = @import("bgzf_chunk_builder");
-const chunk_builder_mod = @import("chunk_builder");
-
-const bam_reader_mod = @import("bam_reader");
 const bam_pipeline_mod = @import("bam_pipeline");
-
-fn printHelp() void {
-    std.debug.print(
-        \\QwD — high-performance streaming bioinformatics engine (v1.1.0-stable)
-        \\
-        \\Usage: qwd <command> [options] <file>
-        \\
-        \\Subcommands:
-        \\  qc              Run full Quality Control suite (FASTQ)
-        \\  bamstats        Alignment and coverage analytics (BAM)
-        \\  pipeline        Run custom pipeline from JSON config
-        \\  entropy         Analyze sequence complexity (FASTQ)
-        \\  n50             Calculate N-statistics (FASTQ)
-        \\  adapter-detect  Detect common adapters (FASTQ)
-        \\  version         Print version information
-        \\  help            Print this help message
-        \\
-        \\Options:
-        \\  --threads N      Number of parallel threads (default: CPU count)
-        \\  --mode <type>    Execution mode: 'exact' (deterministic) or 'approx' (probabilistic)
-        \\  --fast           Alias for '--mode approx'
-        \\  --gzip-backend <m>  Backends: 'auto', 'native', 'libdeflate', 'compat'
-        \\                   - auto: Detect BGZF and use parallel decompression if possible.
-        \\                   - native: Force use of QwD native Zig decompression.
-        \\                   - libdeflate: Force use of SIMD-accelerated libdeflate.
-        \\                   - compat: Robust sequential decompression for standard GZ.
-        \\  --json           Output results in structured JSON format
-        \\  --max-memory N   Hard memory limit in MB (default: 1024)
-        \\  --perf           Print detailed performance metrics
-        \\  --quiet          Minimize output verbosity
-        \\
-        \\Documentation: https://github.com/Sulkysubject37/QwD/blob/main/docs/cli_usage.md
-        \\
-    , .{});
-}
+const bam_reader_mod = @import("bam_reader");
+const runtime_metrics = @import("runtime_metrics");
 
 pub fn main() !void {
-    @import("entropy_lut").initGlobal();
-    
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
@@ -140,7 +99,7 @@ pub fn main() !void {
     var global_pool = global_allocator.GlobalAllocator.init(allocator, max_memory_mb * 1024 * 1024);
     const pool_allocator = global_pool.allocator();
 
-    if (std.mem.eql(u8, command, "bamstats")) {
+    if (std.mem.eql(u8, command, "bamstats") or std.mem.eql(u8, command, "bam-stats") or std.mem.eql(u8, command, "bam")) {
         if (positional_args.items.len < 1) return;
         const file_path = positional_args.items[0];
         var bam_pipeline = bam_pipeline_mod.BamPipeline.init(pool_allocator);
@@ -156,116 +115,109 @@ pub fn main() !void {
             try bam_pipeline.run(record);
         }
         try bam_pipeline.finalize();
-        try bam_pipeline.report(stdout);
-        if (perf_mode) perf.report(stdout);
-        try bw.flush();
-        return;
-    }
 
-    var pipeline = pipeline_mod.Pipeline.init(pool_allocator, null);
-    pipeline.mode = mode;
-    pipeline.gzip_mode = gzip_mode;
-    defer pipeline.deinit();
-
-    if (positional_args.items.len < 1) return;
-    const file_path = positional_args.items[0];
-
-    if (std.mem.eql(u8, command, "qc")) {
-        try pipeline.addStage("basic_stats");
-        try pipeline.addStage("per_base_quality");
-        try pipeline.addStage("nucleotide_composition");
-        try pipeline.addStage("gc_distribution");
-        try pipeline.addStage("length_distribution");
-        try pipeline.addStage("n_statistics");
-        try pipeline.addStage("entropy");
-        try pipeline.addStage("kmer_spectrum");
-        try pipeline.addStage("overrepresented");
-        try pipeline.addStage("duplication");
-        try pipeline.addStage("adapter_detect");
-    } else if (std.mem.eql(u8, command, "entropy")) {
-        try pipeline.addStage("entropy");
-    } else if (std.mem.eql(u8, command, "n50")) {
-        try pipeline.addStage("n_statistics");
-    } else if (std.mem.eql(u8, command, "quality-decay")) {
-        try pipeline.addStage("per_base_quality");
-    } else if (std.mem.eql(u8, command, "adapter-detect")) {
-        try pipeline.addStage("adapter_detect");
-    } else if (std.mem.eql(u8, command, "pipeline")) {
-        const config_path = file_path;
-        const config_data = try std.fs.cwd().readFileAlloc(allocator, config_path, 1024 * 1024);
-        defer allocator.free(config_data);
-        const parsed = try pipeline_config_mod.PipelineConfig.parseJson(allocator, config_data);
-        defer parsed.deinit();
-        for (parsed.value.pipeline) |stage_name| try pipeline.addStage(stage_name);
-    }
-
-    try pipeline.setupSchedulers(num_threads);
-
-    const target_input = if (std.mem.eql(u8, command, "pipeline")) positional_args.items[1] else file_path;
-    const file = try std.fs.cwd().openFile(target_input, .{});
-    defer file.close();
-
-    var fr = file.reader();
-    const is_gz = std.mem.endsWith(u8, target_input, ".gz");
-    
-    var perf = runtime_metrics.RuntimeMetrics.start();
-
-    if (num_threads > 1) {
-        var is_actually_bgzf = false;
-        if (is_gz) {
-            // PROBE for BGZF
-            try file.seekTo(0);
-            is_actually_bgzf = bgzf_native_reader.BgzfNativeReader.isBgzf(file.reader());
-            try file.seekTo(0); // Reset for the actual run
-        }
-
-        if (is_actually_bgzf and (gzip_mode == .NATIVE or gzip_mode == .AUTO)) {
-            // HIGH-PERFORMANCE PATH: Parallel Decompression (BGZF only)
-            var native_reader = try bgzf_native_reader.BgzfNativeReader.init(pool_allocator, file.reader().any());
-            defer native_reader.deinit();
-            var chunk_builder = bgzf_chunk_builder.BgzfChunkBuilder.init(pool_allocator, &native_reader);
-            try pipeline.run_chunked(&chunk_builder);
+        if (output_format == .json) {
+            try bam_pipeline.reportJson(stdout);
+        } else if (output_format == .ndjson) {
+            try structured_output.writeNdjsonReport(bam_pipeline.scheduler, stdout);
         } else {
-            // ROBUST PATH: Sequential Parsing (Standard GZ / Plain), Parallel Processing
-            var parser = if (is_gz) 
-                try parser_mod.FastqParser.initGzip(pool_allocator, file.reader().any(), 1024 * 1024, gzip_mode)
-            else if (mode == .APPROX) 
-                try parser_mod.FastqParser.initMmap(pool_allocator, file) 
-            else 
-                try parser_mod.FastqParser.init(pool_allocator, file.reader().any(), 1024 * 1024);
-            defer parser.deinit();
-            
-            if (pipeline.parallel_scheduler) |*ps| {
-                try ps.run_parallel(&parser, &pipeline);
+            if (!quiet_mode) {
+                try bam_pipeline.report(stdout);
+                perf.reads_processed = bam_pipeline.scheduler.record_count;
+                perf.report(stdout);
             }
         }
     } else {
-        var parser = if (is_gz) 
-            try parser_mod.FastqParser.initGzip(pool_allocator, fr.any(), 1024 * 1024, gzip_mode) 
-        else 
-            try parser_mod.FastqParser.init(pool_allocator, fr.any(), 1024 * 1024);
-        defer parser.deinit();
+        // FASTQ path
+        if (positional_args.items.len < 1) return;
+        const file_path = positional_args.items[0];
         
-        const record_buffer = try pool_allocator.alloc(u8, 1024 * 1024);
-        while (try parser.next(record_buffer)) |read| {
-            pipeline.read_count += 1;
-            for (pipeline.stages.items) |stage| {
-                _ = try stage.processRead(&read);
-            }
-        }
-        try pipeline.finalize();
-    }
+        var pipeline = pipeline_mod.Pipeline.init(pool_allocator, null);
+        defer pipeline.deinit();
+        pipeline.mode = mode;
+        pipeline.gzip_mode = gzip_mode;
 
-    if (output_format == .json) {
-        try structured_output.writeJsonReport(&pipeline, stdout);
-    } else if (output_format == .ndjson) {
-        try structured_output.writeNdjsonReport(&pipeline, stdout);
-    } else {
-        if (!quiet_mode) {
-            try stdout.print("\n--- QwD Execution Mode: {s} ---\n", .{@tagName(mode)});
-            pipeline.report(stdout);
-            if (perf_mode) perf.report(stdout);
+        if (std.mem.eql(u8, command, "qc")) {
+            try pipeline.addStage("basic_stats");
+            try pipeline.addStage("per_base_quality");
+            try pipeline.addStage("nucleotide_composition");
+            try pipeline.addStage("gc_distribution");
+            try pipeline.addStage("length_distribution");
+            try pipeline.addStage("n_statistics");
+            try pipeline.addStage("entropy");
+            try pipeline.addStage("kmer_spectrum");
+            try pipeline.addStage("overrepresented");
+            try pipeline.addStage("duplication");
+            try pipeline.addStage("adapter_detect");
+        } else if (std.mem.eql(u8, command, "entropy")) {
+            try pipeline.addStage("entropy");
+        } else if (std.mem.eql(u8, command, "n50")) {
+            try pipeline.addStage("n_statistics");
+        } else if (std.mem.eql(u8, command, "quality-decay")) {
+            try pipeline.addStage("per_base_quality");
+        } else if (std.mem.eql(u8, command, "adapter-detect")) {
+            try pipeline.addStage("adapter_detect");
+        } else if (std.mem.eql(u8, command, "pipeline")) {
+            const config_path = file_path;
+            const config_data = try std.fs.cwd().readFileAlloc(allocator, config_path, 1024 * 1024);
+            defer allocator.free(config_data);
+            const parsed = try pipeline_config_mod.PipelineConfig.parseJson(allocator, config_data);
+            defer parsed.deinit();
+            for (parsed.value.pipeline) |stage_name| try pipeline.addStage(stage_name);
+        }
+
+        @import("entropy_lut").initGlobal();
+        try pipeline.setupSchedulers(num_threads);
+
+        const target_input = if (std.mem.eql(u8, command, "pipeline")) positional_args.items[1] else file_path;
+        const file = try std.fs.cwd().openFile(target_input, .{});
+        defer file.close();
+
+        var perf = runtime_metrics.RuntimeMetrics.start();
+        const is_gz = std.mem.endsWith(u8, target_input, ".gz");
+        try pipeline.run(file, is_gz);
+        try pipeline.finalize();
+
+        if (output_format == .json) {
+            try pipeline.reportJson(stdout);
+        } else if (output_format == .ndjson) {
+            try structured_output.writeNdjsonReport(&pipeline, stdout);
+        } else {
+            if (!quiet_mode) {
+                try stdout.print("\n--- QwD Execution Mode: {s} ---\n", .{@tagName(mode)});
+                pipeline.report(stdout);
+                perf.reads_processed = pipeline.read_count;
+                perf.report(stdout);
+            }
         }
     }
     try bw.flush();
+}
+
+fn printHelp() void {
+    std.debug.print(
+        \\QwD (قَلَّ وَدَلَّ) - SIMD-Vectorized Sequence Analytics
+        \\Usage: qwd <command> [options] <input_file>
+        \\
+        \\Commands:
+        \\  qc              Full quality control suite
+        \\  bam-stats       BAM alignment statistics
+        \\  entropy         Sequence complexity analysis
+        \\  n50             Assembly continuity metrics
+        \\  quality-decay   Per-base quality profiling
+        \\  adapter-detect  Automated adapter contamination check
+        \\  pipeline        Run a custom pipeline from JSON config
+        \\  version         Show version information
+        \\
+        \\Options:
+        \\  --mode <exact|fast>      Analysis precision (default: exact)
+        \\  --threads <n>            Number of parallel threads (default: CPU count)
+        \\  --gzip-backend <engine>  auto|native|libdeflate|compat
+        \\  --json                   Output results in structured JSON
+        \\  --ndjson                 Output results in Newline-Delimited JSON
+        \\  --max-memory <mb>        Hard analytical memory limit (default: 1024MB)
+        \\  --perf                   Show execution performance metrics
+        \\  --quiet                  Silence status messages
+        \\
+    , .{});
 }

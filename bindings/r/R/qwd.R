@@ -51,9 +51,10 @@ qwd_qc <- function(fastq_path, approx = FALSE, threads = 0, gzip_mode = "auto", 
 
 #' QwD BAM Stats
 #' @param bam_path Path to BAM file
+#' @param threads Number of threads to use (default 1)
 #' @return A list of alignment metrics
 #' @export
-qwd_bamstats <- function(bam_path) {
+qwd_bamstats <- function(bam_path, threads = 1) {
   lib_name <- "qwd"
   lib_file <- if (.Platform$OS.type == "windows") "qwd.dll" else if (Sys.info()["sysname"] == "Darwin") "libqwd.dylib" else "libqwd.so"
   
@@ -71,7 +72,11 @@ qwd_bamstats <- function(bam_path) {
   max_len <- 2 * 1024 * 1024
   res_buf <- raw(max_len)
   
-  res <- .C(sym, path = as.character(bam_path), out = res_buf, max_len = as.integer(max_len))
+  res <- .C(sym, 
+            path = as.character(bam_path), 
+            threads = as.integer(threads),
+            out = res_buf, 
+            max_len = as.integer(max_len))
   json_str <- rawToChar(res$out[res$out != as.raw(0)])
   
   return(jsonlite::fromJSON(json_str))

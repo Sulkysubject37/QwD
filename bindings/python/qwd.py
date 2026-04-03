@@ -44,7 +44,7 @@ if _lib:
     _lib.qwd_fastq_qc_ex.argtypes = [ctypes.c_char_p, ctypes.c_int, ctypes.c_int, ctypes.c_int]
 
     _lib.qwd_bam_stats.restype = ctypes.c_void_p
-    _lib.qwd_bam_stats.argtypes = [ctypes.c_char_p]
+    _lib.qwd_bam_stats.argtypes = [ctypes.c_char_p, ctypes.c_int]
     
     _lib.qwd_pipeline.restype = ctypes.c_void_p
     _lib.qwd_pipeline.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
@@ -81,9 +81,9 @@ def qc(fastq_path, approx=False, threads=0, gzip_mode="auto", **kwargs):
     _lib.qwd_free_string(res_ptr)
     return data
 
-def bamstats(bam_path):
+def bamstats(bam_path, threads=1):
     if not _lib: raise RuntimeError("QwD shared library not found")
-    res_ptr = _lib.qwd_bam_stats(bam_path.encode('utf-8'))
+    res_ptr = _lib.qwd_bam_stats(bam_path.encode('utf-8'), threads)
     res_str = ctypes.string_at(res_ptr).decode('utf-8')
     data = json.loads(res_str)
     _lib.qwd_free_string(res_ptr)
