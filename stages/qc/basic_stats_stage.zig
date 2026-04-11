@@ -10,6 +10,7 @@ pub const BasicStatsStage = struct {
     min_read_length: usize = std.math.maxInt(usize),
     max_read_length: usize = 0,
     mean_read_length: f64 = 0.0,
+    integrity_violations: usize = 0,
 
     pub fn init(allocator: std.mem.Allocator) !*BasicStatsStage {
         const self = try allocator.create(BasicStatsStage);
@@ -32,6 +33,7 @@ pub const BasicStatsStage = struct {
         const fused = @constCast(bps).getFused(block.read_count);
         self.total_reads += block.read_count;
         self.total_bases += fused.total_bases;
+        self.integrity_violations += fused.integrity_violations;
         
         for (0..block.read_count) |i| {
             const len = block.read_lengths[i];
@@ -57,6 +59,7 @@ pub const BasicStatsStage = struct {
         // CRITICAL PARITY AGGREGATION
         self.total_reads += other.total_reads;
         self.total_bases += other.total_bases;
+        self.integrity_violations += other.integrity_violations;
         
         if (other.min_read_length < self.min_read_length) self.min_read_length = other.min_read_length;
         if (other.max_read_length > self.max_read_length) self.max_read_length = other.max_read_length;
@@ -70,16 +73,18 @@ pub const BasicStatsStage = struct {
         writer.print("  Min length:  {d}\n", .{self.min_read_length}) catch {};
         writer.print("  Max length:  {d}\n", .{self.max_read_length}) catch {};
         writer.print("  Mean length: {d:.2}\n", .{self.mean_read_length}) catch {};
+        writer.print("  Integrity Violations: {d}\n", .{self.integrity_violations}) catch {};
     }
 
     pub fn reportJson(ptr: *anyopaque, writer: std.io.AnyWriter) !void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        try writer.print("\"basic_stats\": {{\"total_reads\": {d}, \"total_bases\": {d}, \"min_length\": {d}, \"max_length\": {d}, \"mean_length\": {d:.2}}}", .{
+        try writer.print("\"basic_stats\": {{\"total_reads\": {d}, \"total_bases\": {d}, \"min_length\": {d}, \"max_length\": {d}, \"mean_length\": {d:.2}, \"integrity_violations\": {d}}}", .{
             self.total_reads,
             self.total_bases,
             self.min_read_length,
             self.max_read_length,
             self.mean_read_length,
+            self.integrity_violations,
         });
     }
 

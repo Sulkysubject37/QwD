@@ -441,7 +441,6 @@ pub const ParallelScheduler = struct {
                 std.time.sleep(10 * 1000);
             }
         }
-
         feeder.join();
         done_flag.store(true, .release);
         for (0..self.num_threads) |i| threads[i].join();

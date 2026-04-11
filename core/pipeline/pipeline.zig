@@ -25,6 +25,7 @@ pub const Pipeline = struct {
     mode: mode_mod.Mode = .EXACT,
     gzip_mode: mode_mod.GzipMode = .AUTO,
     read_count: usize = 0,
+    integrity_violations: usize = 0,
 
     pub fn init(allocator: std.mem.Allocator, config: ?pipeline_config.PipelineConfig) Pipeline {
         return Pipeline{

@@ -113,6 +113,14 @@ pub const BgzfNativeReader = struct {
                 return self.nextBlock();
             }
 
+            // Phase Sec-Zero: Hardened Decompression Ceiling
+            // Prevent BGZF Decompression Bombs
+            const MAX_EXPANSION_RATIO = 32;
+            if (payload_len > 0 and isize_val > payload_len * MAX_EXPANSION_RATIO) {
+                self.allocator.free(compressed_data);
+                return error.DecompressionBomb;
+            }
+
             return Block{
                 .compressed_data = compressed_data,
                 .uncompressed_len = isize_val,

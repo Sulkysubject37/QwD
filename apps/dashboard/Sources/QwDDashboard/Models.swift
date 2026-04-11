@@ -71,6 +71,7 @@ public struct BasicStats: Codable {
     public let min_length: Int
     public let max_length: Int
     public let mean_length: Double
+    public let integrity_violations: Int?
 }
 
 public struct GCDistribution: Codable {

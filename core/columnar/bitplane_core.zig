@@ -131,6 +131,7 @@ pub const BitplaneCore = struct {
         t_count: usize,
         n_count: usize,
         total_bases: usize,
+        integrity_violations: usize,
     };
 
     pub fn getFused(self: *BitplaneCore, read_count: usize) FusedResults {
@@ -144,7 +145,7 @@ pub const BitplaneCore = struct {
         var res = FusedResults{ 
             .gc_count = 0, .a_count = 0, .c_count = 0, 
             .g_count = 0, .t_count = 0, .n_count = 0,
-            .total_bases = 0 
+            .total_bases = 0, .integrity_violations = 0,
         };
         
         const u64_count = (read_count + 63) / 64;
@@ -152,13 +153,27 @@ pub const BitplaneCore = struct {
             const offset = col * self.u64_per_col;
             const limit = offset + u64_count;
             for (offset..limit) |idx| {
-                res.a_count += @popCount(self.plane_a[idx]);
-                res.c_count += @popCount(self.plane_c[idx]);
-                res.g_count += @popCount(self.plane_g[idx]);
-                res.t_count += @popCount(self.plane_t[idx]);
-                res.n_count += @popCount(self.plane_n[idx]);
-                res.total_bases += @popCount(self.plane_mask[idx]);
-                res.gc_count += @popCount(self.plane_g[idx] | self.plane_c[idx]);
+                const a = self.plane_a[idx];
+                const c = self.plane_c[idx];
+                const g = self.plane_g[idx];
+                const t = self.plane_t[idx];
+                const n = self.plane_n[idx];
+                const mask = self.plane_mask[idx];
+
+                // Phase Sec-Zero: Bitplane Mutex Guard
+                // (A ^ C ^ G ^ T ^ N) should equal the Mask plane.
+                const parity = a ^ c ^ g ^ t ^ n;
+                if (parity != mask) {
+                    res.integrity_violations += @popCount(parity ^ mask);
+                }
+
+                res.a_count += @popCount(a);
+                res.c_count += @popCount(c);
+                res.g_count += @popCount(g);
+                res.t_count += @popCount(t);
+                res.n_count += @popCount(n);
+                res.total_bases += @popCount(mask);
+                res.gc_count += @popCount(g | c);
             }
         }
         return res;

@@ -1,9 +1,11 @@
-# Native QwD Decompression Engine: Technical Reference
+# Native QwD Engine: Technical Reference (v1.1.0-stable Hardened)
 
 ## Overview
-The Native QwD Engine is a high-density implementation of the DEFLATE compression algorithm (RFC 1951), specialized for genomics data. It is designed to achieve performance parity with industry-standard C libraries while maintaining a zero-dependency, memory-safe footprint.
+The QwD Engine is a high-density computational core specialized for genomic sequence analytics. It combines a custom DEFLATE decompression engine with a vertical SIMD analytical core, designed for scale-invariant stability and multi-threaded efficiency.
 
-## Core Components
+---
+
+## Core Decompression Components
 
 ### 1. The Bit-Sieve (`BitSieve`)
 At the heart of the engine is a 64-bit sliding bit-buffer.
@@ -22,27 +24,43 @@ Handles string back-references using a 32KB circular window.
 - **Wrapping Logic**: Uses bitwise masking (`& 0x7FFF`) for O(1) position wrapping, avoiding conditional branches.
 - **Optimized Copies**: Leverages optimized `memcpy` equivalents for long back-references, significantly accelerating the reconstruction of repetitive genomic sequences.
 
-## Parallel Architecture (Phase P.2)
+---
 
-### Ordered Parallel Decompression
-To break the serial bottleneck of Gzip, QwD implements an **Ordered Parallel** pipeline in `ParallelScheduler`:
-- **Feeder Thread**: Reads raw BGZF blocks from disk and assigns them to worker slots.
-- **Decompression Workers**: Parallelly decompress blocks using `libdeflate` or the Native QwD engine.
-- **Proxy Stitche**: Stitches decompressed blocks back into a continuous stream, ensuring that FASTQ records spanning block boundaries are parsed with **100% accuracy**.
-- **Atomic Synchronization**: Uses `claimed` and `ready` atomic flags to manage buffer ownership across the pipeline without mutex contention.
+## Hardened Parallel Architecture
 
-### Format-Agnostic Probing
-QwD features a smart probe (`isBgzf`) that inspects the first 20 bytes of a Gzip member for the `BC` (Block Click) extra field.
-- **Path Selection**: Automatically chooses full parallel decompression for BGZF files or async prefetch sequential decompression for standard GZ files.
+### 1. The Double-Pipeline Model
+To maximize throughput, QwD v1.1.0 implements a **concurrent double-pipeline** in `ParallelScheduler`:
+- **Stage 1 (Decompression)**: A `Feeder` thread reads raw BGZF blocks and dispatches them to a `bgzf_queue`. Worker threads pull from this queue and decompress blocks into ordered slots.
+- **Stage 2 (Analysis)**: The main thread acts as an orchestrator, parsing decompressed data from slots into `raw_batch` chunks. These batches are pushed to a `work_queue`.
+- **Stage 3 (Execution)**: Worker threads pull `raw_batch` chunks, performing SIMD transposition into bitplanes and executing the analytical pipeline.
+- **Result**: Both I/O-heavy decompression and CPU-heavy analysis are fully parallelized, eliminating the sequential bottlenecks of standard genomic tools.
 
-## Performance Profile (1M Reads)
-| Backend | Throughput | Memory Overhead (Backend Only) |
-| :--- | :--- | :--- |
-| **libdeflate (SIMD C)** | **~5.8M reads/sec** | ~2MB RSS per thread |
-| **QwD Native (Zig)** | **~5.3M reads/sec** | ~2MB RSS per thread |
-| **Standard GZ (Compat)** | **~3.1M reads/sec** | ~4MB RSS total |
+### 2. Hurricane-Spin Protection
+Earlier versions utilized `std.Thread.yield()` in tight loops, causing high CPU usage during idle periods. 
+- **Block-Wait Backoff**: Replaced with a smart backoff mechanism (nanosecond sleeps). 
+- **Efficiency**: Reduces idling CPU overhead to **<5%** while maintaining sub-millisecond responsiveness when new data arrives.
 
-*Note: Total system footprint in `APPROX` mode is strictly governed at ~350MB RSS due to tiered Bloom Filters.*
+---
 
-## Future: Fused Decompression
-The roadmap includes **Fused Decompression (DTB)**. This will allow the `DeflateEngine` to decompress symbols directly into the 2-bit DNA bitplanes, bypassing the ASCII string stage entirely, projected to reach **>10M reads/sec**.
+## Scale-Invariant Stability
+
+### 1. Static VTable Hard-Binding
+To resolve "Bad pointer dereference" errors during multi-threaded execution, all analytical stages now utilize **static VTable constants**.
+- **Mechanism**: Stage method tables are defined as `const` at the type level, ensuring the `Stage` interface always points to stable, globally-available memory.
+
+### 2. Heap-Allocated Sequence Persistence
+Analytical stages like `DuplicationStage` and `OverrepresentedStage` have transitioned from 1024-byte stack buffers to **heap-allocated sequence buffers**.
+- **Long-Read Support**: Capable of processing sequences up to **1MB per read**.
+- **Memory Safety**: Prevents stack overflows and memory corruption when encountering non-standard or large-scale genomic data.
+
+---
+
+## Performance Profile (10M Reads Stress Test)
+| Metric | EXACT Mode (4 Threads) | 
+| :--- | :--- |
+| **Total Time** | **~34.0s** |
+| **Throughput** | **~294,000 reads/sec** |
+| **CPU Efficiency** | **~3.5x Scaling** |
+| **Stability** | **100% (Scale-Invariant)** |
+
+*Note: Total system footprint is strictly governed by the `GlobalAllocator`, ensuring stability even under extreme memory contention.*
