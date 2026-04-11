@@ -1,7 +1,7 @@
 # Phase Sec-Zero: Security Hardening and Scientific Formalization
 
 ## Overview
-Phase Sec-Zero is a critical architectural milestone for the QwD project. It transitions the system from a pure "high-throughput engine" into a **Secure Scientific Instrument**. This phase introduces "Zero-Overhead Security" mechanisms to protect against malicious genomic payloads while simultaneously adding statistical hooks to formalize the biological accuracy of the bitplane paradigm for peer-reviewed publication (IEEE BIBM).
+Phase Sec-Zero is a critical architectural milestone for the QwD project. It transitions the system from a pure "high-throughput engine" into a **Secure Scientific Instrument**. This phase introduces "Zero-Overhead Security" mechanisms to protect against malicious genomic payloads while simultaneously adding statistical hooks to formalize the biological accuracy of the bitplane paradigm for peer-reviewed publication.
 
 ## 1. Zero-Overhead Security Mechanisms
 
@@ -20,7 +20,7 @@ Phase Sec-Zero is a critical architectural milestone for the QwD project. It tra
 
 ## 2. Statistical Validation and Formalization
 
-To support the claims in the IEEE BIBM manuscript, the pipeline now formally tracks its own statistical fidelity.
+To support the claims in the scientific documentation, the pipeline now formally tracks its own statistical fidelity.
 
 ### 2.1 EXACT Mode Identity (Determinism)
 - QwD's `EXACT` mode serves as the deterministic baseline. It is mathematically verified against legacy tools (e.g., FastQC).
