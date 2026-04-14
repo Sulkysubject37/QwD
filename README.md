@@ -23,9 +23,10 @@ Meaning: **brevity with clarity**
 ---
 
 ### Project Status (v1.2.0-secured Hardened)
-QwD v1.2.0-secured marks the transition of the engine into a hardened, production-grade instrument. This update focuses on **"Zero-Overhead Security"** and **"Scientific Formalization,"** ensuring that elite computational performance does not come at the cost of data integrity or system safety. The system is now verified stable for files exceeding **100 Million reads** and introduces the **Phase Sec-Zero** security architecture.
+QwD v1.2.0-secured marks the transition of the engine into a hardened, production-grade instrument. This update focuses on **"Zero-Overhead Security"** and **"Scientific Formalization,"** ensuring that elite computational performance does not come at the cost of data integrity or system safety. The macOS Dashboard has been upgraded from a passive viewer to an **Active Control Platform**, allowing real-time biological parameter injection (trimming, filtering).
 
 ### Key Features
+- **Active Control Dashboard (macOS)**: Interactive biological control surface for real-time parameter injection (5'/3' Trimming, Quality Filtering, Adapter Removal) via the new JSON-Configured Reactive Engine.
 - **Phase Sec-Zero Architecture**: Implemented hardware-level protection mechanisms (Bitplane Mutex Guard) and hardened decompression ceilings (32x expansion gate) to neutralize malicious genomic payloads.
 - **Scientific Formalization**: Verified $R^2 = 1.0$ against legacy baselines (EXACT mode) and $<0.05\%$ MAPE for hardware-level sampling (APPROX mode).
 - **Hardened Parallel Engine**: Multi-threaded stability with zero-overhead block-wait backoff and unified reporting across the ecosystem.

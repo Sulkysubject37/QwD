@@ -125,6 +125,41 @@ pub export fn qwd_pipeline(config_path: [*:0]const u8, input_path: [*:0]const u8
     return json;
 }
 
+pub export fn qwd_run_json_config(config_json: [*:0]const u8, input_path: [*:0]const u8) [*:0]const u8 {
+    const allocator = std.heap.c_allocator;
+    const json_data = std.mem.span(config_json);
+    const i_path = std.mem.span(input_path);
+    @import("entropy_lut").initGlobal();
+
+    const config = pipeline_config_mod.PipelineConfig.parseJson(allocator, json_data) catch |err| {
+        const msg = std.fmt.allocPrint(allocator, "Invalid config JSON: {s}", .{@errorName(err)}) catch return allocError(allocator, "JSON Error");
+        defer allocator.free(msg);
+        return allocError(allocator, msg);
+    };
+    defer config.deinit();
+
+    var pipeline = pipeline_mod.Pipeline.init(allocator, config.value);
+    
+    for (config.value.pipeline) |stage_name| {
+        pipeline.addStage(stage_name) catch return allocError(allocator, "Stage init failed");
+    }
+
+    const num_threads = std.Thread.getCpuCount() catch 1;
+    pipeline.setupSchedulers(num_threads) catch return allocError(allocator, "Scheduler setup failed");
+
+    var file = std.fs.cwd().openFile(i_path, .{}) catch return allocError(allocator, "Input file not found");
+    defer file.close();
+
+    const is_gz = std.mem.endsWith(u8, i_path, ".gz");
+    pipeline.run(file, is_gz) catch |err| return allocError(allocator, @errorName(err));
+
+    pipeline.finalize() catch return allocError(allocator, "Pipeline finalize error");
+
+    const json = pipeline.reportJsonAlloc(allocator) catch return allocError(allocator, "JSON allocation failed");
+    pipeline.deinit();
+    return json;
+}
+
 pub export fn qwd_free_string(ptr: [*:0]const u8) void {
     const allocator = std.heap.c_allocator;
     const len = std.mem.indexOfSentinel(u8, 0, ptr);

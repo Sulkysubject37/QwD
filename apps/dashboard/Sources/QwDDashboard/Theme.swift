@@ -41,6 +41,7 @@ struct ProMetricPanel: ViewModifier {
             .overlay {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .strokeBorder(QwDPalette.separator, lineWidth: 1)
+                    .allowsHitTesting(false) // CRITICAL: Prevent overlay from blocking TextField input
             }
     }
 }

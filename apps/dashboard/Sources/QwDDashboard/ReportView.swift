@@ -31,6 +31,27 @@ struct ReportBodyView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 32) {
             HeaderBar(report: report, showingInspector: $showingInspector)
+            
+            if report.stages.trim != nil || report.stages.filter != nil {
+                HStack {
+                    Image(systemName: "bolt.shield.fill")
+                    Text("Biological Transformations Active")
+                    Spacer()
+                    if let trim = report.stages.trim {
+                        Text("\(trim.reads_trimmed.formatted()) trimmed")
+                    }
+                    if let filter = report.stages.filter {
+                        Text("•")
+                        Text("\(filter.reads_filtered.formatted()) filtered")
+                    }
+                }
+                .font(.caption.bold())
+                .padding(12)
+                .background(Color.orange.opacity(0.1))
+                .cornerRadius(8)
+                .foregroundStyle(.orange)
+            }
+
             MetricSummaryGrid(report: report)
             
             if let alignment = report.stages.alignment_stats {
@@ -61,6 +82,23 @@ struct ReportBodyView: View {
 
             HStack(alignment: .top, spacing: 20) {
                 VStack(spacing: 20) {
+                    if let trim = report.stages.trim {
+                        IntegrityTile(title: "Trimming Delta", icon: "scissors") {
+                            HStack {
+                                Text("\(trim.reads_trimmed.formatted())").font(.headline)
+                                Text("reads modified").font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    if let filter = report.stages.filter {
+                        IntegrityTile(title: "Filter Yield", icon: "line.3.horizontal.decrease.circle") {
+                            VStack(alignment: .leading) {
+                                let yield = filter.reads_seen > 0 ? (Double(filter.reads_passed) / Double(filter.reads_seen)) * 100 : 0.0
+                                Text(String(format: "%.1f%%", yield)).font(.headline)
+                                Text("Survival Rate").font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
                     if let dup = report.stages.duplication {
                         IntegrityTile(title: "Duplication Rate", icon: "square.on.square.dashed") {
                             DuplicationMiniChart(stats: dup)

@@ -47,6 +47,15 @@ pub const FilterStage = struct {
         writer.print("  Reads filtered: {d}\n", .{self.reads_filtered}) catch {};
     }
 
+    pub fn reportJson(ptr: *anyopaque, writer: std.io.AnyWriter) !void {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        try writer.print("\"filter\": {{\"reads_seen\": {d}, \"reads_passed\": {d}, \"reads_filtered\": {d}}}", .{
+            self.reads_seen,
+            self.reads_passed,
+            self.reads_filtered,
+        });
+    }
+
     pub fn stage(self: *@This()) stage_mod.Stage {
         return .{
             .ptr = self,
@@ -54,6 +63,7 @@ pub const FilterStage = struct {
                 .process = process,
                 .finalize = finalize,
                 .report = report,
+                .reportJson = reportJson,
             },
         };
     }

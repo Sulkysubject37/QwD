@@ -6,6 +6,12 @@ struct SettingsView: View {
     @AppStorage("qwd_analysis_mode")   private var mode: AnalysisMode = .exact
     @AppStorage("qwd_gzip_mode")       private var gzipMode: GzipMode = .auto
 
+    // Biological Parameters (For Reset Only)
+    @AppStorage("qwd_trim_front")      private var trimFront: Int = 0
+    @AppStorage("qwd_trim_tail")       private var trimTail: Int = 0
+    @AppStorage("qwd_min_quality")     private var minQual: Double = 0.0
+    @AppStorage("qwd_adapter_sequence") private var adapterSeq: String = ""
+
     enum AnalysisMode: String, CaseIterable, Identifiable {
         case exact = "Exact (Deterministic)"
         case approx = "Approx (Heuristic)"
@@ -73,6 +79,11 @@ struct SettingsView: View {
                     maxMemory = 1024
                     mode = .exact
                     gzipMode = .auto
+                    
+                    trimFront = 0
+                    trimTail = 0
+                    minQual = 0.0
+                    adapterSeq = ""
                 }
             }
         }

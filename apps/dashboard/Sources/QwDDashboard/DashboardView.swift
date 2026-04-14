@@ -4,11 +4,6 @@ struct DashboardView: View {
     @Environment(QwDEngine.self) private var engine
     @State private var showFilePicker = false
     
-    // Per-analysis overrides (defaults from AppStorage handled in SettingsView)
-    @AppStorage("qwd_thread_count")    private var defaultThreads: Int = 4
-    @AppStorage("qwd_analysis_mode")   private var defaultMode: SettingsView.AnalysisMode = .exact
-    @AppStorage("qwd_gzip_mode")       private var defaultGzip: SettingsView.GzipMode = .auto
-
     var body: some View {
         ScrollView {
             VStack(spacing: 32) {
@@ -83,6 +78,24 @@ struct EmptyDashboardView: View {
 struct ConfigurationView: View {
     @Environment(QwDEngine.self) private var engine
     
+    // Persistent Storage (Used only for saving on Execute)
+    @AppStorage("qwd_trim_front")       private var storeTrimFront: Int = 0
+    @AppStorage("qwd_trim_tail")        private var storeTrimTail: Int = 0
+    @AppStorage("qwd_min_quality")      private var storeMinQual: Double = 0.0
+    @AppStorage("qwd_adapter_sequence")  private var storeAdapterSeq: String = ""
+    @AppStorage("qwd_enable_trimming")   private var storeEnableTrimming: Bool = false
+    @AppStorage("qwd_enable_filtering")  private var storeEnableFiltering: Bool = false
+    
+    // LOCAL STATE: Completely decoupled from persistent storage
+    @State private var trimFront: Int = 0
+    @State private var trimTail: Int = 0
+    @State private var minQual: Double = 0.0
+    @State private var adapterSeq: String = ""
+    @State private var enableTrimming: Bool = false
+    @State private var enableFiltering: Bool = false
+    
+    @FocusState private var isAdapterFocused: Bool
+    
     var body: some View {
         VStack(spacing: 32) {
             HStack {
@@ -101,9 +114,9 @@ struct ConfigurationView: View {
             }
             
             HStack(alignment: .top, spacing: 24) {
-                // Settings summary/override
+                // 1. Hardware & Strategy
                 VStack(alignment: .leading, spacing: 20) {
-                    Text("Presets & Strategies")
+                    Text("Hardware & Strategy")
                         .font(.headline)
                     
                     VStack(alignment: .leading, spacing: 12) {
@@ -113,28 +126,82 @@ struct ConfigurationView: View {
                         let tCount = UserDefaults.standard.integer(forKey: "qwd_thread_count")
                         PresetTile(title: "Concurrency", icon: "cpu", value: "\(tCount == 0 ? 4 : tCount) Threads")
                     }
+                    .proPanel(padding: 16)
                     
-                    Text("Change these in global Settings if needed.")
+                    Text("Global settings can be adjusted in the Settings menu.")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
-                .frame(width: 280)
-                .proPanel(padding: 20)
+                .frame(width: 260)
                 
+                // 2. Biological Gates (ACTIVE CONTROLS)
                 VStack(alignment: .leading, spacing: 20) {
-                    Text("Validation Checklist")
+                    Text("Biological Gates")
+                        .font(.headline)
+                    
+                    VStack(alignment: .leading, spacing: 24) {
+                        // Trimming Section
+                        VStack(alignment: .leading, spacing: 12) {
+                            Toggle("Enable Sequence Trimming", isOn: $enableTrimming)
+                                .font(.subheadline.bold())
+                                .toggleStyle(.switch)
+                            
+                            if enableTrimming {
+                                VStack(spacing: 12) {
+                                    BiologicalSlider(label: "5' Trim (Front)", value: Binding(get: { Double(trimFront) }, set: { trimFront = Int($0) }), range: 0...100, unit: "bp")
+                                    BiologicalSlider(label: "3' Trim (Tail)", value: Binding(get: { Double(trimTail) }, set: { trimTail = Int($0) }), range: 0...100, unit: "bp")
+                                    
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        Text("Adapter Sequence").font(.caption.bold()).foregroundStyle(.secondary)
+                                        TextField("Enter DNA sequence...", text: $adapterSeq)
+                                            .textFieldStyle(.roundedBorder)
+                                            .font(.system(.body, design: .monospaced))
+                                            .autocorrectionDisabled(true)
+                                            .focused($isAdapterFocused)
+                                    }
+                                }
+                                .padding(.leading, 8)
+                                .transition(.opacity.combined(with: .move(edge: .top)))
+                            }
+                        }
+                        
+                        Divider()
+                        
+                        // Quality Filtering Section
+                        VStack(alignment: .leading, spacing: 12) {
+                            Toggle("Enable Quality Filtering", isOn: $enableFiltering)
+                                .font(.subheadline.bold())
+                                .toggleStyle(.switch)
+                            
+                            if enableFiltering {
+                                BiologicalSlider(label: "Min Mean Quality", value: $minQual, range: 0...40, unit: "Phred")
+                                    .padding(.leading, 8)
+                                    .transition(.opacity.combined(with: .move(edge: .top)))
+                            }
+                        }
+                    }
+                    .proPanel(padding: 20)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        isAdapterFocused = false // Dismiss keyboard/focus when clicking panel
+                    }
+                }
+                
+                // 3. Execution Column
+                VStack(alignment: .leading, spacing: 20) {
+                    Text("Status")
                         .font(.headline)
                     
                     VStack(alignment: .leading, spacing: 12) {
-                        CheckItem(text: "Input format detected (FASTQ/GZ)")
-                        CheckItem(text: "Resource limits verified")
-                        CheckItem(text: "Output directory writable")
+                        CheckItem(text: "Format detected")
+                        CheckItem(text: "Resources verified")
+                        CheckItem(text: enableTrimming || enableFiltering ? "Gates active" : "Raw pass-through")
                     }
                     
                     Spacer()
                     
                     Button {
-                        Task { await engine.runQC() }
+                        executeWithSaving()
                     } label: {
                         HStack {
                             Text("Execute Pipeline")
@@ -146,10 +213,50 @@ struct ConfigurationView: View {
                     .buttonStyle(.borderedProminent)
                     .tint(.green)
                 }
-                .proPanel(padding: 20)
+                .frame(width: 220)
             }
         }
-        .frame(maxWidth: 800)
+        .frame(maxWidth: 1000)
+        .onAppear {
+            // Load from persistent storage once
+            trimFront = storeTrimFront
+            trimTail = storeTrimTail
+            minQual = storeMinQual
+            adapterSeq = storeAdapterSeq
+            enableTrimming = storeEnableTrimming
+            enableFiltering = storeEnableFiltering
+        }
+    }
+    
+    private func executeWithSaving() {
+        // 1. Persist local state back to AppStorage
+        storeTrimFront = trimFront
+        storeTrimTail = trimTail
+        storeMinQual = minQual
+        storeAdapterSeq = adapterSeq
+        storeEnableTrimming = enableTrimming
+        storeEnableFiltering = enableFiltering
+        
+        // 2. Run Engine
+        Task { await engine.runQC() }
+    }
+}
+
+struct BiologicalSlider: View {
+    let label: String
+    @Binding var value: Double
+    let range: ClosedRange<Double>
+    let unit: String
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(label).font(.caption.bold()).foregroundStyle(.secondary)
+                Spacer()
+                Text("\(value, specifier: "%.1f") \(unit)").font(.caption.monospaced())
+            }
+            Slider(value: $value, in: range, step: 0.5)
+        }
     }
 }
 

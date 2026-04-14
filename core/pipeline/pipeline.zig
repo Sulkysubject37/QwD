@@ -166,7 +166,7 @@ pub const Pipeline = struct {
         const thread_count: usize = if (self.parallel_scheduler) |ps| ps.num_threads else 1;
         try writer.print(
             \\{{
-            \\  "version": "1.1.0",
+            \\  "version": "1.2.0-secured",
             \\  "thread_count": {d},
             \\  "read_count": {d},
             \\  "stages": {{
@@ -192,6 +192,22 @@ pub const Pipeline = struct {
         if (std.mem.eql(u8, name, "basic_stats") or std.mem.eql(u8, name, "basic-stats")) {
             const s = try @import("basic_stats").BasicStatsStage.init(allocator);
             return @constCast(s).stage();
+        }
+        if (std.mem.eql(u8, name, "trim")) {
+            const s = try allocator.create(@import("trim").TrimStage);
+            s.* = if (self.config) |c| 
+                @import("trim").TrimStage.init(c.adapter_sequence, c.trim_front, c.trim_tail)
+            else 
+                @import("trim").TrimStage.init(null, 0, 0);
+            return s.stage();
+        }
+        if (std.mem.eql(u8, name, "filter")) {
+            const s = try allocator.create(@import("filter").FilterStage);
+            s.* = if (self.config) |c|
+                @import("filter").FilterStage.init(c.min_quality)
+            else
+                @import("filter").FilterStage.init(0.0);
+            return s.stage();
         }
         if (std.mem.eql(u8, name, "nucleotide_composition") or std.mem.eql(u8, name, "nucleotide-composition")) {
             const s = try @import("nucleotide_composition").NucleotideCompositionStage.init(allocator);

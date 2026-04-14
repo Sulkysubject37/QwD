@@ -5,6 +5,19 @@ import UniformTypeIdentifiers
 struct QwDDashboardApp: App {
     @State private var engine = QwDEngine.shared
 
+    init() {
+        // CRITICAL: Ensure the app becomes a foreground process with keyboard focus
+        NSApplication.shared.setActivationPolicy(.regular)
+        
+        // Dynamic Branding: Inject the logo into the Dock at runtime
+        let logoPath = "../../qwd_logo.png" // Relative to .build/debug/
+        if let logoImage = NSImage(contentsOfFile: logoPath) ?? NSImage(contentsOfFile: "qwd_logo.png") {
+            NSApp.applicationIconImage = logoImage
+        }
+        
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()

@@ -19,6 +19,8 @@ public struct QCStages: Codable {
     public let entropy: EntropyStats?
     public let duplication: DuplicationStats?
     public let overrepresented: OverrepresentedStats?
+    public let trim: TrimStats?
+    public let filter: FilterStats?
     
     // BAM-specific stages
     public let alignment_stats: AlignmentStats?
@@ -110,6 +112,46 @@ public struct OverrepresentedStats: Codable, Identifiable {
     public let unique_sequences: Int
     public let most_frequent: String
     public let most_frequent_count: Int
+}
+
+public struct TrimStats: Codable {
+    public let reads_seen: Int
+    public let reads_trimmed: Int
+}
+
+public struct FilterStats: Codable {
+    public let reads_seen: Int
+    public let reads_passed: Int
+    public let reads_filtered: Int
+}
+
+// ─────────────────────────────────────────────
+// Pipeline Configuration (For Engine Injection)
+// ─────────────────────────────────────────────
+
+public struct BioPipelineConfig: Encodable {
+    public var pipeline: [String]
+    public var mode: String
+    public var trim_front: Int
+    public var trim_tail: Int
+    public var min_quality: Double
+    public var adapter_sequence: String?
+    
+    public init(
+        pipeline: [String] = ["basic_stats", "per_base_quality", "gc_distribution", "length_distribution", "duplication"],
+        mode: String = "EXACT",
+        trim_front: Int = 0,
+        trim_tail: Int = 0,
+        min_quality: Double = 0.0,
+        adapter_sequence: String? = nil
+    ) {
+        self.pipeline = pipeline
+        self.mode = mode
+        self.trim_front = trim_front
+        self.trim_tail = trim_tail
+        self.min_quality = min_quality
+        self.adapter_sequence = adapter_sequence
+    }
 }
 
 // ─────────────────────────────────────────────
