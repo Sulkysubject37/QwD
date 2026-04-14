@@ -54,6 +54,20 @@ struct ReportBodyView: View {
 
             MetricSummaryGrid(report: report)
             
+            if let dist = report.stages.quality_dist {
+                QualityHeatmapView(stats: dist)
+            }
+            
+            HStack(alignment: .top, spacing: 20) {
+                if let kmer = report.stages.kmer_spectrum {
+                    KmerSpectrumView(stats: kmer)
+                }
+                
+                if let taxed = report.stages.taxonomic_screening {
+                    TaxonomyProfileView(taxa: taxed)
+                }
+            }
+            
             if let alignment = report.stages.alignment_stats {
                 VStack(alignment: .leading, spacing: 16) {
                     SectionLabel(text: "BAM Alignment Statistics")

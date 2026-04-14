@@ -73,7 +73,17 @@ public final class QwDEngine {
                 }
             } else {
                 // Construct JSON Config for FASTQ
-                var pipeline = ["basic_stats", "per_base_quality", "gc_distribution", "length_distribution", "duplication"]
+                var pipeline = [
+                    "basic_stats", 
+                    "per_base_quality", 
+                    "gc_distribution", 
+                    "length_distribution", 
+                    "duplication",
+                    "kmer_spectrum",
+                    "quality_dist",
+                    "taxed",
+                    "overrepresented"
+                ]
                 
                 if enableTrimming {
                     pipeline.insert("trim", at: 1)

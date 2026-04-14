@@ -43,15 +43,15 @@ pub export fn qwd_fastq_qc_ex(path: [*:0]const u8, threads: c_int, mode: c_int, 
     pipeline.gzip_mode = gz_mode;
     
     pipeline.addStage("basic_stats") catch return allocError(allocator, "Stage init failed");
-    pipeline.addStage("per_base_quality") catch return allocError(allocator, "Stage init failed");
     pipeline.addStage("nucleotide_composition") catch return allocError(allocator, "Stage init failed");
     pipeline.addStage("gc_distribution") catch return allocError(allocator, "Stage init failed");
     pipeline.addStage("length_distribution") catch return allocError(allocator, "Stage init failed");
-    pipeline.addStage("n_statistics") catch return allocError(allocator, "Stage init failed");
-    pipeline.addStage("entropy") catch return allocError(allocator, "Stage init failed");
     pipeline.addStage("kmer_spectrum") catch return allocError(allocator, "Stage init failed");
+    pipeline.addStage("quality_dist") catch return allocError(allocator, "Stage init failed");
+    pipeline.addStage("taxed") catch return allocError(allocator, "Stage init failed");
     pipeline.addStage("overrepresented") catch return allocError(allocator, "Stage init failed");
     pipeline.addStage("duplication") catch return allocError(allocator, "Stage init failed");
+    pipeline.addStage("per_base_quality") catch return allocError(allocator, "Stage init failed");
     pipeline.addStage("adapter_detect") catch return allocError(allocator, "Stage init failed");
 
     const num_threads: usize = if (threads <= 0) std.Thread.getCpuCount() catch 1 else @intCast(threads);

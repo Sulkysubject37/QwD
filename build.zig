@@ -100,6 +100,8 @@ pub fn build(b: *std.Build) void {
         .{ .n = "trim", .p = "stages/trim/trim_stage.zig" },
         .{ .n = "filter", .p = "stages/filter/filter_stage.zig" },
         .{ .n = "kmer", .p = "stages/kmer/kmer_stage.zig" },
+        .{ .n = "quality_dist", .p = "stages/qc/quality_dist_stage.zig" },
+        .{ .n = "taxed", .p = "stages/qc/taxed_stage.zig" },
     };
 
     var stage_mods = std.StringHashMap(*std.Build.Module).init(b.allocator);
@@ -115,6 +117,11 @@ pub fn build(b: *std.Build) void {
         mod.addImport("structured_output", structured_output_mod);
         if (std.mem.eql(u8, s.n, "qc_entropy")) mod.addImport("entropy_lut", entropy_lut_mod);
         if (std.mem.eql(u8, s.n, "duplication")) mod.addImport("bloom_filter", bloom_filter_mod);
+        if (std.mem.eql(u8, s.n, "taxed")) {
+            mod.addImport("kmer_bitroll", kmer_bitroll_mod);
+            mod.addImport("kmer_columnar", kmer_columnar_mod);
+            mod.addImport("dna_2bit", dna_2bit_mod);
+        }
         if (std.mem.eql(u8, s.n, "kmer_spectrum")) {
             mod.addImport("kmer_bitroll", kmer_bitroll_mod);
             mod.addImport("kmer_columnar", kmer_columnar_mod);

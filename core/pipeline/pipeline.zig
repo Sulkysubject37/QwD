@@ -259,6 +259,14 @@ pub const Pipeline = struct {
             const s = try @import("per_base_quality").PerBaseQualityStage.init(allocator);
             return @constCast(s).stage();
         }
+        if (std.mem.eql(u8, name, "quality_dist")) {
+            const s = try @import("quality_dist").QualityDistStage.init(allocator);
+            return s.stage();
+        }
+        if (std.mem.eql(u8, name, "taxed")) {
+            const s = try @import("taxed").TaxedStage.init(allocator);
+            return s.stage();
+        }
         return error.UnknownStage;
     }
 };

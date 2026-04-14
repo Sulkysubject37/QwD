@@ -21,6 +21,9 @@ public struct QCStages: Codable {
     public let overrepresented: OverrepresentedStats?
     public let trim: TrimStats?
     public let filter: FilterStats?
+    public let kmer_spectrum: KmerSpectrumStats?
+    public let quality_dist: QualityDistStats?
+    public let taxonomic_screening: [TaxonMatch]?
     
     // BAM-specific stages
     public let alignment_stats: AlignmentStats?
@@ -123,6 +126,22 @@ public struct FilterStats: Codable {
     public let reads_seen: Int
     public let reads_passed: Int
     public let reads_filtered: Int
+}
+
+public struct KmerSpectrumStats: Codable {
+    public let k: Int
+    public let counts: [Int]
+}
+
+public struct QualityDistStats: Codable {
+    public let max_pos: Int
+    public let data: [[Int]]
+}
+
+public struct TaxonMatch: Codable, Identifiable {
+    public var id: String { taxon }
+    public let taxon: String
+    public let count: Int
 }
 
 // ─────────────────────────────────────────────

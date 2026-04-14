@@ -70,6 +70,7 @@ QwD v1.2.0-secured marks the transition of the engine into a hardened, productio
 
 ### Documentation
 - **[Architecture: Hardened Parallelism](docs/native_qwd_engine.md)**
+- **[Phase Tax-ed: Taxonomic Screening & HD Visuals](docs/phase_taxed.md)**
 - **[Phase Sec-Zero: Hardened Security](docs/phase_sec_zero.md)**
 - **[Phase P: Universal GZIP Engine](docs/phase_p.md)**
 - **[CLI Usage Guide](docs/cli_usage.md)**
