@@ -18,7 +18,7 @@ pub const BasicStatsStage = struct {
         return self;
     }
 
-    pub fn process(ptr: *anyopaque, read: *const parser.Read) !bool {
+    pub fn process(ptr: *anyopaque, read: *const parser.Read) anyerror!bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         const len = read.seq.len;
         self.total_reads += 1;
@@ -28,8 +28,9 @@ pub const BasicStatsStage = struct {
         return true;
     }
 
-    pub fn processBitplanes(ptr: *anyopaque, bps: *const bitplanes_mod.BitplaneCore, block: *const fastq_block.FastqColumnBlock) !bool {
+    pub fn processBitplanes(ptr: *anyopaque, bps: *const bitplanes_mod.BitplaneCore, block: *const fastq_block.FastqColumnBlock) anyerror!bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
+        // Use the fused result path for maximum speed
         const fused = @constCast(bps).getFused(block.read_count);
         self.total_reads += block.read_count;
         self.total_bases += fused.total_bases;
@@ -43,7 +44,7 @@ pub const BasicStatsStage = struct {
         return true;
     }
 
-    pub fn finalize(ptr: *anyopaque) !void {
+    pub fn finalize(ptr: *anyopaque) anyerror!void { 
         const self: *@This() = @ptrCast(@alignCast(ptr));
         if (self.total_reads > 0) {
             self.mean_read_length = @as(f64, @floatFromInt(self.total_bases)) / @as(f64, @floatFromInt(self.total_reads));
@@ -52,20 +53,17 @@ pub const BasicStatsStage = struct {
         }
     }
 
-    pub fn merge(ptr: *anyopaque, other_ptr: *anyopaque) !void {
+    pub fn merge(ptr: *anyopaque, other_ptr: *anyopaque) anyerror!void { 
         const self: *@This() = @ptrCast(@alignCast(ptr));
         const other: *@This() = @ptrCast(@alignCast(other_ptr));
-        
-        // CRITICAL PARITY AGGREGATION
         self.total_reads += other.total_reads;
         self.total_bases += other.total_bases;
         self.integrity_violations += other.integrity_violations;
-        
         if (other.min_read_length < self.min_read_length) self.min_read_length = other.min_read_length;
         if (other.max_read_length > self.max_read_length) self.max_read_length = other.max_read_length;
     }
 
-    pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
+    pub fn report(ptr: *anyopaque, writer: *std.Io.Writer) void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         writer.print("\n[Basic Statistics]\n", .{}) catch {};
         writer.print("  Total reads: {d}\n", .{self.total_reads}) catch {};
@@ -76,7 +74,7 @@ pub const BasicStatsStage = struct {
         writer.print("  Integrity Violations: {d}\n", .{self.integrity_violations}) catch {};
     }
 
-    pub fn reportJson(ptr: *anyopaque, writer: std.io.AnyWriter) !void {
+    pub fn reportJson(ptr: *anyopaque, writer: *std.Io.Writer) anyerror!void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         try writer.print("\"basic_stats\": {{\"total_reads\": {d}, \"total_bases\": {d}, \"min_length\": {d}, \"max_length\": {d}, \"mean_length\": {d:.2}, \"integrity_violations\": {d}}}", .{
             self.total_reads,
@@ -95,20 +93,20 @@ pub const BasicStatsStage = struct {
         return new_self;
     }
 
-    const VTABLE = stage_mod.Stage.VTable{
-        .process = process,
-        .processBitplanes = processBitplanes,
-        .finalize = finalize,
-        .report = report,
-        .reportJson = reportJson,
-        .merge = merge,
-        .clone = clone,
-    };
-
-    pub fn stage(self: *const @This()) stage_mod.Stage {
+    pub fn stage(self: *BasicStatsStage) stage_mod.Stage {
         return .{
-            .ptr = @constCast(self),
+            .ptr = self,
             .vtable = &VTABLE,
         };
     }
+};
+
+const VTABLE = stage_mod.Stage.VTable{
+    .process = BasicStatsStage.process,
+    .finalize = BasicStatsStage.finalize,
+    .report = BasicStatsStage.report,
+    .reportJson = BasicStatsStage.reportJson,
+    .merge = BasicStatsStage.merge,
+    .clone = BasicStatsStage.clone,
+    .processBitplanes = BasicStatsStage.processBitplanes,
 };

@@ -1,0 +1,298 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		37000001 /* QwDDashboardApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37000001A /* QwDDashboardApp.swift */; };
+		37000002 /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37000002A /* DashboardView.swift */; };
+		37000003 /* QwDEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37000003A /* QwDEngine.swift */; };
+		37000004 /* ReportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37000004A /* ReportView.swift */; };
+		37000005 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37000005A /* SettingsView.swift */; };
+		37000006 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37000006A /* Models.swift */; };
+		37000007 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37000007A /* Theme.swift */; };
+		37000008 /* QualityHeatmapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37000008A /* QualityHeatmapView.swift */; };
+		37000009 /* TaxonomyProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37000009A /* TaxonomyProfileView.swift */; };
+		3700000A /* KmerSpectrumView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3700000AA /* KmerSpectrumView.swift */; };
+		3700000B /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3700000BA /* ContentView.swift */; };
+		3700000C /* QwD.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3700000CA /* QwD.xcframework */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		37000001A /* QwDDashboardApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QwDDashboardApp.swift; sourceTree = "<group>"; };
+		37000002A /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
+		37000003A /* QwDEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QwDEngine.swift; sourceTree = "<group>"; };
+		37000004A /* ReportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportView.swift; sourceTree = "<group>"; };
+		37000005A /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		37000006A /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		37000007A /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		37000008A /* QualityHeatmapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QualityHeatmapView.swift; sourceTree = "<group>"; };
+		37000009A /* TaxonomyProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaxonomyProfileView.swift; sourceTree = "<group>"; };
+		3700000AA /* KmerSpectrumView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KmerSpectrumView.swift; sourceTree = "<group>"; };
+		3700000BA /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		3700000BB /* QwDDashboard.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = QwDDashboard.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		3700000CA /* QwD.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = QwD.xcframework; path = "Frameworks/QwD.xcframework"; sourceTree = SOURCE_ROOT; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		3700000E /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3700000C /* QwD.xcframework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		3700000F = {
+			isa = PBXGroup;
+			children = (
+				37000010 /* Sources/QwDDashboard */,
+				37000011 /* Products */,
+				3700000CA /* QwD.xcframework */,
+			);
+			sourceTree = "<group>";
+		};
+		37000010 /* Sources/QwDDashboard */ = {
+			isa = PBXGroup;
+			children = (
+				37000001A /* QwDDashboardApp.swift */,
+				3700000BA /* ContentView.swift */,
+				37000002A /* DashboardView.swift */,
+				37000003A /* QwDEngine.swift */,
+				37000004A /* ReportView.swift */,
+				37000005A /* SettingsView.swift */,
+				37000006A /* Models.swift */,
+				37000007A /* Theme.swift */,
+				37000008A /* QualityHeatmapView.swift */,
+				37000009A /* TaxonomyProfileView.swift */,
+				3700000AA /* KmerSpectrumView.swift */,
+			);
+			path = Sources/QwDDashboard;
+			sourceTree = "<group>";
+		};
+		37000011 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				3700000BB /* QwDDashboard.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		37000012 /* QwDDashboard */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 37000013 /* Build configuration list for PBXNativeTarget "QwDDashboard" */;
+			buildPhases = (
+				37000015 /* Sources */,
+				3700000E /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = QwDDashboard;
+			productName = QwDDashboard;
+			productReference = 3700000BB /* QwDDashboard.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		37000016 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+			};
+			buildConfigurationList = 37000017 /* Build configuration list for PBXProject "QwD" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 3700000F;
+			productRefGroup = 37000011 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				37000012 /* QwDDashboard */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXShellScriptBuildPhase section */
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Build Zig Core";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(SRCROOT)/../../zig-out/lib/libqwd.a",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "cd $SRCROOT/../..\n\nif [ \"$PLATFORM_NAME\" == \"iphoneos\" ]; then\n  ZIG_TARGET=\"aarch64-ios\"\n  ZIG_SYSROOT=$(xcrun --sdk iphoneos --show-sdk-path)\nelif [ \"$PLATFORM_NAME\" == \"iphonesimulator\" ]; then\n  ZIG_TARGET=\"aarch64-ios-simulator\"\n  ZIG_SYSROOT=$(xcrun --sdk iphonesimulator --show-sdk-path)\nelse\n  ZIG_TARGET=\"aarch64-macos\"\n  ZIG_SYSROOT=$(xcrun --sdk macosx --show-sdk-path)\nfi\n\n/usr/local/zig/zig build -Dtarget=$ZIG_TARGET -Doptimize=ReleaseFast --sysroot \"$ZIG_SYSROOT\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		37000015 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				37000001 /* QwDDashboardApp.swift in Sources */,
+				3700000B /* ContentView.swift in Sources */,
+				37000002 /* DashboardView.swift in Sources */,
+				37000003 /* QwDEngine.swift in Sources */,
+				37000004 /* ReportView.swift in Sources */,
+				37000005 /* SettingsView.swift in Sources */,
+				37000006 /* Models.swift in Sources */,
+				37000007 /* Theme.swift in Sources */,
+				37000008 /* QualityHeatmapView.swift in Sources */,
+				37000009 /* TaxonomyProfileView.swift in Sources */,
+				3700000A /* KmerSpectrumView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		37000018 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				OTHER_LDFLAGS = (
+					"-lSystem",
+					"-lc++",
+					"-lz",
+				);
+				SDKROOT = macosx;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_INCLUDE_PATHS = "$(PROJECT_DIR)/Sources/CQwD/include";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		37000019 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				OTHER_LDFLAGS = (
+					"-lSystem",
+					"-lc++",
+					"-lz",
+				);
+				SDKROOT = macosx;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_INCLUDE_PATHS = "$(PROJECT_DIR)/Sources/CQwD/include";
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+			};
+			name = Release;
+		};
+		3700001A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
+				CODE_SIGN_STYLE = Manual;
+				DEVELOPMENT_TEAM = "";
+				"DEVELOPMENT_TEAM[sdk=macosx*]" = 4397V5B46G;
+				INFOPLIST_FILE = Sources/QwDDashboard/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.sulky.QwDDashboard;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		3700001B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
+				CODE_SIGN_STYLE = Manual;
+				DEVELOPMENT_TEAM = "";
+				"DEVELOPMENT_TEAM[sdk=macosx*]" = 4397V5B46G;
+				INFOPLIST_FILE = Sources/QwDDashboard/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.sulky.QwDDashboard;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		37000013 /* Build configuration list for PBXNativeTarget "QwDDashboard" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3700001A /* Debug */,
+				3700001B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		37000017 /* Build configuration list for PBXProject "QwD" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				37000018 /* Debug */,
+				37000019 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 37000016 /* Project object */;
+}

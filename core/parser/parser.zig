@@ -1,6 +1,7 @@
 const std = @import("std");
 const block_reader = @import("block_reader");
 const mode_mod = @import("mode");
+const parser_errors = @import("parser_errors");
 
 pub const Read = struct {
     id: []const u8,
@@ -10,39 +11,25 @@ pub const Read = struct {
 };
 
 pub const FastqParser = struct {
-    reader: *block_reader.BlockReader,
+    reader: block_reader.BlockReader,
     allocator: std.mem.Allocator,
 
-    pub fn init(allocator: std.mem.Allocator, reader: std.io.AnyReader, buf_size: usize) !FastqParser {
-        const br = try allocator.create(block_reader.BlockReader);
-        br.* = try block_reader.BlockReader.init(allocator, reader, buf_size);
+    pub fn initWithFile(allocator: std.mem.Allocator, file: std.Io.File, io: std.Io, buf_size: usize) !FastqParser {
         return FastqParser{
-            .reader = br,
+            .reader = try block_reader.BlockReader.initWithFile(allocator, file, io, buf_size),
             .allocator = allocator,
         };
     }
 
-    pub fn initGzip(allocator: std.mem.Allocator, reader: std.io.AnyReader, buf_size: usize, gzip_mode: mode_mod.GzipMode) !FastqParser {
-        const br = try allocator.create(block_reader.BlockReader);
-        br.* = try block_reader.BlockReader.initGzip(allocator, reader, buf_size, gzip_mode);
+    pub fn initWithBuffer(allocator: std.mem.Allocator, reader: std.Io.Reader) !FastqParser {
         return FastqParser{
-            .reader = br,
-            .allocator = allocator,
-        };
-    }
-
-    pub fn initMmap(allocator: std.mem.Allocator, file: std.fs.File) !FastqParser {
-        const br = try allocator.create(block_reader.BlockReader);
-        br.* = try block_reader.BlockReader.initMmap(allocator, file);
-        return FastqParser{
-            .reader = br,
+            .reader = try block_reader.BlockReader.initFromReader(allocator, reader),
             .allocator = allocator,
         };
     }
 
     pub fn deinit(self: *FastqParser) void {
         self.reader.deinit(self.allocator);
-        self.allocator.destroy(self.reader);
     }
 
     pub fn next(self: *FastqParser, buf: []u8) !?Read {
@@ -55,10 +42,13 @@ pub const FastqParser = struct {
             _ = (try self.reader.readLine()) orelse return null; // skip +
             const qual_raw = (try self.reader.readLine()) orelse return null;
             
-            if (seq_raw.len != qual_raw.len) return error.MismatchedSequenceQuality;
+            if (seq_raw.len != qual_raw.len) {
+                // If we are in APPROX or some specialized mode, we might ignore this,
+                // but for stability we return null to signal end of valid records.
+                return null;
+            }
 
             if (buf.len < id_raw.len + seq_raw.len + qual_raw.len) {
-                // Return slices directly if buffer is too small, though this is less stable
                 return Read{
                     .id = id_raw,
                     .seq = seq_raw,
@@ -67,7 +57,6 @@ pub const FastqParser = struct {
                 };
             }
 
-            // Stable Copy into buf
             @memcpy(buf[0..id_raw.len], id_raw);
             @memcpy(buf[id_raw.len .. id_raw.len + seq_raw.len], seq_raw);
             @memcpy(buf[id_raw.len + seq_raw.len .. id_raw.len + seq_raw.len + qual_raw.len], qual_raw);

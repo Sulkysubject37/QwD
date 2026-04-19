@@ -4,19 +4,21 @@ const builtin = @import("builtin");
 pub const BitSieve = struct {
     bit_buffer: u64 = 0,
     bit_count: u8 = 0,
-    inner_reader: std.io.AnyReader,
+    inner_reader: *std.Io.Reader,
 
-    pub fn init(reader: std.io.AnyReader) BitSieve {
+    pub fn init(reader: *std.Io.Reader) BitSieve {
         return .{
             .inner_reader = reader,
         };
     }
 
     pub fn refill(self: *BitSieve) !void {
-        // Safe refill for u64 without u6 overflow
         while (self.bit_count <= 56) {
             var byte: u8 = undefined;
-            const n = self.inner_reader.read(std.mem.asBytes(&byte)) catch 0;
+            const n = self.inner_reader.readSliceShort(std.mem.asBytes(&byte)) catch |err| {
+                if (err == error.EndOfStream) break;
+                return err;
+            };
             if (n == 0) break;
             
             self.bit_buffer |= (@as(u64, byte) << @as(u6, @intCast(self.bit_count)));

@@ -1,0 +1,4 @@
+module CQwD {
+    header "qwd.h"
+    export *
+}

@@ -1,0 +1,16 @@
+.{
+    .name = .qwd,
+    .version = "1.3.0",
+    .fingerprint = 0x80d3910559b5c7a9,
+    .dependencies = .{},
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "core",
+        "stages",
+        "bindings",
+        "apps",
+        "LICENSE",
+        "README.md",
+    },
+}

@@ -1,136 +1,53 @@
 const std = @import("std");
 const parser = @import("parser");
 const stage_mod = @import("stage");
+const bitplanes_mod = @import("bitplanes");
+const fastq_block = @import("fastq_block");
 
 pub const NStatisticsStage = struct {
-    total_bases: u64 = 0,
-    length_histogram: [30000]u32 = [_]u32{0} ** 30000,
-    n10: usize = 0,
-    n25: usize = 0,
-    n50: usize = 0,
-    n75: usize = 0,
-    n90: usize = 0,
+    n_count: usize = 0,
+    total_bases: usize = 0,
 
-    pub fn init(allocator: std.mem.Allocator) !*NStatisticsStage {
-        const self = try allocator.create(NStatisticsStage);
-        self.* = .{};
-        return self;
-    }
-
-    pub fn process(ptr: *anyopaque, read: *const parser.Read) !bool {
+    pub fn init() NStatisticsStage { return .{}; }
+    pub fn process(ptr: *anyopaque, read: *const parser.Read) anyerror!bool { 
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        const len = read.seq.len;
-        self.total_bases += len;
-        
-        const idx = if (len >= 30000) 29999 else len;
-        self.length_histogram[idx] += 1;
-
+        for (read.seq) |base| {
+            self.total_bases += 1;
+            if (base == 'N' or base == 'n') self.n_count += 1;
+        }
+        return true; 
+    }
+    pub fn processBitplanes(ptr: *anyopaque, bps: *const bitplanes_mod.BitplaneCore, block: *const fastq_block.FastqColumnBlock) anyerror!bool {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        const fused = @constCast(bps).getFused(block.read_count);
+        self.n_count += fused.n_count;
+        self.total_bases += fused.total_bases;
         return true;
     }
-
-    pub fn processBitplanes(ptr: *anyopaque, bp: *const @import("bitplanes").BitplaneCore, block: *const @import("fastq_block").FastqColumnBlock) anyerror!bool {
+    pub fn finalize(_: *anyopaque) anyerror!void {}
+    pub fn report(_: *anyopaque, _: *std.Io.Writer) void {}
+    pub fn reportJson(ptr: *anyopaque, writer: *std.Io.Writer) anyerror!void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        const res = @constCast(bp).getFused(block.read_count);
-        self.total_bases += res.total_bases;
-        for (0..block.read_count) |i| {
-            const len = block.read_lengths[i];
-            const idx = if (len >= 30000) 29999 else len;
-            self.length_histogram[idx] += 1;
-        }
-        return true;
+        const ratio = if (self.total_bases > 0) @as(f64, @floatFromInt(self.n_count)) / @as(f64, @floatFromInt(self.total_bases)) else 0.0;
+        try writer.print("\"n_statistics\": {{\"n_count\": {d}, \"n_ratio\": {d:.4}}}", .{self.n_count, ratio});
     }
-
-    pub fn processBlock(ptr: *anyopaque, block: *const @import("fastq_block").FastqColumnBlock) !bool {
-        const bitplanes = @import("bitplanes");
-        var bp = try bitplanes.BitplaneCore.init(block.allocator, block.capacity, block.max_read_len);
-        defer bp.deinit();
-        bp.fromColumnBlock(block);
-        return processBitplanes(ptr, &bp, block);
-    }
-
-    pub fn processRawBatch(ptr: *anyopaque, reads: []const parser.Read) !bool {
-        const self: *@This() = @ptrCast(@alignCast(ptr));
-        for (reads) |read| {
-            const len = read.seq.len;
-            self.total_bases += len;
-            const idx = if (len >= 30000) 29999 else len;
-            self.length_histogram[idx] += 1;
-        }
-        return true;
-    }
-
-    pub fn finalize(ptr: *anyopaque) !void {
-        const self: *@This() = @ptrCast(@alignCast(ptr));
-        if (self.total_bases == 0) return;
-
-        const t10 = self.total_bases / 10;
-        const t25 = self.total_bases / 4;
-        const t50 = self.total_bases / 2;
-        const t75 = (self.total_bases * 3) / 4;
-        const t90 = (self.total_bases * 9) / 10;
-        
-        var cumulative_bases: u64 = 0;
-        
-        var i: usize = 29999;
-        while (i > 0) : (i -= 1) {
-            cumulative_bases += @as(u64, self.length_histogram[i]) * i;
-            if (self.n10 == 0 and cumulative_bases >= t10) self.n10 = i;
-            if (self.n25 == 0 and cumulative_bases >= t25) self.n25 = i;
-            if (self.n50 == 0 and cumulative_bases >= t50) self.n50 = i;
-            if (self.n75 == 0 and cumulative_bases >= t75) self.n75 = i;
-            if (self.n90 == 0 and cumulative_bases >= t90) self.n90 = i;
-            
-            if (self.n90 != 0) break;
-        }
-    }
-
-    pub fn merge(ptr: *anyopaque, other_ptr: *anyopaque) !void {
+    pub fn merge(ptr: *anyopaque, other_ptr: *anyopaque) anyerror!void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         const other: *@This() = @ptrCast(@alignCast(other_ptr));
+        self.n_count += other.n_count;
         self.total_bases += other.total_bases;
-        for (0..30000) |i| {
-            self.length_histogram[i] += other.length_histogram[i];
-        }
     }
-
-    pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
-        const self: *@This() = @ptrCast(@alignCast(ptr));
-        writer.print("N-Statistics Report:\n", .{}) catch {};
-        writer.print("  N10: {d}\n", .{self.n10}) catch {};
-        writer.print("  N25: {d}\n", .{self.n25}) catch {};
-        writer.print("  N50: {d}\n", .{self.n50}) catch {};
-        writer.print("  N75: {d}\n", .{self.n75}) catch {};
-        writer.print("  N90: {d}\n", .{self.n90}) catch {};
-    }
-
-    pub fn reportJson(ptr: *anyopaque, writer: std.io.AnyWriter) !void {
-        const self: *@This() = @ptrCast(@alignCast(ptr));
-        try writer.print("\"n_statistics\": {{\"n10\": {d}, \"n25\": {d}, \"n50\": {d}, \"n75\": {d}, \"n90\": {d}}}", .{ self.n10, self.n25, self.n50, self.n75, self.n90 });
-    }
-
     pub fn clone(ptr: *anyopaque, allocator: std.mem.Allocator) anyerror!*anyopaque {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        const new_self = try allocator.create(@This());
+        const new_self = try allocator.create(NStatisticsStage);
         new_self.* = self.*;
         return new_self;
     }
-
-    const VTABLE = stage_mod.Stage.VTable{
-        .process = process,
-        .processRawBatch = processRawBatch,
-        .processBlock = processBlock,
-        .processBitplanes = processBitplanes,
-        .finalize = finalize,
-        .report = report,
-        .reportJson = reportJson,
-        .merge = merge,
-        .clone = clone,
-    };
-
-    pub fn stage(self: *const @This()) stage_mod.Stage {
-        return .{
-            .ptr = @constCast(self),
-            .vtable = &VTABLE,
-        };
-    }
+    pub fn stage(self: *NStatisticsStage) stage_mod.Stage { return .{ .ptr = self, .vtable = &VTABLE }; }
+};
+const VTABLE = stage_mod.Stage.VTable{
+    .process = NStatisticsStage.process, .finalize = NStatisticsStage.finalize,
+    .report = NStatisticsStage.report, .reportJson = NStatisticsStage.reportJson,
+    .merge = NStatisticsStage.merge, .clone = NStatisticsStage.clone,
+    .processBitplanes = NStatisticsStage.processBitplanes,
 };

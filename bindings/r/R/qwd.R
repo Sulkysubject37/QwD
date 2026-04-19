@@ -1,83 +1,60 @@
 #' QwD FASTQ QC
-#' @param fastq_path Path to FASTQ file
-#' @param approx Boolean, whether to use probabilistic approx mode
-#' @param threads Number of threads to use (0 for auto)
-#' @param gzip_mode Decompression engine: 'auto', 'libdeflate', 'qwd', 'compat'
-#' @param ... Additional arguments (deprecated 'fast' supported for backward compatibility)
-#' @return A list of metrics
 #' @export
 qwd_qc <- function(fastq_path, approx = FALSE, threads = 0, gzip_mode = "auto", ...) {
-  # Handle backward compatibility for 'fast'
-  args <- list(...)
-  if ("fast" %in% names(args)) {
-    approx <- args$fast
+  # Robust Path Resolution
+  fastq_path <- normalizePath(fastq_path, mustWork = TRUE)
+
+  lib_file <- if (Sys.info()["sysname"] == "Windows") {
+    "qwd.dll"
+  } else if (Sys.info()["sysname"] == "Darwin") {
+    "libqwd.dylib"
+  } else {
+    "libqwd.so"
   }
 
-  lib_name <- "qwd"
-  lib_file <- if (.Platform$OS.type == "windows") "qwd.dll" else if (Sys.info()["sysname"] == "Darwin") "libqwd.dylib" else "libqwd.so"
+  possible_paths <- c(
+    lib_file, 
+    file.path("zig-out", "lib", lib_file), 
+    file.path("zig-out", "bin", lib_file),
+    file.path(getwd(), "zig-out", "lib", lib_file)
+  )
   
-  # Try to find library
-  possible_paths <- c(lib_file, file.path("zig-out", "lib", lib_file), file.path("zig-out", "bin", lib_file))
   path <- ""
   for (p in possible_paths) {
-    if (file.exists(p)) { path <- p; break }
+    if (file.exists(p)) {
+      path <- p
+      break
+    }
   }
   
-  if (path == "") stop("QwD shared library not found")
+  if (path == "") stop("QwD shared library not found. Build it with 'zig build'")
   
   dyn.load(path)
   
-  # Map gzip_mode to index
-  gz_map <- c("auto" = 0, "native" = 1, "qwd" = 1, "libdeflate" = 2, "chunked" = 3, "compat" = 4)
-  gz_idx <- if (gzip_mode %in% names(gz_map)) gz_map[gzip_mode] else 0
-
-  # Allocate 2MB buffer
-  max_len <- 2 * 1024 * 1024
+  max_len <- 16 * 1024 * 1024
   res_buf <- raw(max_len)
-
-  sym <- getNativeSymbolInfo("qwd_fastq_qc_ex_r")
-  res <- .C(sym, 
+  
+  # .C returns a list of modified arguments. We must capture it.
+  res <- .C("qwd_fastq_qc_ex_r", 
             path = as.character(fastq_path), 
             threads = as.integer(threads), 
-            mode = as.integer(if(approx) 1 else 0),
-            gzip_mode = as.integer(gz_idx),
+            mode = as.integer(if(approx) 1 else 0), 
+            gzip_mode = as.integer(0), 
             out = res_buf, 
             max_len = as.integer(max_len))
   
-  json_str <- rawToChar(res$out[res$out != as.raw(0)])
+  actual_buf <- res$out
   
-  return(jsonlite::fromJSON(json_str))
-}
+  # Check if engine returned data (first byte should not be 0)
+  if (actual_buf[1] == as.raw(0)) {
+    stop("QwD Engine failed to process file or returned an empty report.")
+  }
 
-#' QwD BAM Stats
-#' @param bam_path Path to BAM file
-#' @param threads Number of threads to use (default 1)
-#' @return A list of alignment metrics
-#' @export
-qwd_bamstats <- function(bam_path, threads = 1) {
-  lib_name <- "qwd"
-  lib_file <- if (.Platform$OS.type == "windows") "qwd.dll" else if (Sys.info()["sysname"] == "Darwin") "libqwd.dylib" else "libqwd.so"
-  
-  possible_paths <- c(lib_file, file.path("zig-out", "lib", lib_file), file.path("zig-out", "bin", lib_file))
-  path <- ""
-  for (p in possible_paths) {
-    if (file.exists(p)) { path <- p; break }
+  terminator_idx <- match(as.raw(0), actual_buf)
+  if (is.na(terminator_idx) || terminator_idx <= 1) {
+    stop("QwD Engine returned an empty report. Check for errors in the engine console.")
   }
   
-  if (path == "") stop("QwD shared library not found")
-  
-  dyn.load(path)
-  sym <- getNativeSymbolInfo("qwd_bam_stats_r")
-  
-  max_len <- 2 * 1024 * 1024
-  res_buf <- raw(max_len)
-  
-  res <- .C(sym, 
-            path = as.character(bam_path), 
-            threads = as.integer(threads),
-            out = res_buf, 
-            max_len = as.integer(max_len))
-  json_str <- rawToChar(res$out[res$out != as.raw(0)])
-  
+  json_str <- rawToChar(actual_buf[1:(terminator_idx - 1)])
   return(jsonlite::fromJSON(json_str))
 }

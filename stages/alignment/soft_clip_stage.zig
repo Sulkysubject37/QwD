@@ -1,46 +1,21 @@
 const std = @import("std");
 const bam_reader = @import("bam_reader");
 const bam_stage = @import("bam_stage");
-const cigar_parser = @import("cigar_parser");
 
-pub const SoftClipStage = struct {
-    soft_clipped_reads: usize = 0,
-    soft_clipped_bases: usize = 0,
-
-    pub fn process(ptr: *anyopaque, record: *bam_reader.AlignmentRecord) !bool {
-        const self: *@This() = @ptrCast(@alignCast(ptr));
-        if ((record.flag & 4) == 0) {
-            const stats = cigar_parser.parseCigar(record.cigar);
-            if (stats.soft_clips > 0) {
-                self.soft_clipped_reads += 1;
-                self.soft_clipped_bases += stats.soft_clips;
-            }
-        }
-        return true;
+pub const SoftclipStage = struct {
+    pub fn process(ptr: *anyopaque, record: *const bam_reader.AlignmentRecord) anyerror!void { 
+        _ = ptr; _ = record;
     }
-
-    pub fn finalize(ptr: *anyopaque) !void {
+    pub fn finalize(ptr: *anyopaque) anyerror!void {
         _ = ptr;
     }
-
-    pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
-        const self: *@This() = @ptrCast(@alignCast(ptr));
-        writer.print("Soft Clipping Report:\n", .{}) catch {};
-        writer.print("  Soft-clipped reads: {d}\n", .{self.soft_clipped_reads}) catch {};
-        writer.print("  Soft-clipped bases: {d}\n", .{self.soft_clipped_bases}) catch {};
+    pub fn report(ptr: *anyopaque, writer: *std.Io.Writer) void {
+        _ = ptr; _ = writer;
     }
-
-    pub fn reportJson(ptr: *anyopaque, writer: std.io.AnyWriter) !void {
-        const self: *@This() = @ptrCast(@alignCast(ptr));
-        try writer.print("\"soft_clipping\": {{\"soft_clipped_reads\": {d}, \"soft_clipped_bases\": {d}}}", .{ self.soft_clipped_reads, self.soft_clipped_bases });
+    pub fn reportJson(ptr: *anyopaque, writer: *std.Io.Writer) anyerror!void {
+        _ = ptr;
+        try writer.writeAll("{}");
     }
-
-    const VTABLE = bam_stage.BamStage.VTable{
-        .process = process,
-        .finalize = finalize,
-        .report = report,
-        .reportJson = reportJson,
-    };
 
     pub fn stage(self: *@This()) bam_stage.BamStage {
         return .{
@@ -48,4 +23,11 @@ pub const SoftClipStage = struct {
             .vtable = &VTABLE,
         };
     }
+};
+
+const VTABLE = bam_stage.BamStage.VTable{
+    .process = SoftclipStage.process,
+    .finalize = SoftclipStage.finalize,
+    .report = SoftclipStage.report,
+    .reportJson = SoftclipStage.reportJson,
 };

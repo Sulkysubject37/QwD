@@ -3,23 +3,25 @@ const parser = @import("parser");
 const stage_mod = @import("stage");
 
 pub const Scheduler = struct {
+    allocator: std.mem.Allocator,
     read_count: usize = 0,
-    stages: std.ArrayList(stage_mod.Stage),
+    stages: std.ArrayListUnmanaged(stage_mod.Stage),
 
     pub fn init(allocator: std.mem.Allocator) Scheduler {
         return Scheduler{
+            .allocator = allocator,
             .read_count = 0,
-            .stages = std.ArrayList(stage_mod.Stage).init(allocator),
+            .stages = .empty,
         };
     }
 
     pub fn deinit(self: *Scheduler) void {
-        self.stages.deinit();
+        self.stages.deinit(self.allocator);
     }
 
     /// Register a new processing stage.
     pub fn registerStage(self: *Scheduler, stage: stage_mod.Stage) !void {
-        try self.stages.append(stage);
+        try self.stages.append(self.allocator, stage);
     }
 
     /// Receive a parsed read and forward it to registered processing stages.
@@ -41,7 +43,7 @@ pub const Scheduler = struct {
     }
 
     /// Report all registered stages.
-    pub fn report(self: *Scheduler, writer: std.io.AnyWriter) void {
+    pub fn report(self: *Scheduler, writer: std.Io.Writer) void {
         for (self.stages.items) |stage| {
             stage.report(writer);
         }
@@ -49,8 +51,8 @@ pub const Scheduler = struct {
 };
 
 test "Scheduler test with dummy stage" {
-    const allocator = std.testing.allocator;
-    var scheduler = Scheduler.init(allocator);
+    
+    var scheduler = Scheduler.init(std.heap.c_allocator);
     defer scheduler.deinit();
 
     // Define a dummy stage
@@ -69,7 +71,7 @@ test "Scheduler test with dummy stage" {
             _ = ptr;
         }
 
-        pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
+        pub fn report(ptr: *anyopaque, writer: std.Io.Writer) void {
             _ = ptr;
             _ = writer;
         }

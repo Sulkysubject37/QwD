@@ -8,41 +8,21 @@ import Charts
 struct ReportView: View {
     let report: QCReport
     @State private var showingInspector = false
-
-    var body: some View {
-        ScrollView {
-            ReportBodyView(report: report, showingInspector: $showingInspector)
-        }
-        .background(GlassBackground())
-        .sheet(isPresented: $showingInspector) {
-            InspectorSidebar(report: report)
-        }
-    }
-}
-
-// ─────────────────────────────────────────────
-// UI View (For the Dashboard)
-// ─────────────────────────────────────────────
-
-struct ReportBodyView: View {
-    let report: QCReport
-    @Binding var showingInspector: Bool
+    @State private var showingPrintPreview = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 32) {
-            HeaderBar(report: report, showingInspector: $showingInspector)
+            HeaderBar(report: report, showingInspector: $showingInspector, showingPrintPreview: $showingPrintPreview)
             
-            if report.stages.trim != nil || report.stages.filter != nil {
+            if let trim = report.stages.trim, let trimmed = trim.reads_trimmed {
                 HStack {
                     Image(systemName: "bolt.shield.fill")
                     Text("Biological Transformations Active")
                     Spacer()
-                    if let trim = report.stages.trim {
-                        Text("\(trim.reads_trimmed.formatted()) trimmed")
-                    }
-                    if let filter = report.stages.filter {
+                    Text("\(trimmed.formatted()) trimmed")
+                    if let filter = report.stages.filter, let filtered = filter.reads_filtered {
                         Text("•")
-                        Text("\(filter.reads_filtered.formatted()) filtered")
+                        Text("\(filtered.formatted()) filtered")
                     }
                 }
                 .font(.caption.bold())
@@ -58,431 +38,385 @@ struct ReportBodyView: View {
                 QualityHeatmapView(stats: dist)
             }
             
-            HStack(alignment: .top, spacing: 20) {
-                if let kmer = report.stages.kmer_spectrum {
-                    KmerSpectrumView(stats: kmer)
-                }
-                
-                if let taxed = report.stages.taxonomic_screening {
-                    TaxonomyProfileView(taxa: taxed)
-                }
-            }
-            
-            if let alignment = report.stages.alignment_stats {
-                VStack(alignment: .leading, spacing: 16) {
-                    SectionLabel(text: "BAM Alignment Statistics")
-                    HStack(spacing: 20) {
-                        SummaryTile(label: "Mapped Reads", value: alignment.mapped_reads.compactFormatted, unit: "Reads", trend: .nominal)
-                        SummaryTile(label: "Mean MAPQ", value: String(format: "%.1f", alignment.mean_mapq), unit: "Quality", trend: .neutral)
-                        if let cov = report.stages.coverage {
-                            SummaryTile(label: "Est. Coverage", value: String(format: "%.2f", cov.coverage_estimate), unit: "x", trend: .nominal)
-                        }
-                    }
-                }
-            }
-            
-            HStack(alignment: .top, spacing: 20) {
-                DistributionPanel(title: "GC Composition", icon: "leaf.fill") {
-                    if let gc = report.stages.gc_distribution {
-                        GCChart(bins: gc.bins, isPrinting: false)
-                    }
-                }
-                DistributionPanel(title: "Length Profile", icon: "chart.bar.fill") {
-                    if let len = report.stages.length_distribution {
-                        LengthChart(bins: len.bins, isPrinting: false)
-                    }
-                }
-            }
-
-            HStack(alignment: .top, spacing: 20) {
-                VStack(spacing: 20) {
-                    if let trim = report.stages.trim {
-                        IntegrityTile(title: "Trimming Delta", icon: "scissors") {
-                            HStack {
-                                Text("\(trim.reads_trimmed.formatted())").font(.headline)
-                                Text("reads modified").font(.caption).foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                    if let filter = report.stages.filter {
-                        IntegrityTile(title: "Filter Yield", icon: "line.3.horizontal.decrease.circle") {
-                            VStack(alignment: .leading) {
-                                let yield = filter.reads_seen > 0 ? (Double(filter.reads_passed) / Double(filter.reads_seen)) * 100 : 0.0
-                                Text(String(format: "%.1f%%", yield)).font(.headline)
-                                Text("Survival Rate").font(.caption).foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                    if let dup = report.stages.duplication {
-                        IntegrityTile(title: "Duplication Rate", icon: "square.on.square.dashed") {
-                            DuplicationMiniChart(stats: dup)
-                        }
-                    }
-                    if let ent = report.stages.entropy {
-                        IntegrityTile(title: "Complexity (Entropy)", icon: "waveform.path.ecg") {
-                            EntropyMiniChart(stats: ent)
-                        }
-                    }
-                }
-                .frame(width: 300)
-                
-                if let over = report.stages.overrepresented {
-                    VStack(alignment: .leading, spacing: 12) {
-                        SectionLabel(text: "Anomalous Sequence Patterns")
-                        OverrepresentedTable(stats: over)
-                            .proPanel(padding: 0)
-                    }
-                }
-            }
-            Spacer(minLength: 40)
+            ReportBodyView(report: report)
         }
-        .padding(32)
+        .sheet(isPresented: $showingInspector) {
+            InspectorView(report: report)
+        }
+        #if os(macOS)
+        .sheet(isPresented: $showingPrintPreview) {
+            ScientificPrintView(report: report)
+        }
+        #endif
     }
 }
 
 // ─────────────────────────────────────────────
-// Scientific Print View (Optimized for A4/Vector PDF)
+// Components
 // ─────────────────────────────────────────────
-
-struct ScientificPrintView: View {
-    let report: QCReport
-    let timestamp = Date()
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            // Formal Provenance Header
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("SEQUENCE QUALITY ASSESSMENT REPORT")
-                        .font(.system(size: 18, weight: .black))
-                    Text("QwD Scientific Core — Deterministic Trace Output")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.gray)
-                }
-                Spacer()
-                VStack(alignment: .trailing, spacing: 4) {
-                    Text("REPORT_ID: \(timestamp.timeIntervalSince1970.description.prefix(10))")
-                    Text("TIMESTAMP: \(timestamp.formatted(date: .abbreviated, time: .shortened))")
-                }
-                .font(.system(size: 8, design: .monospaced))
-                .foregroundStyle(.gray)
-            }
-            
-            Divider().padding(.vertical, 8)
-
-            // Primary Telemetry
-            HStack(spacing: 40) {
-                PrintMetric(label: "TOTAL READS", value: report.read_count.formatted())
-                if let bs = report.stages.basic_stats {
-                    PrintMetric(label: "TOTAL BASES", value: bs.total_bases.formatted())
-                    PrintMetric(label: "MEAN LENGTH", value: String(format: "%.1f bp", bs.mean_length))
-                }
-                if let n50 = report.stages.n_statistics?.n50 {
-                    PrintMetric(label: "N50 METRIC", value: "\(n50) bp")
-                }
-            }
-
-            // Visual Analytics (Vector Optimized)
-            VStack(alignment: .leading, spacing: 32) {
-                PrintDistributionSection(title: "GC Composition Profile", icon: "leaf") {
-                    if let gc = report.stages.gc_distribution {
-                        GCChart(bins: gc.bins, isPrinting: true)
-                    }
-                }
-                
-                PrintDistributionSection(title: "Read Length Distribution", icon: "ruler") {
-                    if let len = report.stages.length_distribution {
-                        LengthChart(bins: len.bins, isPrinting: true)
-                    }
-                }
-            }
-
-            // Bottom Summary
-            Grid(alignment: .leading, horizontalSpacing: 40, verticalSpacing: 12) {
-                GridRow {
-                    Text("METRIC").font(.system(size: 8, weight: .bold))
-                    Text("VALUE").font(.system(size: 8, weight: .bold))
-                    Text("STATUS").font(.system(size: 8, weight: .bold))
-                }
-                if let dup = report.stages.duplication {
-                    GridRow {
-                        Text("Sequence Duplication").font(.system(size: 10))
-                        Text(String(format: "%.2f%%", dup.duplication_ratio * 100))
-                        Text(dup.duplication_ratio > 0.2 ? "WARNING" : "NOMINAL")
-                            .foregroundStyle(dup.duplication_ratio > 0.2 ? Color.orange : Color.green)
-                    }
-                }
-            }
-            .padding()
-            .border(Color.gray.opacity(0.2))
-
-            Spacer()
-            
-            // Professional Footer
-            HStack {
-                Text("QwD Core Engine v\(report.version)")
-                Spacer()
-                Text("Native ARM64/NEON Vectorized Pipeline")
-            }
-            .font(.system(size: 7, design: .monospaced))
-            .foregroundStyle(.gray)
-        }
-        .padding(40)
-        .frame(width: 595, height: 842) // A4 at 72 DPI (Points)
-        .background(Color.white)
-    }
-}
-
-// MARK: - Component Helpers
 
 struct HeaderBar: View {
     let report: QCReport
     @Binding var showingInspector: Bool
-    
+    @Binding var showingPrintPreview: Bool
+    @Environment(QwDEngine.self) private var engine
+
     var body: some View {
-        HStack(alignment: .lastTextBaseline) {
+        HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Quality Control Report")
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
-                Text("Engine v\(report.version) • \(report.read_count.formatted()) Sequences • \(report.thread_count) Threads")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            Spacer()
-            HStack(spacing: 10) {
-                Button(action: { showingInspector = true }) {
-                    Label("Inspect", systemImage: "doc.text.magnifyingglass")
+                Text("Sequence Analytics Report")
+                    .font(.system(size: 32, weight: .black, design: .rounded))
+                HStack {
+                    Text("QwD v\(report.version)")
+                        .font(.caption.monospaced())
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.accentColor.opacity(0.1))
+                        .cornerRadius(4)
+                    
+                    Text("•")
+                    Text("\(report.read_count.formatted()) Reads Processed")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                 }
-                .buttonStyle(.bordered)
-                
-                Button(action: exportPDF) {
-                    Label("Export PDF", systemImage: "printer.filled")
+            }
+            
+            Spacer()
+            
+            HStack(spacing: 12) {
+                Button {
+                    showingInspector = true
+                } label: {
+                    Label("Inspect Raw", systemImage: "doc.text.magnifyingglass")
                 }
                 .buttonStyle(.bordered)
 
-                Button(action: exportJSON) {
-                    Label("Save JSON", systemImage: "square.and.arrow.up")
+                #if os(macOS)
+                Button {
+                    showingPrintPreview = true
+                } label: {
+                    Label("Export PDF", systemImage: "printer.filled.and.paper")
+                }
+                .buttonStyle(.bordered)
+                #endif
+
+                Button {
+                    engine.lastReport = nil
+                } label: {
+                    Label("New", systemImage: "plus")
                 }
                 .buttonStyle(.borderedProminent)
             }
         }
     }
+}
+
+struct InspectorView: View {
+    let report: QCReport
+    @Environment(\.dismiss) private var dismiss
     
-    @MainActor
-    private func exportPDF() {
-        let printView = ScientificPrintView(report: report)
-        let renderer = ImageRenderer(content: printView)
-        
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.pdf]
-        panel.nameFieldStringValue = "qwd_report_\(report.version).pdf"
-        
-        panel.begin { resp in
-            if resp == .OK, let url = panel.url {
-                renderer.render { size, context in
-                    var box = CGRect(origin: .zero, size: size)
-                    guard let pdfContext = CGContext(url as CFURL, mediaBox: &box, nil) else { return }
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    Text("Raw Analytical Payload")
+                        .font(.headline)
                     
-                    pdfContext.beginPDFPage(nil)
-                    context(pdfContext) // This draws vector data from SwiftUI to PDF
-                    pdfContext.endPDFPage()
-                    pdfContext.closePDF()
+                    Text(jsonString)
+                        .font(.system(.caption, design: .monospaced))
+                        .padding()
+                        .background(Color.primary.opacity(0.05))
+                        .cornerRadius(8)
+                }
+                .padding()
+            }
+            .navigationTitle("Data Inspector")
+            #if os(macOS)
+            .frame(minWidth: 600, minHeight: 500)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
                 }
             }
         }
     }
-
-    private func exportJSON() {
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.json]
-        panel.begin { resp in
-            if resp == .OK, let url = panel.url {
-                let data = try? JSONEncoder().encode(report)
-                try? data?.write(to: url)
-            }
+    
+    private var jsonString: String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        if let data = try? encoder.encode(report), let str = String(data: data, encoding: .utf8) {
+            return str
         }
+        return "Error encoding report."
     }
 }
-
-struct PrintMetric: View {
-    let label: String
-    let value: String
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(label).font(.system(size: 8, weight: .bold)).foregroundStyle(.gray)
-            Text(value).font(.system(size: 14, weight: .bold, design: .rounded))
-        }
-    }
-}
-
-struct PrintDistributionSection<Content: View>: View {
-    let title: String
-    let icon: String
-    @ViewBuilder let content: () -> Content
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Image(systemName: icon).font(.system(size: 10))
-                Text(title).font(.system(size: 10, weight: .bold))
-            }
-            content().frame(height: 120)
-        }
-    }
-}
-
-// ─────────────────────────────────────────────
-// Optimized Vector Charts
-// ─────────────────────────────────────────────
-
-struct GCChart: View {
-    let bins: [Int]
-    let isPrinting: Bool
-    var body: some View {
-        Chart {
-            ForEach(Array(bins.enumerated()), id: \.offset) { i, c in
-                AreaMark(x: .value("%", i * 10), y: .value("R", c))
-                    .foregroundStyle(isPrinting ? Color.black.opacity(0.05).gradient : QwDPalette.accent.opacity(0.1).gradient)
-                LineMark(x: .value("%", i * 10), y: .value("R", c))
-                    .foregroundStyle(isPrinting ? Color.black : QwDPalette.accent)
-                    .lineStyle(StrokeStyle(lineWidth: isPrinting ? 1 : 2))
-            }
-        }
-        .chartXAxis { AxisMarks(values: [0, 50, 100]) }
-        .chartYAxis(.hidden)
-    }
-}
-
-struct LengthChart: View {
-    let bins: [Int]
-    let isPrinting: Bool
-    let labels = ["<100", "500", "1k", "5k", "10k", "10k+"]
-    var body: some View {
-        Chart {
-            ForEach(Array(zip(labels, bins).enumerated()), id: \.offset) { _, pair in
-                BarMark(x: .value("L", pair.0), y: .value("R", pair.1))
-                    .foregroundStyle(isPrinting ? Color.black.opacity(0.8).gradient : Color.blue.gradient)
-            }
-        }
-        .chartYAxis(.hidden)
-    }
-}
-
-// ─────────────────────────────────────────────
-// Internal UI Components
-// ─────────────────────────────────────────────
 
 struct MetricSummaryGrid: View {
     let report: QCReport
+    
     var body: some View {
-        Grid(horizontalSpacing: 16, verticalSpacing: 16) {
-            GridRow {
-                if let stats = report.stages.basic_stats {
-                    SummaryTile(label: "Throughput", value: stats.total_bases.compactFormatted, unit: "Bases", trend: .nominal)
-                    SummaryTile(label: "Avg. Length", value: String(format: "%.0f", stats.mean_length), unit: "bp", trend: .neutral)
-                } else if let alignment = report.stages.alignment_stats {
-                    SummaryTile(label: "Total Records", value: alignment.total_records.compactFormatted, unit: "Reads", trend: .neutral)
+        let columns = [
+            GridItem(.flexible()),
+            GridItem(.flexible()),
+            GridItem(.flexible())
+        ]
+        
+        LazyVGrid(columns: columns, spacing: 20) {
+            if let stats = report.stages.basic_stats {
+                if let mean = stats.mean_length {
+                    SummaryTile(label: "Mean Length", value: String(format: "%.1f", mean), unit: "bp", trend: .nominal)
                 }
-                
-                if let n50 = report.stages.n_statistics?.n50 {
-                    SummaryTile(label: "N50 Metric", value: "\(n50)", unit: "bp", trend: .nominal)
+                if let max = stats.max_length {
+                    SummaryTile(label: "Max Length", value: max.formatted(), unit: "bp", trend: .nominal)
                 }
-                
-                if report.stages.gc_distribution != nil {
-                    SummaryTile(label: "GC Content", value: String(format: "%.1f", calculateGC(report)), unit: "%", trend: .neutral)
+                if let bases = stats.total_bases {
+                    SummaryTile(label: "Total Yield", value: bases.compactFormatted, unit: "bp", trend: .nominal)
                 }
+            }
+            
+            if let n50 = report.stages.n_statistics, let val = n50.n50 {
+                SummaryTile(label: "N50 Metric", value: val.compactFormatted, unit: "bp", trend: .nominal)
             }
         }
     }
-    private func calculateGC(_ r: QCReport) -> Double {
-        guard let bins = r.stages.gc_distribution?.bins else { return 0 }
-        let total = bins.reduce(0, +)
-        if total == 0 { return 0 }
-        var sum: Double = 0
-        for (i, count) in bins.enumerated() { sum += Double(i * 10) * Double(count) }
-        return sum / Double(total)
+}
+
+struct ReportBodyView: View {
+    let report: QCReport
+    
+    var body: some View {
+        #if os(macOS)
+        HStack(alignment: .top, spacing: 24) {
+            MainAnalysisPanel(report: report)
+            IntegritySidebar(report: report)
+        }
+        #else
+        VStack(alignment: .leading, spacing: 24) {
+            MainAnalysisPanel(report: report)
+            IntegritySidebar(report: report)
+        }
+        #endif
     }
 }
 
+struct MainAnalysisPanel: View {
+    let report: QCReport
+    var body: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            if let gc = report.stages.gc_distribution {
+                GCChart(stats: gc)
+            }
+            if let len = report.stages.length_distribution {
+                LengthChart(stats: len)
+            }
+            if let kmer = report.stages.kmer_spectrum {
+                KmerSpectrumView(stats: kmer)
+            }
+            
+            if let taxed = report.stages.taxonomic_screening {
+                TaxonomyProfileView(taxa: taxed)
+            }
+            
+            if let alignment = report.stages.alignment_stats, let mapped = alignment.mapped_reads, let mean = alignment.mean_mapq {
+                VStack(alignment: .leading, spacing: 16) {
+                    SectionLabel(text: "BAM Alignment Statistics")
+                    HStack(spacing: 20) {
+                        SummaryTile(label: "Mapped Reads", value: mapped.compactFormatted, unit: "Reads", trend: .nominal)
+                        SummaryTile(label: "Mean MAPQ", value: String(format: "%.1f", mean), unit: "Quality", trend: .nominal)
+                    }
+                }
+                .proPanel(padding: 24)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
+struct IntegritySidebar: View {
+    let report: QCReport
+    var body: some View {
+        VStack(spacing: 20) {
+            if let trim = report.stages.trim, let trimmed = trim.reads_trimmed {
+                IntegrityTile(title: "Trimming Delta", icon: "scissors") {
+                    HStack {
+                        Text("\(trimmed.formatted())").font(.headline)
+                        Text("reads modified").font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            if let filter = report.stages.filter, let seen = filter.reads_seen, let passed = filter.reads_passed {
+                IntegrityTile(title: "Filter Yield", icon: "line.3.horizontal.decrease.circle") {
+                    VStack(alignment: .leading) {
+                        let yield = seen > 0 ? (Double(passed) / Double(seen)) * 100 : 0.0
+                        Text(String(format: "%.1f%%", yield)).font(.headline)
+                        Text("Survival Rate").font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            if let dup = report.stages.duplication, dup.duplication_ratio != nil {
+                IntegrityTile(title: "Duplication Rate", icon: "square.on.square.dashed") {
+                    DuplicationMiniChart(stats: dup)
+                }
+            }
+            if let ent = report.stages.entropy {
+                IntegrityTile(title: "Complexity (Entropy)", icon: "waveform.path.ecg") {
+                    EntropyMiniChart(stats: ent)
+                }
+            }
+        }
+        #if os(macOS)
+        .frame(width: 280)
+        #else
+        .frame(maxWidth: .infinity)
+        #endif
+    }
+}
+
+// ─────────────────────────────────────────────
+// Detailed Charts
+// ─────────────────────────────────────────────
+
+struct GCChart: View {
+    let stats: GCDistribution
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionLabel(text: "GC Distribution")
+            if let bins = stats.bins {
+                Chart {
+                    ForEach(Array(bins.enumerated()), id: \.offset) { index, count in
+                        BarMark(
+                            x: .value("GC%", Double(index) / Double(bins.count) * 100.0),
+                            y: .value("Count", count)
+                        )
+                        .foregroundStyle(Color.accentColor.gradient)
+                    }
+                }
+                .frame(height: 200)
+                .chartXAxisLabel("GC Percentage (%)")
+                .chartYAxisLabel("Read Count")
+            } else {
+                Text("No GC Distribution data available.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(height: 200)
+            }
+        }
+        .proPanel(padding: 24)
+    }
+}
+
+struct LengthBin: Identifiable {
+    let id: Int
+    let count: Int
+}
+
+struct LengthChart: View {
+    let stats: LengthDistribution
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionLabel(text: "Sequence Length Distribution")
+            if let binsData = stats.bins {
+                let bins = binsData.enumerated().map { LengthBin(id: $0.offset, count: $0.element) }
+                Chart(bins) { bin in
+                    AreaMark(
+                        x: .value("Index", bin.id),
+                        y: .value("Reads", bin.count)
+                    )
+                    .foregroundStyle(Color.blue.opacity(0.1).gradient)
+                    
+                    LineMark(
+                        x: .value("Index", bin.id),
+                        y: .value("Reads", bin.count)
+                    )
+                    .interpolationMethod(.catmullRom)
+                    .foregroundStyle(Color.blue)
+                }
+                .frame(height: 200)
+                .chartXAxisLabel("Length Distribution Index")
+            } else {
+                VStack {
+                    Text("Detailed Length Distribution not available.")
+                    if let count = stats.count {
+                        Text("\(count) length variations recorded.")
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(height: 200)
+            }
+        }
+        .proPanel(padding: 24)
+    }
+}
+
+// ─────────────────────────────────────────────
+// Shared UI Elements
+// ─────────────────────────────────────────────
+
 struct SummaryTile: View {
-    let label: String; let value: String; let unit: String; let trend: BioTrend
-    enum BioTrend { case nominal, neutral, warning, critical }
+    let label: String
+    let value: String
+    let unit: String
+    let trend: TrendType
+    
+    enum Trend { case nominal, warning, critical }
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(label.uppercased()).font(.system(size: 10, weight: .black)).foregroundStyle(.secondary)
+            Text(label).font(.caption.bold()).foregroundStyle(.secondary)
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text(value).font(.system(size: 24, weight: .bold, design: .rounded))
                 Text(unit).font(.caption2).foregroundStyle(.tertiary)
-                Spacer()
-                Circle().fill(trendColor.gradient).frame(width: 8, height: 8)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading).proPanel()
-    }
-    var trendColor: Color {
-        switch trend {
-        case .nominal: QwDPalette.bioNominal; case .neutral: QwDPalette.bioNeutral
-        case .warning: QwDPalette.bioWarning; case .critical: QwDPalette.bioCritical
-        }
-    }
-}
-
-struct DistributionPanel<Content: View>: View {
-    let title: String; let icon: String; @ViewBuilder let content: () -> Content
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Label(title, systemImage: icon).font(.subheadline.bold()).foregroundStyle(.secondary)
-            content().frame(height: 180)
-        }
-        .frame(maxWidth: .infinity).proPanel()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .proPanel(padding: 16)
     }
 }
 
 struct IntegrityTile<Content: View>: View {
-    let title: String; let icon: String; @ViewBuilder let content: () -> Content
+    let title: String
+    let icon: String
+    let content: Content
+    
+    init(title: String, icon: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.icon = icon
+        self.content = content()
+    }
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label(title, systemImage: icon).font(.caption.bold()).foregroundStyle(.secondary)
-            content()
+            Label(title, systemImage: icon)
+                .font(.caption.bold())
+                .foregroundStyle(.secondary)
+            content
         }
-        .frame(maxWidth: .infinity, alignment: .leading).proPanel()
-    }
-}
-
-struct OverrepresentedTable: View {
-    let stats: OverrepresentedStats
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack { Text("Detected Sequence"); Spacer(); Text("Frequency") }
-            .font(.caption.bold()).foregroundStyle(.secondary).padding(.horizontal, 16).padding(.vertical, 8).background(Color.primary.opacity(0.03))
-            HStack(alignment: .top) {
-                Text(stats.most_frequent).font(.system(.body, design: .monospaced)).foregroundStyle(QwDPalette.accent)
-                Spacer()
-                VStack(alignment: .trailing) {
-                    Text("\(stats.most_frequent_count.formatted())").font(.headline.bold())
-                    Text("Occurrences").font(.system(size: 9)).foregroundStyle(.secondary)
-                }
-            }.padding(16)
-            Divider()
-            HStack { Text("Pattern Diversity Index").font(.caption).foregroundStyle(.secondary); Spacer()
-                Text("\(stats.unique_sequences.formatted()) unique").font(.caption.bold())
-            }.padding(12)
-        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .proPanel(padding: 16)
     }
 }
 
 struct DuplicationMiniChart: View {
     let stats: DuplicationStats
     var body: some View {
-        HStack(spacing: 16) {
-            ZStack {
-                Circle().stroke(.quaternary, lineWidth: 6)
-                Circle().trim(from: 0, to: stats.duplication_ratio)
-                    .stroke(stats.duplication_ratio > 0.2 ? QwDPalette.bioWarning.gradient : QwDPalette.bioNominal.gradient, style: StrokeStyle(lineWidth: 6, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
-            }.frame(width: 44, height: 44)
-            VStack(alignment: .leading) {
-                Text(String(format: "%.1f%%", stats.duplication_ratio * 100)).font(.headline.bold())
-                Text("Total Duplicates").font(.system(size: 9)).foregroundStyle(.secondary)
+        let rate = stats.duplication_ratio ?? 0.0
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(String(format: "%.1f%%", rate * 100)).font(.headline)
+                Spacer()
+                if let dup = stats.duplicate_reads, let total = stats.total_reads {
+                    Text("\(dup.formatted()) / \(total.formatted())").font(.system(size: 9)).foregroundStyle(.tertiary)
+                }
             }
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(.secondary.opacity(0.1))
+                    Capsule().fill(rate > 0.2 ? .orange : .blue).frame(width: geo.size.width * CGFloat(rate))
+                }
+            }
+            .frame(height: 6)
         }
     }
 }
@@ -490,38 +424,131 @@ struct DuplicationMiniChart: View {
 struct EntropyMiniChart: View {
     let stats: EntropyStats
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(String(format: "%.4f bits", stats.entropy)).font(.headline.bold())
-            GeometryReader { geo in
-                Capsule().fill(.quaternary).overlay(alignment: .leading) {
-                    Capsule().fill(Color.purple.gradient).frame(width: geo.size.width * min(stats.entropy / 2.0, 1.0))
-                }
-            }.frame(height: 6)
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            Text(String(format: "%.2f", stats.entropy)).font(.headline)
+            Text("bits").font(.caption2).foregroundStyle(.tertiary)
         }
     }
 }
 
-struct InspectorSidebar: View {
-    let report: QCReport; @Environment(\.dismiss) var dismiss
+struct SectionLabel: View {
+    let text: String
     var body: some View {
-        NavigationStack {
-            List {
-                Section("Engine Profile") { LabeledContent("QwD Version", value: report.version); LabeledContent("Target Platform", value: "Native ARM64/SIMD") }
-                Section("Raw Telemetry") { LabeledContent("Read Count", value: "\(report.read_count)")
-                    if let bs = report.stages.basic_stats {
-                        LabeledContent("Bases Processed", value: "\(bs.total_bases)")
-                        LabeledContent("Shortest Read", value: "\(bs.min_length) bp"); LabeledContent("Longest Read", value: "\(bs.max_length) bp")
-                    }
-                }
-            }
-            .navigationTitle("Telemetry Details").toolbar { Button("Done") { dismiss() } }
-        }.frame(width: 350, height: 500)
+        Text(text.uppercased())
+            .font(.system(size: 11, weight: .black))
+            .foregroundStyle(.secondary)
+            .kerning(1.2)
     }
 }
 
-struct SectionLabel: View {
-    let text: String; var body: some View { Text(text.uppercased()).font(.system(size: 10, weight: .black)).foregroundStyle(.tertiary) }
+enum TrendType { case nominal, warning, critical }
+
+#if os(macOS)
+// ─────────────────────────────────────────────
+// Scientific Print View (macOS ONLY)
+// ─────────────────────────────────────────────
+
+struct ScientificPrintView: View {
+    let report: QCReport
+    let timestamp = Date()
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Toolbar
+            HStack {
+                Button("Cancel") { dismiss() }
+                Spacer()
+                Text("Scientific Report Preview").font(.headline)
+                Spacer()
+                Button("Save as PDF...") {
+                    savePDF()
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            .padding()
+            .background(.ultraThinMaterial)
+            
+            // The Paper
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    header
+                    Divider()
+                    MetricSummaryGrid(report: report)
+                    if let gc = report.stages.gc_distribution {
+                        GCChart(stats: gc)
+                    }
+                    if let len = report.stages.length_distribution {
+                        LengthChart(stats: len)
+                    }
+                    footer
+                }
+                .padding(40)
+                .frame(width: 595) // A4 width at 72dpi
+                .background(.white)
+                .foregroundStyle(.black)
+                .shadow(radius: 10)
+                .padding()
+            }
+            .background(Color.gray.opacity(0.2))
+        }
+        .frame(width: 800, height: 800)
+    }
+    
+    var header: some View {
+        HStack {
+            VStack(alignment: .leading) {
+                Text("QwD GENOMIC QUALITY REPORT").font(.title.bold())
+                Text("Fidelity Level: Publication Grade").font(.caption)
+            }
+            Spacer()
+            VStack(alignment: .trailing) {
+                Text(timestamp, style: .date)
+                Text(timestamp, style: .time)
+            }
+            .font(.caption.monospaced())
+        }
+    }
+    
+    var footer: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Software Version: QwD v\(report.version)")
+            Text("Digital Signature: \(UUID().uuidString)")
+            Text("© 2026 MD. Arshad. All rights reserved.")
+        }
+        .font(.system(size: 8, design: .monospaced))
+        .foregroundStyle(.secondary)
+    }
+    
+    @MainActor
+    private func savePDF() {
+        let renderer = ImageRenderer(content: self.frame(width: 595))
+        
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.pdf]
+        panel.nameFieldStringValue = "QwD_Report.pdf"
+        
+        panel.begin { response in
+            if response == .OK, let url = panel.url {
+                renderer.render { size, context in
+                    var box = CGRect(origin: .zero, size: size)
+                    guard let pdfContext = CGContext(url as CFURL, mediaBox: &box, nil) else { return }
+                    
+                    pdfContext.beginPDFPage(nil)
+                    context(pdfContext)
+                    pdfContext.endPDFPage()
+                    pdfContext.closePDF()
+                }
+                dismiss()
+            }
+        }
+    }
 }
+#endif
+
+// ─────────────────────────────────────────────
+// Extensions
+// ─────────────────────────────────────────────
 
 extension Int {
     var compactFormatted: String {

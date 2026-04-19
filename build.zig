@@ -41,13 +41,20 @@ pub fn build(b: *std.Build) void {
     custom_deflate_mod.addImport("bit_sieve", bit_sieve_mod);
     custom_deflate_mod.addImport("huffman", huffman_mod);
     custom_deflate_mod.addImport("lz77", lz77_mod);
+    
+    const deflate_impl_path = if (with_libdeflate and target.result.os.tag == .macos) 
+        "core/io/deflate_libdeflate.zig" 
+    else 
+        "core/io/deflate_fallback.zig";
+    
+    const deflate_impl_mod = b.addModule("deflate_impl", .{ .root_source_file = b.path(deflate_impl_path) });
     const deflate_wrapper_mod = b.addModule("deflate_wrapper", .{ .root_source_file = b.path("core/io/deflate_wrapper.zig") });
+    deflate_wrapper_mod.addImport("deflate_impl", deflate_impl_mod);
     deflate_wrapper_mod.addImport("custom_deflate", custom_deflate_mod);
     deflate_wrapper_mod.addOptions("build_options", options);
-    if (with_libdeflate) {
-        if (target.result.os.tag == .macos) {
-            deflate_wrapper_mod.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
-        }
+    
+    if (with_libdeflate and target.result.os.tag == .macos) {
+        deflate_impl_mod.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
     }
     
     const bgzf_native_reader_mod = b.addModule("bgzf_native_reader", .{ .root_source_file = b.path("core/io/bgzf_native_reader.zig") });
@@ -61,6 +68,8 @@ pub fn build(b: *std.Build) void {
     const block_reader_mod = b.addModule("block_reader", .{ .root_source_file = b.path("core/io/block_reader.zig") });
     block_reader_mod.addImport("mode", mode_mod);
     block_reader_mod.addImport("gzip_reader", gzip_reader_mod);
+    block_reader_mod.addImport("bgzf_native_reader", bgzf_native_reader_mod);
+    block_reader_mod.addImport("deflate_impl", deflate_impl_mod);
     const parser_mod = b.addModule("parser", .{ .root_source_file = b.path("core/parser/parser.zig") });
     parser_mod.addImport("block_reader", block_reader_mod);
     parser_mod.addImport("newline_scan", newline_scan_mod);
@@ -81,6 +90,18 @@ pub fn build(b: *std.Build) void {
     stage_interface_mod.addImport("parser", parser_mod);
     stage_interface_mod.addImport("fastq_block", fastq_block_mod);
     stage_interface_mod.addImport("bitplanes", bitplanes_mod);
+
+    // --- Artifact Root Modules ---
+    const cli_root = b.createModule(.{
+        .root_source_file = b.path("apps/cli/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const api_root = b.createModule(.{
+        .root_source_file = b.path("bindings/c/qwd_api.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
     // QC Stages
     const qc_list = [_]struct { n: []const u8, p: []const u8 }{
@@ -163,7 +184,11 @@ pub fn build(b: *std.Build) void {
     bam_pipeline_mod.addImport("bam_stage", bam_stage_mod);
     bam_pipeline_mod.addImport("structured_output", structured_output_mod);
     var bit = bam_stage_mods.iterator();
-    while (bit.next()) |e| bam_pipeline_mod.addImport(e.key_ptr.*, e.value_ptr.*);
+    while (bit.next()) |e| {
+        bam_pipeline_mod.addImport(e.key_ptr.*, e.value_ptr.*);
+        cli_root.addImport(e.key_ptr.*, e.value_ptr.*);
+        api_root.addImport(e.key_ptr.*, e.value_ptr.*);
+    }
 
     // Pipeline & Schedulers
     const scheduler_mod = b.addModule("scheduler", .{ .root_source_file = b.path("core/scheduler/scheduler.zig") });
@@ -181,6 +206,8 @@ pub fn build(b: *std.Build) void {
     parallel_scheduler_mod.addImport("fastq_block", fastq_block_mod);
     parallel_scheduler_mod.addImport("bitplanes", bitplanes_mod);
     parallel_scheduler_mod.addImport("vertical_scanner", vertical_scanner_mod);
+    parallel_scheduler_mod.addImport("bgzf_native_reader", bgzf_native_reader_mod);
+    parallel_scheduler_mod.addImport("deflate_impl", deflate_impl_mod);
 
     const pipeline_mod = b.addModule("pipeline", .{ .root_source_file = b.path("core/pipeline/pipeline.zig") });
     pipeline_mod.addImport("parallel_scheduler", parallel_scheduler_mod);
@@ -195,56 +222,87 @@ pub fn build(b: *std.Build) void {
     pipeline_mod.addImport("bloom_filter", bloom_filter_mod);
     pipeline_mod.addImport("structured_output", structured_output_mod);
     var it = stage_mods.iterator();
-    while (it.next()) |e| pipeline_mod.addImport(e.key_ptr.*, e.value_ptr.*);
+    while (it.next()) |e| {
+        pipeline_mod.addImport(e.key_ptr.*, e.value_ptr.*);
+        cli_root.addImport(e.key_ptr.*, e.value_ptr.*);
+        api_root.addImport(e.key_ptr.*, e.value_ptr.*);
+    }
+
+    // --- Artifact Root Modules ---
+    cli_root.addImport("pipeline", pipeline_mod);
+    cli_root.addImport("parser", parser_mod);
+    cli_root.addImport("mode", mode_mod);
+    cli_root.addImport("entropy_lut", entropy_lut_mod);
+    cli_root.addImport("bam_pipeline", bam_pipeline_mod);
+    cli_root.addImport("bam_reader", bam_reader_mod);
+    cli_root.addImport("structured_output", structured_output_mod);
+    cli_root.addImport("pipeline_config", pipeline_config_mod);
+    cli_root.addImport("global_allocator", global_allocator_mod);
+    cli_root.addImport("runtime_metrics", runtime_metrics_mod);
+    cli_root.addImport("chunk_builder", chunk_builder_mod);
+    cli_root.addImport("bgzf_chunk_builder", bgzf_chunk_builder_mod);
+    cli_root.addImport("bgzf_native_reader", bgzf_native_reader_mod);
+    cli_root.addOptions("build_options", options);
+
+    api_root.addImport("pipeline", pipeline_mod);
+    api_root.addImport("parser", parser_mod);
+    api_root.addImport("mode", mode_mod);
+    api_root.addImport("entropy_lut", entropy_lut_mod);
+    api_root.addImport("bam_pipeline", bam_pipeline_mod);
+    api_root.addImport("bam_reader", bam_reader_mod);
+    api_root.addImport("structured_output", structured_output_mod);
+    api_root.addImport("pipeline_config", pipeline_config_mod);
+    api_root.addImport("global_allocator", global_allocator_mod);
+    api_root.addImport("runtime_metrics", runtime_metrics_mod);
+    api_root.addImport("chunk_builder", chunk_builder_mod);
+    api_root.addImport("bgzf_chunk_builder", bgzf_chunk_builder_mod);
+    api_root.addImport("bgzf_native_reader", bgzf_native_reader_mod);
+    api_root.addOptions("build_options", options);
 
     // --- Artifacts ---
-    const artifacts = [_]*std.Build.Step.Compile{
-        b.addExecutable(.{ .name = "qwd", .root_source_file = b.path("apps/cli/main.zig"), .target = target, .optimize = optimize }),
-        b.addSharedLibrary(.{ .name = "qwd", .root_source_file = b.path("bindings/c/qwd_api.zig"), .target = target, .optimize = optimize }),
-    };
+    const qwd_exe = b.addExecutable(.{ .name = "qwd", .root_module = cli_root });
+    const qwd_lib_shared = b.addLibrary(.{ .name = "qwd", .root_module = api_root, .linkage = .dynamic });
+    const qwd_lib_static = b.addLibrary(.{ .name = "qwd", .root_module = api_root, .linkage = .static });
 
-    for (artifacts) |art| {
-        art.root_module.addImport("pipeline", pipeline_mod);
-        art.root_module.addImport("parser", parser_mod);
-        art.root_module.addImport("mode", mode_mod);
-        art.root_module.addImport("entropy_lut", entropy_lut_mod);
-        art.root_module.addImport("bam_pipeline", bam_pipeline_mod);
-        art.root_module.addImport("bam_reader", bam_reader_mod);
-        art.root_module.addImport("structured_output", structured_output_mod);
-        art.root_module.addImport("pipeline_config", pipeline_config_mod);
-        art.root_module.addImport("global_allocator", global_allocator_mod);
-        art.root_module.addImport("runtime_metrics", runtime_metrics_mod);
-        art.root_module.addImport("chunk_builder", chunk_builder_mod);
-        art.root_module.addImport("bgzf_chunk_builder", bgzf_chunk_builder_mod);
-        art.root_module.addImport("bgzf_native_reader", bgzf_native_reader_mod);
-        art.root_module.addOptions("build_options", options);
-        if (with_libdeflate) {
-            art.linkSystemLibrary("deflate");
+    const arts = [_]*std.Build.Step.Compile{ qwd_exe, qwd_lib_shared, qwd_lib_static };
+
+    for (arts) |art| {
+        // Mobile Compatibility: Only link libdeflate if not targeting iOS
+        const is_ios = target.result.os.tag == .ios;
+        if (with_libdeflate and !is_ios) {
+            art.root_module.linkSystemLibrary("deflate", .{});
             if (target.result.os.tag == .macos) {
-                art.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
-                art.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
+                art.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
+                art.root_module.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
             }
         }
-        art.linkLibC();
+        art.root_module.link_libc = true;
+        art.bundle_compiler_rt = true;
         b.installArtifact(art);
     }
 
     const test_step = b.step("test", "Run unit tests");
     const io_tests = [_][]const u8{ "tests/io/test_bit_sieve.zig", "tests/io/test_deflate_wrapper.zig" };
     for (io_tests) |p| {
-        const t = b.addTest(.{ .root_source_file = b.path(p), .target = target, .optimize = optimize });
-        t.root_module.addImport("bit_sieve", bit_sieve_mod);
-        t.root_module.addImport("deflate_wrapper", deflate_wrapper_mod);
-        t.root_module.addOptions("build_options", options);
+        const test_mod = b.createModule(.{
+            .root_source_file = b.path(p),
+            .target = target,
+            .optimize = optimize,
+        });
+        test_mod.addImport("bit_sieve", bit_sieve_mod);
+        test_mod.addImport("deflate_wrapper", deflate_wrapper_mod);
+        test_mod.addOptions("build_options", options);
+
+        const t = b.addTest(.{ .root_module = test_mod });
         
         if (with_libdeflate) {
-            t.linkSystemLibrary("deflate");
+            t.root_module.linkSystemLibrary("deflate", .{});
             if (target.result.os.tag == .macos) {
-                t.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
-                t.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
+                t.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
+                t.root_module.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
             }
         }
-        t.linkLibC();
+        t.root_module.link_libc = true;
         
         test_step.dependOn(&b.addRunArtifact(t).step);
     }

@@ -1,84 +1,60 @@
 const std = @import("std");
-const bam_scheduler_mod = @import("bam_scheduler");
-const bam_stage_mod = @import("bam_stage");
-const bam_reader_mod = @import("bam_reader");
-
-const alignment_stats_mod = @import("alignment_stats");
-const mapq_dist_mod = @import("mapq_dist");
-const insert_size_mod = @import("insert_size");
-const coverage_mod = @import("coverage");
-const error_rate_mod = @import("error_rate");
-const soft_clip_mod = @import("soft_clip");
+const bam_reader = @import("bam_reader");
+const bam_stage = @import("bam_stage");
 
 pub const BamPipeline = struct {
-    scheduler: bam_scheduler_mod.BamScheduler,
-    arena: std.heap.ArenaAllocator,
+    allocator: std.mem.Allocator,
+    stages: std.ArrayList(bam_stage.BamStage),
+    record_count: usize = 0,
 
-    pub fn init(child_allocator: std.mem.Allocator) BamPipeline {
-        return BamPipeline{
-            .scheduler = bam_scheduler_mod.BamScheduler.init(child_allocator),
-            .arena = std.heap.ArenaAllocator.init(child_allocator),
+    pub fn init(allocator: std.mem.Allocator) BamPipeline {
+        return .{
+            .allocator = allocator,
+            .stages = std.ArrayList(bam_stage.BamStage).empty,
         };
     }
 
     pub fn deinit(self: *BamPipeline) void {
-        self.scheduler.deinit();
-        self.arena.deinit();
+        self.stages.deinit(self.allocator);
     }
 
-    pub fn addDefaultStages(self: *BamPipeline) !void {
-        const allocator = self.arena.allocator();
-
-        var s1 = try allocator.create(alignment_stats_mod.AlignmentStatsStage);
-        s1.* = .{};
-        try self.scheduler.registerStage(s1.stage());
-
-        var s2 = try allocator.create(mapq_dist_mod.MapqDistributionStage);
-        s2.* = .{};
-        try self.scheduler.registerStage(s2.stage());
-
-        var s3 = try allocator.create(insert_size_mod.InsertSizeStage);
-        s3.* = .{};
-        try self.scheduler.registerStage(s3.stage());
-
-        var s4 = try allocator.create(coverage_mod.CoverageStage);
-        s4.* = coverage_mod.CoverageStage.init(3000000000);
-        try self.scheduler.registerStage(s4.stage());
-
-        var s5 = try allocator.create(error_rate_mod.ErrorRateStage);
-        s5.* = .{};
-        try self.scheduler.registerStage(s5.stage());
-
-        var s6 = try allocator.create(soft_clip_mod.SoftClipStage);
-        s6.* = .{};
-        try self.scheduler.registerStage(s6.stage());
+    pub fn addStage(self: *BamPipeline, stage: bam_stage.BamStage) !void {
+        try self.stages.append(self.allocator, stage);
     }
 
-    pub fn run(self: *BamPipeline, record: bam_reader_mod.AlignmentRecord) !void {
-        try self.scheduler.process(record);
+    pub fn run(self: *BamPipeline, file: std.Io.File, io: std.Io) !void {
+        var reader = try bam_reader.BamReader.init(self.allocator, file, io);
+        defer reader.deinit();
+
+        while (try reader.next()) |record| {
+            for (self.stages.items) |stage| {
+                try stage.processRecord(&record);
+            }
+            self.record_count += 1;
+        }
     }
 
     pub fn finalize(self: *BamPipeline) !void {
-        try self.scheduler.finalize();
+        for (self.stages.items) |stage| {
+            try stage.finalize();
+        }
     }
 
-    pub fn report(self: *BamPipeline, writer: std.io.AnyWriter) !void {
-        try writer.print("\nQwD BAM Analytics Summary\n", .{});
-        try writer.print("=========================\n", .{});
-        self.scheduler.report(writer);
-        try writer.print("=========================\n", .{});
+    pub fn report(self: *BamPipeline, writer: *std.Io.Writer) void {
+        for (self.stages.items) |stage| {
+            stage.report(writer);
+        }
     }
 
-    pub fn reportJson(self: *BamPipeline, writer: std.io.AnyWriter) !void {
+    pub fn reportJson(self: *BamPipeline, writer: *std.Io.Writer) anyerror!void {
         try writer.print(
             \\{{
-            \\  "version": "1.1.0",
-            \\  "thread_count": 1,
+            \\  "version": "1.2.0-secured",
             \\  "read_count": {d},
             \\  "stages": {{
-        , .{self.scheduler.record_count});
+        , .{self.record_count});
 
-        for (self.scheduler.stages.items, 0..) |stage, i| {
+        for (self.stages.items, 0..) |stage, i| {
             if (i > 0) try writer.writeAll(",");
             try writer.writeAll("\n    ");
             try stage.reportJson(writer);
@@ -87,10 +63,13 @@ pub const BamPipeline = struct {
         try writer.writeAll("\n  }\n}\n");
     }
 
-    pub fn reportJsonAlloc(self: *BamPipeline, allocator: std.mem.Allocator) ![*:0]const u8 {
-        var list = std.ArrayList(u8).init(allocator);
-        errdefer list.deinit();
-        try self.reportJson(list.writer().any());
-        return try list.toOwnedSliceSentinel(0);
+    pub fn reportJsonAlloc(self: *BamPipeline, allocator: std.mem.Allocator, io: std.Io) ![*:0]const u8 {
+        _ = io;
+        var list = std.ArrayList(u8).empty;
+        errdefer list.deinit(allocator);
+        var aw = std.Io.Writer.Allocating.fromArrayList(allocator, &list);
+        try self.reportJson(&aw.writer);
+        var result_list = aw.toArrayList();
+        return try result_list.toOwnedSliceSentinel(allocator, 0);
     }
 };

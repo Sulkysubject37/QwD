@@ -1,227 +1,137 @@
 const std = @import("std");
 const pipeline_mod = @import("pipeline");
+const bam_pipeline_mod = @import("bam_pipeline");
 const pipeline_config_mod = @import("pipeline_config");
 const parser_mod = @import("parser");
-const bam_pipeline_mod = @import("bam_pipeline");
-const bam_reader_mod = @import("bam_reader");
-const allocator_mod = @import("allocator");
-const structured_output = @import("structured_output");
 const mode_mod = @import("mode");
 
-fn allocError(allocator: std.mem.Allocator, msg: []const u8) [*:0]const u8 {
-    const error_json = std.fmt.allocPrintZ(allocator, "{{\"error\": \"{s}\"}}", .{msg}) catch return "{\"error\":\"critical memory failure\"}";
-    return error_json;
-}
+var g_io_instance: std.Io.Threaded = undefined;
+var g_io: std.Io = undefined;
+var g_initialized: bool = false;
 
-pub export fn qwd_fastq_qc(path: [*:0]const u8) [*:0]const u8 {
-    return qwd_fastq_qc_ex(path, 1, 0, 0); // exact, 1 thread, auto gzip
-}
-
-pub export fn qwd_fastq_qc_fast(path: [*:0]const u8, threads: c_int) [*:0]const u8 {
-    return qwd_fastq_qc_ex(path, threads, 1, 0); // approx, threads, auto gzip
-}
-
-pub export fn qwd_fastq_qc_ex(path: [*:0]const u8, threads: c_int, mode: c_int, gzip_mode: c_int) [*:0]const u8 {
+export fn qwd_init() void {
+    if (g_initialized) return;
     const allocator = std.heap.c_allocator;
-    const file_path = std.mem.span(path);
-    @import("entropy_lut").initGlobal();
-    
-    var file = std.fs.cwd().openFile(file_path, .{}) catch return allocError(allocator, "File not found");
-    defer file.close();
+    g_io_instance = std.Io.Threaded.init(allocator, .{});
+    g_io = g_io_instance.io();
+    g_initialized = true;
+}
 
-    const analysis_mode: mode_mod.Mode = if (mode == 1) .APPROX else .EXACT;
-    const gz_mode: mode_mod.GzipMode = switch (gzip_mode) {
-        1 => .NATIVE,
-        2 => .LIBDEFLATE,
-        3 => .CHUNKED,
-        4 => .COMPAT,
-        else => .AUTO,
+fn openDirect(path: [*:0]const u8) !std.Io.File {
+    return std.Io.Dir.openFile(.cwd(), g_io, std.mem.span(path), .{});
+}
+
+export fn qwd_pipeline_run(p: *pipeline_mod.Pipeline, file_path: [*:0]const u8) i32 {
+    if (!g_initialized) qwd_init();
+    const file = openDirect(file_path) catch return -1;
+    defer file.close(g_io);
+    p.run(file, g_io) catch return -2;
+    p.finalize() catch {};
+    return 0;
+}
+
+export fn qwd_fastq_qc_ex(file_path: [*:0]const u8, threads: i32, mode: i32, gzip_mode: i32) ?[*:0]const u8 {
+    _ = mode; _ = gzip_mode;
+    if (!g_initialized) qwd_init();
+    const allocator = std.heap.c_allocator;
+    var config = pipeline_config_mod.PipelineConfig.default();
+    config.threads = if (threads > 0) @intCast(threads) else 1;
+    var p = pipeline_mod.Pipeline.init(allocator, config);
+    defer p.deinit();
+    p.addDefaultStages() catch return null;
+    const file = openDirect(file_path) catch return null;
+    defer file.close(g_io);
+    p.run(file, g_io) catch return null;
+    p.finalize() catch {};
+    return p.reportJsonAlloc(allocator, g_io) catch null;
+}
+
+export fn qwd_fastq_qc_ex_r(file_path_ptr: *[*:0]const u8, threads: *i32, mode: *i32, gzip_mode: *i32, out_buf: [*]u8, max_len: *i32) void {
+    _ = mode; _ = gzip_mode;
+    if (!g_initialized) qwd_init();
+    const allocator = std.heap.c_allocator;
+    const path_str = file_path_ptr.*;
+    
+    var config = pipeline_config_mod.PipelineConfig.default();
+    config.threads = if (threads.* > 0) @intCast(threads.*) else 1;
+    
+    var p = pipeline_mod.Pipeline.init(allocator, config);
+    defer p.deinit();
+    p.addDefaultStages() catch return;
+    
+    const file = openDirect(path_str) catch |err| {
+        std.debug.print("[C-API-R] Open error: {s}\n", .{@errorName(err)});
+        return;
     };
-
-    var pipeline = pipeline_mod.Pipeline.init(allocator, null);
-    pipeline.mode = analysis_mode;
-    pipeline.gzip_mode = gz_mode;
+    defer file.close(g_io);
     
-    pipeline.addStage("basic_stats") catch return allocError(allocator, "Stage init failed");
-    pipeline.addStage("nucleotide_composition") catch return allocError(allocator, "Stage init failed");
-    pipeline.addStage("gc_distribution") catch return allocError(allocator, "Stage init failed");
-    pipeline.addStage("length_distribution") catch return allocError(allocator, "Stage init failed");
-    pipeline.addStage("kmer_spectrum") catch return allocError(allocator, "Stage init failed");
-    pipeline.addStage("quality_dist") catch return allocError(allocator, "Stage init failed");
-    pipeline.addStage("taxed") catch return allocError(allocator, "Stage init failed");
-    pipeline.addStage("overrepresented") catch return allocError(allocator, "Stage init failed");
-    pipeline.addStage("duplication") catch return allocError(allocator, "Stage init failed");
-    pipeline.addStage("per_base_quality") catch return allocError(allocator, "Stage init failed");
-    pipeline.addStage("adapter_detect") catch return allocError(allocator, "Stage init failed");
-
-    const num_threads: usize = if (threads <= 0) std.Thread.getCpuCount() catch 1 else @intCast(threads);
-    pipeline.setupSchedulers(num_threads) catch return allocError(allocator, "Scheduler setup failed");
-
-    const is_gz = std.mem.endsWith(u8, file_path, ".gz");
-    pipeline.run(file, is_gz) catch |err| return allocError(allocator, @errorName(err));
-
-    pipeline.finalize() catch return allocError(allocator, "Pipeline finalize error");
-
-    const json = pipeline.reportJsonAlloc(allocator) catch return allocError(allocator, "JSON allocation failed");
-    pipeline.deinit();
-    return json;
-}
-
-pub export fn qwd_bam_stats(path: [*:0]const u8, threads: c_int) [*:0]const u8 {
-    _ = threads;
-    const allocator = std.heap.c_allocator;
-    const file_path = std.mem.span(path);
-
-    var file = std.fs.cwd().openFile(file_path, .{}) catch return allocError(allocator, "File not found");
-    defer file.close();
-
-    var bam_pipeline = bam_pipeline_mod.BamPipeline.init(allocator);
-    bam_pipeline.addDefaultStages() catch return allocError(allocator, "BAM stage setup failed");
-
-    var reader = bam_reader_mod.BamReader.init(allocator, file.reader().any()) catch return allocError(allocator, "BAM Reader Init failed");
-    defer reader.deinit();
-
-    const record_buffer = allocator.alloc(u8, 1024 * 1024) catch return allocError(allocator, "BAM buffer alloc failed");
-    defer allocator.free(record_buffer);
-    while (reader.next(record_buffer) catch return allocError(allocator, "BAM read failed")) |record| {
-        bam_pipeline.run(record) catch return allocError(allocator, "BAM processing failed");
-    }
-    bam_pipeline.finalize() catch return allocError(allocator, "BAM Finalize failed");
-
-    const json = bam_pipeline.reportJsonAlloc(allocator) catch return allocError(allocator, "JSON allocation failed");
-    bam_pipeline.deinit();
-    return json;
-}
-
-pub export fn qwd_pipeline(config_path: [*:0]const u8, input_path: [*:0]const u8) [*:0]const u8 {
-    const allocator = std.heap.c_allocator;
-    const c_path = std.mem.span(config_path);
-    const i_path = std.mem.span(input_path);
-    @import("entropy_lut").initGlobal();
-
-    const config_data = std.fs.cwd().readFileAlloc(allocator, c_path, 1024 * 1024) catch return allocError(allocator, "Config file not found");
-    defer allocator.free(config_data);
-    const config = pipeline_config_mod.PipelineConfig.parseJson(allocator, config_data) catch return allocError(allocator, "Invalid config JSON");
-    defer config.deinit();
-
-    var pipeline = pipeline_mod.Pipeline.init(allocator, config.value);
-    
-    for (config.value.pipeline) |stage_name| {
-        pipeline.addStage(stage_name) catch return allocError(allocator, "Stage init failed");
-    }
-
-    pipeline.setupSchedulers(1) catch return allocError(allocator, "Scheduler setup failed");
-
-    const file = std.fs.cwd().openFile(i_path, .{}) catch return allocError(allocator, "Input file not found");
-    defer file.close();
-
-    const is_gz = std.mem.endsWith(u8, i_path, ".gz");
-    pipeline.run(file, is_gz) catch |err| return allocError(allocator, @errorName(err));
-
-    pipeline.finalize() catch return allocError(allocator, "Pipeline finalize error");
-
-    const json = pipeline.reportJsonAlloc(allocator) catch return allocError(allocator, "JSON allocation failed");
-    pipeline.deinit();
-    return json;
-}
-
-pub export fn qwd_run_json_config(config_json: [*:0]const u8, input_path: [*:0]const u8) [*:0]const u8 {
-    const allocator = std.heap.c_allocator;
-    const json_data = std.mem.span(config_json);
-    const i_path = std.mem.span(input_path);
-    @import("entropy_lut").initGlobal();
-
-    const config = pipeline_config_mod.PipelineConfig.parseJson(allocator, json_data) catch |err| {
-        const msg = std.fmt.allocPrint(allocator, "Invalid config JSON: {s}", .{@errorName(err)}) catch return allocError(allocator, "JSON Error");
-        defer allocator.free(msg);
-        return allocError(allocator, msg);
+    p.run(file, g_io) catch |err| {
+        std.debug.print("[C-API-R] Run error: {s}\n", .{@errorName(err)});
+        return;
     };
-    defer config.deinit();
-
-    var pipeline = pipeline_mod.Pipeline.init(allocator, config.value);
+    p.finalize() catch {};
     
-    for (config.value.pipeline) |stage_name| {
-        pipeline.addStage(stage_name) catch return allocError(allocator, "Stage init failed");
+    const json = p.reportJsonAlloc(allocator, g_io) catch |err| {
+        std.debug.print("[C-API-R] Report error: {s}\n", .{@errorName(err)});
+        return;
+    };
+    defer {
+        const span = std.mem.span(json);
+        allocator.free(span);
     }
-
-    const num_threads = std.Thread.getCpuCount() catch 1;
-    pipeline.setupSchedulers(num_threads) catch return allocError(allocator, "Scheduler setup failed");
-
-    var file = std.fs.cwd().openFile(i_path, .{}) catch return allocError(allocator, "Input file not found");
-    defer file.close();
-
-    const is_gz = std.mem.endsWith(u8, i_path, ".gz");
-    pipeline.run(file, is_gz) catch |err| return allocError(allocator, @errorName(err));
-
-    pipeline.finalize() catch return allocError(allocator, "Pipeline finalize error");
-
-    const json = pipeline.reportJsonAlloc(allocator) catch return allocError(allocator, "JSON allocation failed");
-    pipeline.deinit();
-    return json;
+    
+    const json_slice = std.mem.span(json);
+    const copy_len = @min(json_slice.len, @as(usize, @intCast(max_len.*)) - 1);
+    @memcpy(out_buf[0..copy_len], json_slice[0..copy_len]);
+    out_buf[copy_len] = 0;
+    
+    std.debug.print("[C-API-R] Success: {d} reads, {d} bytes copied\n", .{p.read_count, copy_len});
 }
 
-pub export fn qwd_free_string(ptr: [*:0]const u8) void {
+export fn qwd_fastq_qc(file_path: [*:0]const u8) ?[*:0]const u8 {
+    return qwd_fastq_qc_ex(file_path, 1, 0, 0);
+}
+
+export fn qwd_bam_stats(file_path: [*:0]const u8, threads: i32) ?[*:0]const u8 {
+    if (!g_initialized) qwd_init();
     const allocator = std.heap.c_allocator;
-    const len = std.mem.indexOfSentinel(u8, 0, ptr);
-    allocator.free(ptr[0..len + 1]);
+    _ = threads; // BAM multi-threading not yet implemented in BAM scheduler
+
+    var p = bam_pipeline_mod.BamPipeline.init(allocator);
+    defer p.deinit();
+
+    // Add default BAM stages
+    const alignment_stats_stage = allocator.create(@import("alignment_stats").AlignmentStatsStage) catch return null;
+    alignment_stats_stage.* = .{};
+    p.addStage(alignment_stats_stage.stage()) catch return null;
+
+    const file = openDirect(file_path) catch return null;
+    defer file.close(g_io);
+    p.run(file, g_io) catch return null;
+    p.finalize() catch {};
+    return p.reportJsonAlloc(allocator, g_io) catch null;
 }
 
-pub export fn qwd_fastq_qc_r(path: [*c]const [*c]const u8, out: [*c]u8, max_len: [*c]const c_int) void {
-    const p = path[0];
-    const res = qwd_fastq_qc(p);
-    defer qwd_free_string(res);
+export fn qwd_pipeline(config_json: [*:0]const u8, input_path: [*:0]const u8) ?[*:0]const u8 {
+    if (!g_initialized) qwd_init();
+    const allocator = std.heap.c_allocator;
 
-    const len = std.mem.indexOfSentinel(u8, 0, res);
-    const m_len: usize = @intCast(max_len[0]);
-    if (m_len > 0) {
-        const copy_len = @min(len, m_len - 1);
-        @memcpy(out[0..copy_len], res[0..copy_len]);
-        out[copy_len] = 0;
-    }
+    const parsed = pipeline_config_mod.PipelineConfig.parseJson(allocator, std.mem.span(config_json)) catch return null;
+    defer parsed.deinit();
+    
+    var p = pipeline_mod.Pipeline.init(allocator, parsed.value);
+    defer p.deinit();
+
+    p.addDefaultStages() catch return null;
+
+    const file = openDirect(input_path) catch return null;
+    defer file.close(g_io);
+    p.run(file, g_io) catch return null;
+    p.finalize() catch {};
+    return p.reportJsonAlloc(allocator, g_io) catch null;
 }
 
-pub export fn qwd_fastq_qc_fast_r(path: [*c]const [*c]const u8, threads: [*c]const c_int, out: [*c]u8, max_len: [*c]const c_int) void {
-    const p = path[0];
-    const t = threads[0];
-    const res = qwd_fastq_qc_fast(p, t);
-    defer qwd_free_string(res);
-
-    const len = std.mem.indexOfSentinel(u8, 0, res);
-    const m_len: usize = @intCast(max_len[0]);
-    if (m_len > 0) {
-        const copy_len = @min(len, m_len - 1);
-        @memcpy(out[0..copy_len], res[0..copy_len]);
-        out[copy_len] = 0;
-    }
-}
-
-pub export fn qwd_fastq_qc_ex_r(path: [*c]const [*c]const u8, threads: [*c]const c_int, mode: [*c]const c_int, gzip_mode: [*c]const c_int, out: [*c]u8, max_len: [*c]const c_int) void {
-    const p = path[0];
-    const t = threads[0];
-    const m = mode[0];
-    const gz = gzip_mode[0];
-    const res = qwd_fastq_qc_ex(p, t, m, gz);
-    defer qwd_free_string(res);
-
-    const len = std.mem.indexOfSentinel(u8, 0, res);
-    const m_len: usize = @intCast(max_len[0]);
-    if (m_len > 0) {
-        const copy_len = @min(len, m_len - 1);
-        @memcpy(out[0..copy_len], res[0..copy_len]);
-        out[copy_len] = 0;
-    }
-}
-
-pub export fn qwd_bam_stats_r(path: [*c]const [*c]const u8, out: [*c]u8, max_len: [*c]const c_int) void {
-    const p = path[0];
-    const res = qwd_bam_stats(p, 1);
-    defer qwd_free_string(res);
-
-    const len = std.mem.indexOfSentinel(u8, 0, res);
-    const m_len: usize = @intCast(max_len[0]);
-    if (m_len > 0) {
-        const copy_len = @min(len, m_len - 1);
-        @memcpy(out[0..copy_len], res[0..copy_len]);
-        out[copy_len] = 0;
-    }
+export fn qwd_free_string(s: [*:0]const u8) void {
+    const allocator = std.heap.c_allocator;
+    allocator.free(std.mem.span(s));
 }

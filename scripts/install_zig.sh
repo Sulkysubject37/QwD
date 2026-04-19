@@ -47,7 +47,14 @@ tar -xf "$FILE"
 
 DIR="zig-${OS}-${ARCH}-${ZIG_VERSION}"
 
+# CLEAN REINSTALL: Remove existing installation to prevent corruption
+if [ -d "/usr/local/zig" ]; then
+  echo "Removing existing Zig installation at /usr/local/zig..."
+  sudo rm -rf /usr/local/zig
+fi
+
 sudo mv "$DIR" /usr/local/zig
+rm "$FILE"
 
 echo "Adding Zig to PATH..."
 

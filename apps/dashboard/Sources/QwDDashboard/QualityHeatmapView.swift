@@ -14,7 +14,7 @@ struct QualityHeatmapView: View {
                     .foregroundStyle(.secondary)
             }
             
-            if stats.data.isEmpty {
+            if stats.data == nil || stats.data!.isEmpty {
                 VStack {
                     Image(systemName: "chart.bar.xaxis")
                         .font(.largeTitle)
@@ -28,8 +28,9 @@ struct QualityHeatmapView: View {
                 .background(Color.primary.opacity(0.02))
                 .cornerRadius(8)
             } else {
+                let safeData = stats.data!
                 Canvas { context, size in
-                    let columns = CGFloat(stats.data.count)
+                    let columns = CGFloat(safeData.count)
                     if columns == 0 { return }
                     
                     let rows: CGFloat = 41
@@ -38,7 +39,7 @@ struct QualityHeatmapView: View {
                     
                     // Find global max once
                     var globalMax: Int = 1
-                    for col in stats.data {
+                    for col in safeData {
                         for val in col {
                             if val > globalMax { globalMax = val }
                         }
@@ -47,9 +48,9 @@ struct QualityHeatmapView: View {
                     // Use logarithmic intensity so small values are visible
                     let logMax = log10(1.0 + Double(globalMax))
                     
-                    for x in 0..<stats.data.count {
+                    for x in 0..<safeData.count {
                         for y in 0..<41 {
-                            let val = stats.data[x][y]
+                            let val = safeData[x][y]
                             if val == 0 { continue }
                             
                             // Log-scaled intensity: log(1+v) / log(1+max)
@@ -88,7 +89,7 @@ struct QualityHeatmapView: View {
             HStack {
                 Text("Read Position (bp)").font(.caption).foregroundStyle(.secondary)
                 Spacer()
-                Text("\(stats.max_pos) bp").font(.caption.bold())
+                Text("\(stats.max_pos ?? 0) bp").font(.caption.bold())
             }
         }
         .proPanel(padding: 20)

@@ -10,11 +10,13 @@ struct KmerSpectrumView: View {
     let stats: KmerSpectrumStats
     
     var body: some View {
-        let bins = stats.counts.enumerated().map { KmerBin(id: $0.offset, count: $0.element) }
-        let hasData = stats.counts.contains { $0 > 0 }
+        let bins = (stats.counts ?? []).enumerated().map { KmerBin(id: $0.offset, count: $0.element) }
+        let hasData = (stats.counts ?? []).contains { $0 > 0 }
+        let kValue = stats.k ?? 0
+        let countValue = stats.counts?.count ?? 0
         
         VStack(alignment: .leading, spacing: 12) {
-            Label("\(stats.k)-mer Frequency Spectrum", systemImage: "waveform.path")
+            Label("\(kValue)-mer Frequency Spectrum", systemImage: "waveform.path")
                 .font(.headline)
             
             if !hasData {
@@ -52,7 +54,7 @@ struct KmerSpectrumView: View {
                 }
             }
             
-            Text("Distribution of \(stats.counts.count) possible \(stats.k)-mers. Linear scale.")
+            Text("Distribution of \(countValue) possible \(kValue)-mers. Linear scale.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

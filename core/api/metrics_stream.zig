@@ -2,11 +2,11 @@ const std = @import("std");
 const structured_output = @import("../output/structured_output.zig");
 
 pub const MetricsStream = struct {
-    writer: std.io.AnyWriter,
+    writer: std.Io.Writer,
     interval: usize = 1000,
     last_emit: usize = 0,
 
-    pub fn init(writer: std.io.AnyWriter, interval: usize) MetricsStream {
+    pub fn init(writer: std.Io.Writer, interval: usize) MetricsStream {
         return .{
             .writer = writer,
             .interval = interval,

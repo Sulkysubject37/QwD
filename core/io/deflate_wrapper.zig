@@ -1,50 +1,19 @@
 const std = @import("std");
-const build_options = @import("build_options");
-const DeflateEngine = @import("custom_deflate").DeflateEngine;
+const deflate_libdeflate = @import("deflate_impl");
 
 pub const DeflateWrapper = struct {
-    pub fn decompressBgzfBlock(compressed: []const u8, decompressed: []u8) !usize {
-        if (build_options.HAVE_LIBDEFLATE) {
-            return decompressLibdeflate(compressed, decompressed);
-        }
+    allocator: std.mem.Allocator,
 
-        // Fallback to std.compress.flate (faster than custom)
-        var fbs = std.io.fixedBufferStream(compressed);
-        var decompressor = std.compress.flate.decompressor(fbs.reader());
-        
-        return decompressor.read(decompressed);
+    pub fn init(allocator: std.mem.Allocator) !DeflateWrapper {
+        return DeflateWrapper{ .allocator = allocator };
     }
 
-    fn decompressLibdeflate(compressed: []const u8, decompressed: []u8) !usize {
-        const c = @cImport({
-            @cInclude("libdeflate.h");
-        });
-        
-        const decompressor = c.libdeflate_alloc_decompressor() orelse return error.LibdeflateAllocFailed;
-        defer c.libdeflate_free_decompressor(decompressor);
-        
-        var actual_out_n: usize = 0;
-        const result = c.libdeflate_deflate_decompress(
-            decompressor,
-            compressed.ptr,
-            compressed.len,
-            decompressed.ptr,
-            decompressed.len,
-            &actual_out_n,
-        );
-        
-        if (result != 0) return error.LibdeflateDecompressionFailed;
-        return actual_out_n;
+    pub fn deinit(self: *DeflateWrapper) void {
+        _ = self;
     }
 
-    const BufferSink = struct {
-        buf: []u8,
-        pos: usize,
-
-        pub fn emit(self: *BufferSink, byte: u8) !void {
-            if (self.pos >= self.buf.len) return error.BufferOverflow;
-            self.buf[self.pos] = byte;
-            self.pos += 1;
-        }
-    };
+    pub fn decompressBgzfBlock(self: *const DeflateWrapper, compressed: []const u8, decompressed: []u8) !usize {
+        _ = self;
+        return deflate_libdeflate.decompress(compressed, decompressed);
+    }
 };

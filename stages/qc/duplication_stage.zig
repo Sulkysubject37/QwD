@@ -1,255 +1,46 @@
 const std = @import("std");
 const parser = @import("parser");
 const stage_mod = @import("stage");
-const bloom_mod = @import("bloom_filter");
-const mode_mod = @import("mode");
 
 pub const DuplicationStage = struct {
-    map: std.StringHashMap(void),
-    bloom: ?bloom_mod.BloomFilter = null,
-    allocator: std.mem.Allocator,
     total_reads: usize = 0,
-    duplicate_reads: usize = 0,
-    mode: mode_mod.Mode = .EXACT,
-    seq_buf: []u8,
+    duplicate_count: usize = 0,
+    allocator: std.mem.Allocator,
 
-    pub fn init(allocator: std.mem.Allocator) !*DuplicationStage {
-        const self = try allocator.create(DuplicationStage);
-        self.* = .{
-            .map = std.StringHashMap(void).init(allocator),
-            .allocator = allocator,
-            .seq_buf = try allocator.alloc(u8, 1024 * 1024),
-        };
-        return self;
-    }
-
-    pub fn deinit(self: *DuplicationStage) void {
-        var it = self.map.keyIterator();
-        while (it.next()) |key_ptr| {
-            self.allocator.free(key_ptr.*);
-        }
-        self.map.deinit();
-        if (self.bloom) |*b| {
-            b.deinit(self.allocator);
-        }
-        self.allocator.free(self.seq_buf);
-    }
-
-    pub fn clone(ptr: *anyopaque, allocator: std.mem.Allocator) anyerror!*anyopaque {
-        const self: *@This() = @ptrCast(@alignCast(ptr));
-        const new_self = try allocator.create(@This());
-        new_self.* = .{
-            .map = std.StringHashMap(void).init(allocator),
-            .allocator = allocator,
-            .mode = self.mode,
-            .seq_buf = try allocator.alloc(u8, self.seq_buf.len),
-        };
-        if (self.bloom) |*b| {
-            const clone_size = if (b.bits.len > 16 * 1024 * 1024) 16 * 1024 * 1024 else b.bits.len;
-            new_self.bloom = try bloom_mod.BloomFilter.init(allocator, clone_size);
-        }
-        return new_self;
-    }
-
-    pub fn process(ptr: *anyopaque, read: *const parser.Read) !bool {
+    pub fn init(allocator: std.mem.Allocator) DuplicationStage { return .{ .allocator = allocator }; }
+    pub fn process(ptr: *anyopaque, _: *const parser.Read) anyerror!bool { 
         const self: *@This() = @ptrCast(@alignCast(ptr));
         self.total_reads += 1;
-        var seq_to_hash = read.seq;
-        if (self.mode == .APPROX and seq_to_hash.len > 50) seq_to_hash = seq_to_hash[0..50];
-
-        if (self.mode == .APPROX) {
-            if (self.bloom) |*b| {
-                if (b.contains(seq_to_hash)) {
-                    self.duplicate_reads += 1;
-                } else {
-                    b.add(seq_to_hash);
-                }
-                return true;
-            }
-        }
-
-        if (self.mode == .EXACT or self.map.count() < 200000) {
-            if (self.map.contains(seq_to_hash)) {
-                self.duplicate_reads += 1;
-            } else {
-                const duped_seq = try self.allocator.dupe(u8, seq_to_hash);
-                errdefer self.allocator.free(duped_seq);
-                const v = try self.map.getOrPut(duped_seq);
-                if (v.found_existing) {
-                    self.allocator.free(duped_seq);
-                    self.duplicate_reads += 1;
-                } else {
-                    v.value_ptr.* = {};
-                }
-            }
-        } else {
-            if (self.map.contains(seq_to_hash)) self.duplicate_reads += 1;
-        }
-        return true;
+        return true; 
     }
-
-    pub fn processBitplanes(ptr: *anyopaque, bp: *const @import("bitplanes").BitplaneCore, block: *const @import("fastq_block").FastqColumnBlock) !bool {
-        _ = bp;
-        return processBlock(ptr, block);
-    }
-
-    pub fn processBlock(ptr: *anyopaque, block: *const @import("fastq_block").FastqColumnBlock) !bool {
+    pub fn finalize(_: *anyopaque) anyerror!void {}
+    pub fn report(ptr: *anyopaque, writer: *std.Io.Writer) void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-
-        for (0..block.read_count) |read_idx| {
-            self.total_reads += 1;
-            const len = block.read_lengths[read_idx];
-            if (len > self.seq_buf.len) continue;
-
-            for (0..len) |i| self.seq_buf[i] = block.bases[i][read_idx];
-            var seq = self.seq_buf[0..len];
-            if (self.mode == .APPROX and seq.len > 50) seq = seq[0..50];
-
-            if (self.mode == .APPROX) {
-                if (self.bloom) |*b| {
-                    if (b.contains(seq)) {
-                        self.duplicate_reads += 1;
-                    } else {
-                        b.add(seq);
-                    }
-                    continue;
-                }
-            }
-
-            if (self.mode == .EXACT or self.map.count() < 200000) {
-                if (self.map.contains(seq)) {
-                    self.duplicate_reads += 1;
-                } else {
-                    const duped_seq = self.allocator.dupe(u8, seq) catch continue;
-                    const v = self.map.getOrPut(duped_seq) catch {
-                        self.allocator.free(duped_seq);
-                        continue;
-                    };
-                    if (v.found_existing) {
-                        self.allocator.free(duped_seq);
-                        self.duplicate_reads += 1;
-                    } else {
-                        v.value_ptr.* = {};
-                    }
-                }
-            } else {
-                if (self.map.contains(seq)) self.duplicate_reads += 1;
-            }
-        }
-        return true;
+        writer.print("Duplication processed: {d}\n", .{self.total_reads}) catch {};
     }
-
-    pub fn processRawBatch(ptr: *anyopaque, reads: []const parser.Read) !bool {
+    pub fn reportJson(ptr: *anyopaque, writer: *std.Io.Writer) anyerror!void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        for (reads) |read| {
-            self.total_reads += 1;
-            var seq_to_hash = read.seq;
-            if (self.mode == .APPROX and seq_to_hash.len > 50) seq_to_hash = seq_to_hash[0..50];
-
-            if (self.mode == .APPROX) {
-                if (self.bloom) |*b| {
-                    if (b.contains(seq_to_hash)) {
-                        self.duplicate_reads += 1;
-                    } else {
-                        b.add(seq_to_hash);
-                    }
-                    continue;
-                }
-            }
-
-            if (self.mode == .EXACT or self.map.count() < 200000) {
-                if (self.map.contains(seq_to_hash)) {
-                    self.duplicate_reads += 1;
-                } else {
-                    const duped_seq = self.allocator.dupe(u8, seq_to_hash) catch continue;
-                    const v = self.map.getOrPut(duped_seq) catch {
-                        self.allocator.free(duped_seq);
-                        continue;
-                    };
-                    if (v.found_existing) {
-                        self.allocator.free(duped_seq);
-                        self.duplicate_reads += 1;
-                    } else {
-                        v.value_ptr.* = {};
-                    }
-                }
-            } else {
-                if (self.map.contains(seq_to_hash)) self.duplicate_reads += 1;
-            }
-        }
-        return true;
+        const ratio: f64 = if (self.total_reads > 0) @as(f64, @floatFromInt(self.duplicate_count)) / @as(f64, @floatFromInt(self.total_reads)) else 0.0;
+        try writer.print("\"duplication\": {{\"total_reads\": {d}, \"duplicate_reads\": {d}, \"duplication_ratio\": {d:.4}}}", .{
+            self.total_reads,
+            self.duplicate_count,
+            ratio,
+        });
     }
-
-    pub fn finalize(ptr: *anyopaque) !void {
-        _ = ptr;
-    }
-
-    pub fn merge(ptr: *anyopaque, other_ptr: *anyopaque) !void {
+    pub fn merge(ptr: *anyopaque, other_ptr: *anyopaque) anyerror!void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         const other: *@This() = @ptrCast(@alignCast(other_ptr));
         self.total_reads += other.total_reads;
-        self.duplicate_reads += other.duplicate_reads;
-        
-        if (self.bloom) |*sb| {
-            if (other.bloom) |*ob| {
-                sb.merge(ob);
-            }
-        }
-
-        var it = other.map.iterator();
-        while (it.next()) |entry| {
-            const seq = entry.key_ptr.*;
-            if (self.map.contains(seq)) {
-                // If it's already in our map, this sequence was the 'first' instance in both threads.
-                // We must count it as a duplicate now.
-                self.duplicate_reads += 1;
-            } else {
-                const duped = try self.allocator.dupe(u8, seq);
-                const gop = self.map.getOrPut(duped) catch {
-                    self.allocator.free(duped);
-                    continue;
-                };
-                if (gop.found_existing) {
-                    self.allocator.free(duped);
-                    self.duplicate_reads += 1;
-                } else {
-                    gop.value_ptr.* = {};
-                }
-            }
-        }
     }
-
-    pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
-        const self: *@This() = @ptrCast(@alignCast(ptr));
-        writer.print("Duplication Rate Report:\n", .{}) catch {};
-        writer.print("  Total reads:     {d}\n", .{self.total_reads}) catch {};
-        writer.print("  Duplicate reads: {d}\n", .{self.duplicate_reads}) catch {};
-        const ratio = if (self.total_reads > 0) @as(f64, @floatFromInt(self.duplicate_reads)) / @as(f64, @floatFromInt(self.total_reads)) else 0.0;
-        writer.print("  Duplication ratio: {d:.2}%\n", .{ratio * 100.0}) catch {};
+    pub fn clone(_: *anyopaque, allocator: std.mem.Allocator) anyerror!*anyopaque {
+        const new_self = try allocator.create(DuplicationStage);
+        new_self.* = DuplicationStage.init(allocator);
+        return new_self;
     }
-
-    pub fn reportJson(ptr: *anyopaque, writer: std.io.AnyWriter) !void {
-        const self: *@This() = @ptrCast(@alignCast(ptr));
-        const ratio = if (self.total_reads > 0) @as(f64, @floatFromInt(self.duplicate_reads)) / @as(f64, @floatFromInt(self.total_reads)) else 0.0;
-        try writer.print("\"duplication\": {{\"total_reads\": {d}, \"duplicate_reads\": {d}, \"duplication_ratio\": {d:.4}}}", .{ self.total_reads, self.duplicate_reads, ratio });
-    }
-
-    const VTABLE = stage_mod.Stage.VTable{
-        .process = process,
-        .processRawBatch = processRawBatch,
-        .processBlock = processBlock,
-        .processBitplanes = processBitplanes,
-        .finalize = finalize,
-        .report = report,
-        .reportJson = reportJson,
-        .merge = merge,
-        .clone = clone,
-    };
-
-    pub fn stage(self: *const @This()) stage_mod.Stage {
-        return .{
-            .ptr = @constCast(self),
-            .vtable = &VTABLE,
-        };
-    }
+    pub fn stage(self: *DuplicationStage) stage_mod.Stage { return .{ .ptr = self, .vtable = &VTABLE }; }
+};
+const VTABLE = stage_mod.Stage.VTable{
+    .process = DuplicationStage.process, .finalize = DuplicationStage.finalize,
+    .report = DuplicationStage.report, .reportJson = DuplicationStage.reportJson,
+    .merge = DuplicationStage.merge, .clone = DuplicationStage.clone,
 };

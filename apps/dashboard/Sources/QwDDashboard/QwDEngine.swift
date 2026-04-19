@@ -62,8 +62,12 @@ public final class QwDEngine {
         defer { self.isRunning = false }
         
         let isBam = targetPath.lowercased().hasSuffix(".bam")
+        let targetURL = URL(fileURLWithPath: targetPath)
         
         let result = await Task.detached(priority: .userInitiated) { () -> String? in
+            let access = targetURL.startAccessingSecurityScopedResource()
+            defer { if access { targetURL.stopAccessingSecurityScopedResource() } }
+
             if isBam {
                 return targetPath.withCString { cPath in
                     let resPtr = qwd_bam_stats(cPath, Int32(threads))
@@ -94,7 +98,8 @@ public final class QwDEngine {
                 
                 let config = BioPipelineConfig(
                     pipeline: pipeline,
-                    mode: modeInt == 1 ? "APPROX" : "EXACT",
+                    mode: modeInt == 1 ? "fast" : "exact",
+                    threads: threads,
                     trim_front: enableTrimming ? trimFront : 0,
                     trim_tail: enableTrimming ? trimTail : 0,
                     min_quality: enableFiltering ? minQual : 0.0,
@@ -106,12 +111,17 @@ public final class QwDEngine {
                     return nil
                 }
                 
+                print("[QwDEngine] Running with Config: \(configJSON)")
+                
                 return targetPath.withCString { cPath in
                     return configJSON.withCString { cJson in
-                        let resPtr = qwd_run_json_config(cJson, cPath)
+                        let resPtr = qwd_pipeline(cJson, cPath)
+                        if resPtr == nil { print("[QwDEngine] Engine returned NULL") }
                         guard let validPtr = resPtr else { return nil }
                         defer { qwd_free_string(validPtr) }
-                        return String(cString: validPtr)
+                        let outStr = String(cString: validPtr)
+                        print("[QwDEngine] Engine returned: \(outStr.prefix(100))...")
+                        return outStr
                     }
                 }
             }

@@ -1,148 +1,80 @@
 const std = @import("std");
 const parser = @import("parser");
 const stage_mod = @import("stage");
+const bitplanes_mod = @import("bitplanes");
+const fastq_block = @import("fastq_block");
 
-pub const GcDistributionStage = struct {
-    // bins: 0-10, 10-20, ..., 90-100 (10 bins)
-    histogram: [10]usize = [_]usize{0} ** 10,
+pub const GcdistributionStage = struct {
+    bins: [101]usize = [_]usize{0} ** 101,
 
-    pub fn init(allocator: std.mem.Allocator) !*GcDistributionStage {
-        const self = try allocator.create(GcDistributionStage);
-        self.* = .{};
-        return self;
-    }
-
-    pub fn process(ptr: *anyopaque, read: *const parser.Read) !bool {
+    pub fn process(ptr: *anyopaque, read: *const parser.Read) anyerror!bool { 
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        const len = read.seq.len;
-        if (len == 0) return true;
-
-        var gc_count: usize = 0;
-        for (read.seq) |base| {
-            if (base == 'G' or base == 'C' or base == 'g' or base == 'c') {
-                gc_count += 1;
+        if (read.seq.len == 0) return true;
+        var gc: usize = 0;
+        for (read.seq) |b| {
+            switch (b) {
+                'G', 'g', 'C', 'c' => gc += 1,
+                else => {},
             }
         }
-
-        const gc_ratio = @as(f64, @floatFromInt(gc_count)) / @as(f64, @floatFromInt(len));
-        var bin = @as(usize, @intFromFloat(gc_ratio * 10.0));
-        if (bin == 10) bin = 9; // handle 100%
-
-        self.histogram[bin] += 1;
-
-        return true;
+        const gc_perc = (gc * 100) / read.seq.len;
+        self.bins[gc_perc] += 1;
+        return true; 
     }
-
-    pub fn processBitplanes(ptr: *anyopaque, bp: *const @import("bitplanes").BitplaneCore, block: *const @import("fastq_block").FastqColumnBlock) !bool {
+    pub fn processBitplanes(ptr: *anyopaque, _: *const bitplanes_mod.BitplaneCore, block: *const fastq_block.FastqColumnBlock) anyerror!bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-
-        for (0..block.read_count) |read_idx| {
-            var gc_count: usize = 0;
-            const word_idx = read_idx >> 6;
-            const bit_mask = @as(u64, 1) << @as(u6, @intCast(read_idx & 63));
-
-            for (0..block.read_lengths[read_idx]) |col| {
-                const col_offset = col * bp.u64_per_col;
-                if ((bp.plane_g[col_offset + word_idx] | bp.plane_c[col_offset + word_idx]) & bit_mask != 0) {
-                    gc_count += 1;
-                }
-            }
-
-            const len = block.read_lengths[read_idx];
-            if (len > 0) {
-                const gc_ratio = @as(f64, @floatFromInt(gc_count)) / @as(f64, @floatFromInt(len));
-                var bin = @as(usize, @intFromFloat(gc_ratio * 10.0));
-                if (bin == 10) bin = 9;
-                self.histogram[bin] += 1;
-            }
-        }
-
-        return true;
-    }
-
-    pub fn processBlock(ptr: *anyopaque, block: *const @import("fastq_block").FastqColumnBlock) !bool {
-        const bitplanes = @import("bitplanes");
-        var bp = try bitplanes.BitplaneCore.init(block.allocator, block.capacity, block.max_read_len);
-        defer bp.deinit();
-        bp.fromColumnBlock(block);
-        return processBitplanes(ptr, &bp, block);
-    }
-
-    pub fn processRawBatch(ptr: *anyopaque, reads: []const parser.Read) !bool {
-        const self: *@This() = @ptrCast(@alignCast(ptr));
-        for (reads) |read| {
-            const len = read.seq.len;
+        for (0..block.read_count) |i| {
+            const len = block.read_lengths[i];
             if (len == 0) continue;
-
-            var gc_count: usize = 0;
-            for (read.seq) |base| {
-                if (base == 'G' or base == 'C' or base == 'g' or base == 'c') {
-                    gc_count += 1;
+            var gc: usize = 0;
+            for (0..len) |pos| {
+                const b = block.bases[pos][i];
+                switch (b) {
+                    'G', 'g', 'C', 'c' => gc += 1,
+                    else => {},
                 }
             }
-
-            const gc_ratio = @as(f64, @floatFromInt(gc_count)) / @as(f64, @floatFromInt(len));
-            var bin = @as(usize, @intFromFloat(gc_ratio * 10.0));
-            if (bin == 10) bin = 9;
-
-            self.histogram[bin] += 1;
+            const gc_perc = (gc * 100) / len;
+            self.bins[gc_perc] += 1;
         }
         return true;
     }
-
-    pub fn finalize(ptr: *anyopaque) !void {
-        _ = ptr;
-    }
-
-    pub fn merge(ptr: *anyopaque, other_ptr: *anyopaque) !void {
-        const self: *@This() = @ptrCast(@alignCast(ptr));
-        const other: *@This() = @ptrCast(@alignCast(other_ptr));
-        for (0..10) |i| {
-            self.histogram[i] += other.histogram[i];
-        }
-    }
-
-    pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
-        const self: *@This() = @ptrCast(@alignCast(ptr));
-        writer.print("GC Distribution Report:\n", .{}) catch {};
-        for (0..10) |i| {
-            writer.print("  {d}0-{d}0%: {d}\n", .{ i, i + 1, self.histogram[i] }) catch {};
-        }
-    }
-
-    pub fn reportJson(ptr: *anyopaque, writer: std.io.AnyWriter) !void {
+    pub fn finalize(_: *anyopaque) anyerror!void {}
+    pub fn report(_: *anyopaque, _: *std.Io.Writer) void {}
+    pub fn reportJson(ptr: *anyopaque, writer: *std.Io.Writer) anyerror!void { 
         const self: *@This() = @ptrCast(@alignCast(ptr));
         try writer.writeAll("\"gc_distribution\": {\"bins\": [");
-        for (self.histogram, 0..) |count, i| {
-            if (i > 0) try writer.writeAll(", ");
+        for (self.bins, 0..) |count, i| {
+            if (i > 0) try writer.writeAll(",");
             try writer.print("{d}", .{count});
         }
         try writer.writeAll("]}");
     }
-
+    pub fn merge(ptr: *anyopaque, other_ptr: *anyopaque) anyerror!void {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        const other: *@This() = @ptrCast(@alignCast(other_ptr));
+        for (0..101) |i| {
+            self.bins[i] += other.bins[i];
+        }
+    }
     pub fn clone(ptr: *anyopaque, allocator: std.mem.Allocator) anyerror!*anyopaque {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        const new_self = try allocator.create(@This());
+        const new_self = try allocator.create(GcdistributionStage);
         new_self.* = self.*;
         return new_self;
     }
 
-    const VTABLE = stage_mod.Stage.VTable{
-        .process = process,
-        .processRawBatch = processRawBatch,
-        .processBlock = processBlock,
-        .processBitplanes = processBitplanes,
-        .finalize = finalize,
-        .report = report,
-        .reportJson = reportJson,
-        .merge = merge,
-        .clone = clone,
-    };
-
-    pub fn stage(self: *const @This()) stage_mod.Stage {
-        return .{
-            .ptr = @constCast(self),
-            .vtable = &VTABLE,
-        };
+    pub fn stage(self: *@This()) stage_mod.Stage {
+        return .{ .ptr = self, .vtable = &VTABLE };
     }
+};
+
+const VTABLE = stage_mod.Stage.VTable{
+    .process = GcdistributionStage.process,
+    .finalize = GcdistributionStage.finalize,
+    .report = GcdistributionStage.report,
+    .reportJson = GcdistributionStage.reportJson,
+    .merge = GcdistributionStage.merge,
+    .clone = GcdistributionStage.clone,
+    .processBitplanes = GcdistributionStage.processBitplanes,
 };

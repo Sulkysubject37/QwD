@@ -5,7 +5,7 @@ const DeflateEngine = @import("custom_deflate.zig").DeflateEngine;
 pub const GzipProtocol = struct {
     engine: DeflateEngine,
     
-    pub fn init(reader: std.io.AnyReader) GzipProtocol {
+    pub fn init(reader: std.Io.Reader) GzipProtocol {
         return .{
             .engine = DeflateEngine.init(reader),
         };

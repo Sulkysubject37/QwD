@@ -1,12 +1,12 @@
 const std = @import("std");
 
 pub const BitplaneCore = struct {
-    plane_a: []u64,
-    plane_c: []u64,
-    plane_g: []u64,
-    plane_t: []u64,
-    plane_n: []u64,
-    plane_mask: []u64, // 1 for any valid base position
+    plane_a: []align(32) u64,
+    plane_c: []align(32) u64,
+    plane_g: []align(32) u64,
+    plane_t: []align(32) u64,
+    plane_n: []align(32) u64,
+    plane_mask: []align(32) u64, // 1 for any valid base position
     read_count: usize,
     max_read_len: usize,
     u64_per_col: usize,
@@ -18,12 +18,12 @@ pub const BitplaneCore = struct {
         const total_u64s = u64_per_col * max_read_len;
         
         return BitplaneCore{
-            .plane_a = try allocator.alloc(u64, total_u64s),
-            .plane_c = try allocator.alloc(u64, total_u64s),
-            .plane_g = try allocator.alloc(u64, total_u64s),
-            .plane_t = try allocator.alloc(u64, total_u64s),
-            .plane_n = try allocator.alloc(u64, total_u64s),
-            .plane_mask = try allocator.alloc(u64, total_u64s),
+            .plane_a = try allocator.alignedAlloc(u64, .@"32", total_u64s),
+            .plane_c = try allocator.alignedAlloc(u64, .@"32", total_u64s),
+            .plane_g = try allocator.alignedAlloc(u64, .@"32", total_u64s),
+            .plane_t = try allocator.alignedAlloc(u64, .@"32", total_u64s),
+            .plane_n = try allocator.alignedAlloc(u64, .@"32", total_u64s),
+            .plane_mask = try allocator.alignedAlloc(u64, .@"32", total_u64s),
             .read_count = capacity,
             .max_read_len = max_read_len,
             .u64_per_col = u64_per_col,
@@ -43,8 +43,6 @@ pub const BitplaneCore = struct {
 
     pub fn fromColumnBlock(self: *BitplaneCore, block: anytype) void {
         const count = block.read_count;
-        // CRITICAL: fromColumnBlock only clears up to 'count'.
-        // But computeFused must also respect this.
         self.clear(count);
         
         const vec_size = 32;
@@ -65,7 +63,9 @@ pub const BitplaneCore = struct {
             var read_idx: usize = 0;
 
             while (read_idx + vec_size <= count) : (read_idx += vec_size) {
-                const v: @Vector(vec_size, u8) = base_col[read_idx..][0..vec_size].*;
+                // Hardened alignment for Apple Silicon
+                const v_ptr: *const [vec_size]u8 = @ptrCast(@alignCast(base_col[read_idx..][0..vec_size]));
+                const v: @Vector(vec_size, u8) = v_ptr.*;
 
                 const mask_a = @select(u8, v == a_vec, ones, zeros_u8) | @select(u8, v == al_vec, ones, zeros_u8);
                 const mask_c = @select(u8, v == c_vec, ones, zeros_u8) | @select(u8, v == cl_vec, ones, zeros_u8);
@@ -161,7 +161,6 @@ pub const BitplaneCore = struct {
                 const mask = self.plane_mask[idx];
 
                 // Phase Sec-Zero: Bitplane Mutex Guard
-                // (A ^ C ^ G ^ T ^ N) should equal the Mask plane.
                 const parity = a ^ c ^ g ^ t ^ n;
                 if (parity != mask) {
                     res.integrity_violations += @popCount(parity ^ mask);

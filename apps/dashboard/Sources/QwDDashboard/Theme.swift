@@ -1,4 +1,7 @@
 import SwiftUI
+#if os(macOS)
+import AppKit
+#endif
 
 // ─────────────────────────────────────────────
 // QwD Design System — "Lab Professional"
@@ -19,7 +22,11 @@ enum QwDPalette {
     static let separator      = Color.primary.opacity(0.06)
     
     // Backgrounds
-    static let windowBackground = Color(NSColor.windowBackgroundColor)
+    #if os(macOS)
+    static let windowBackground = Color(nsColor: NSColor.windowBackgroundColor)
+    #else
+    static let windowBackground = Color(uiColor: .systemBackground)
+    #endif
     static let panelBackground  = Color.white.opacity(0.5) // For Light Mode
     static let panelBackgroundDark = Color.black.opacity(0.2) // For Dark Mode
     
@@ -69,3 +76,4 @@ struct GlassBackground: View {
         }
     }
 }
+

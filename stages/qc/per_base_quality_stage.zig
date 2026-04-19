@@ -1,111 +1,86 @@
 const std = @import("std");
 const parser = @import("parser");
 const stage_mod = @import("stage");
+const bitplanes_mod = @import("bitplanes");
+const fastq_block = @import("fastq_block");
 
-pub const PerBaseQualityStage = struct {
-    total_reads: usize = 0,
-    mean_quality: [MAX_POS]f64 = [_]f64{0} ** MAX_POS,
-    base_count: [MAX_POS]usize = [_]usize{0} ** MAX_POS,
+pub const PerbasequalityStage = struct {
+    quality_counts: [1000][41]usize = [_][41]usize{[_]usize{0} ** 41} ** 1000,
+    max_pos: usize = 0,
 
-    const MAX_POS = 1024;
-
-    pub fn init(allocator: std.mem.Allocator) !*PerBaseQualityStage {
-        const self = try allocator.create(PerBaseQualityStage);
-        self.* = .{};
-        return self;
-    }
-
-    pub fn process(ptr: *anyopaque, read: *const parser.Read) !bool {
+    pub fn process(ptr: *anyopaque, read: *const parser.Read) anyerror!bool { 
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        self.total_reads += 1;
-        const len = @min(read.seq.len, MAX_POS);
-        for (0..len) |pos| {
-            const q = @as(f64, @floatFromInt(read.qual[pos] - 33));
-            self.mean_quality[pos] = (self.mean_quality[pos] * @as(f64, @floatFromInt(self.base_count[pos])) + q) / @as(f64, @floatFromInt(self.base_count[pos] + 1));
-            self.base_count[pos] += 1;
+        const len = read.qual.len;
+        if (len > self.max_pos) self.max_pos = len;
+        for (read.qual, 0..) |q, i| {
+            if (i >= 1000) break;
+            const phred = @min(@as(usize, q - 33), 40);
+            self.quality_counts[i][phred] += 1;
         }
-        return true;
+        return true; 
     }
-
-    pub fn processBlock(ptr: *anyopaque, block: *const @import("fastq_block").FastqColumnBlock) !bool {
+    pub fn processBitplanes(ptr: *anyopaque, _: *const bitplanes_mod.BitplaneCore, block: *const fastq_block.FastqColumnBlock) anyerror!bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        for (0..block.read_count) |read_idx| {
-            self.total_reads += 1;
-            const len = @min(block.read_lengths[read_idx], MAX_POS);
-            for (0..len) |pos| {
-                const q = @as(f64, @floatFromInt(block.qualities[pos][read_idx]));
-                self.mean_quality[pos] = (self.mean_quality[pos] * @as(f64, @floatFromInt(self.base_count[pos])) + q) / @as(f64, @floatFromInt(self.base_count[pos] + 1));
-                self.base_count[pos] += 1;
+        const read_count = block.read_count;
+        const max_len = @min(block.max_read_len, 1000);
+        if (max_len > self.max_pos) self.max_pos = max_len;
+
+        for (0..max_len) |pos| {
+            const qual_col = block.qualities[pos];
+            for (0..read_count) |i| {
+                const q = qual_col[i];
+                if (q == 0) continue;
+                const phred = @min(@as(usize, q - 33), 40);
+                self.quality_counts[pos][phred] += 1;
             }
         }
         return true;
     }
-
-    pub fn finalize(ptr: *anyopaque) !void {
-        _ = ptr;
-    }
-
-    pub fn merge(ptr: *anyopaque, other_ptr: *anyopaque) !void {
+    pub fn finalize(_: *anyopaque) anyerror!void {}
+    pub fn report(_: *anyopaque, _: *std.Io.Writer) void {}
+    pub fn reportJson(ptr: *anyopaque, writer: *std.Io.Writer) anyerror!void { 
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        const other: *@This() = @ptrCast(@alignCast(other_ptr));
-        self.total_reads += other.total_reads;
-        for (0..MAX_POS) |pos| {
-            const total_bases = self.base_count[pos] + other.base_count[pos];
-            if (total_bases > 0) {
-                self.mean_quality[pos] = (self.mean_quality[pos] * @as(f64, @floatFromInt(self.base_count[pos])) + other.mean_quality[pos] * @as(f64, @floatFromInt(other.base_count[pos]))) / @as(f64, @floatFromInt(total_bases));
-                self.base_count[pos] = total_bases;
+        try writer.print("\"quality_dist\": {{\"max_pos\": {d}, \"data\": [", .{self.max_pos});
+        const limit = @min(self.max_pos, 1000);
+        for (0..limit) |i| {
+            if (i > 0) try writer.writeAll(",");
+            try writer.writeAll("[");
+            for (self.quality_counts[i], 0..) |count, phred| {
+                if (phred > 0) try writer.writeAll(",");
+                try writer.print("{d}", .{count});
             }
-        }
-    }
-
-    pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
-        const self: *@This() = @ptrCast(@alignCast(ptr));
-        writer.print("Per-base Quality Report:\n", .{}) catch {};
-        for (0..@min(10, MAX_POS)) |pos| {
-            if (self.base_count[pos] == 0) break;
-            writer.print("  Pos {d}: {d:.2}\n", .{ pos + 1, self.mean_quality[pos] }) catch {};
-        }
-    }
-
-    pub fn reportJson(ptr: *anyopaque, writer: std.io.AnyWriter) !void {
-        const self: *@This() = @ptrCast(@alignCast(ptr));
-        try writer.writeAll("\"per_base_quality\": {\"mean_qualities\": [");
-        var first = true;
-        for (0..MAX_POS) |pos| {
-            if (self.base_count[pos] == 0) break;
-            if (!first) try writer.writeAll(", ");
-            try writer.print("{d:.2}", .{self.mean_quality[pos]});
-            first = false;
+            try writer.writeAll("]");
         }
         try writer.writeAll("]}");
     }
-
-    pub fn processBitplanes(ptr: *anyopaque, bp: *const @import("bitplanes").BitplaneCore, block: *const @import("fastq_block").FastqColumnBlock) !bool {
-        _ = bp;
-        return processBlock(ptr, block);
+    pub fn merge(ptr: *anyopaque, other_ptr: *anyopaque) anyerror!void {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        const other: *@This() = @ptrCast(@alignCast(other_ptr));
+        if (other.max_pos > self.max_pos) self.max_pos = other.max_pos;
+        for (0..1000) |i| {
+            for (0..41) |j| {
+                self.quality_counts[i][j] += other.quality_counts[i][j];
+            }
+        }
     }
-
     pub fn clone(ptr: *anyopaque, allocator: std.mem.Allocator) anyerror!*anyopaque {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        const new_self = try allocator.create(@This());
+        const new_self = try allocator.create(PerbasequalityStage);
         new_self.* = self.*;
         return new_self;
     }
 
-    const VTABLE = stage_mod.Stage.VTable{
-        .process = process,
-        .processBitplanes = processBitplanes,
-        .finalize = finalize,
-        .report = report,
-        .reportJson = reportJson,
-        .merge = merge,
-        .clone = clone,
-    };
-
-    pub fn stage(self: *const @This()) stage_mod.Stage {
-        return .{
-            .ptr = @constCast(self),
-            .vtable = &VTABLE,
-        };
+    pub fn stage(self: *@This()) stage_mod.Stage {
+        return .{ .ptr = self, .vtable = &VTABLE };
     }
+};
+
+const VTABLE = stage_mod.Stage.VTable{
+    .process = PerbasequalityStage.process,
+    .finalize = PerbasequalityStage.finalize,
+    .report = PerbasequalityStage.report,
+    .reportJson = PerbasequalityStage.reportJson,
+    .merge = PerbasequalityStage.merge,
+    .clone = PerbasequalityStage.clone,
+    .processBitplanes = PerbasequalityStage.processBitplanes,
 };

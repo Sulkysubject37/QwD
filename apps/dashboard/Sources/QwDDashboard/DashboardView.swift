@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct DashboardView: View {
     @Environment(QwDEngine.self) private var engine
@@ -14,12 +15,25 @@ struct DashboardView: View {
                 } else if engine.selectedFilePath != nil {
                     ConfigurationView()
                 } else {
-                    EmptyDashboardView()
+                    EmptyDashboardView(showFilePicker: $showFilePicker)
                 }
             }
-            .padding(40)
+            .padding(osDependentPadding)
             .frame(maxWidth: .infinity)
         }
+        #if os(iOS)
+        .sheet(isPresented: $showFilePicker) {
+            DocumentPicker(filePath: Bindable(engine).selectedFilePath)
+        }
+        #endif
+    }
+    
+    private var osDependentPadding: CGFloat {
+        #if os(macOS)
+        return 40
+        #else
+        return 20
+        #endif
     }
 }
 
@@ -29,6 +43,7 @@ struct DashboardView: View {
 
 struct EmptyDashboardView: View {
     @Environment(QwDEngine.self) private var engine
+    @Binding var showFilePicker: Bool
     
     var body: some View {
         VStack(spacing: 24) {
@@ -42,10 +57,15 @@ struct EmptyDashboardView: View {
                 Text("Select a FASTQ or BAM file to begin processing.")
                     .font(.title3)
                     .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
             }
             
             Button {
-                selectFile()
+                #if os(macOS)
+                selectFileMacOS()
+                #else
+                showFilePicker = true
+                #endif
             } label: {
                 Text("Choose File...")
                     .font(.headline)
@@ -54,14 +74,17 @@ struct EmptyDashboardView: View {
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
             
+            #if os(macOS)
             Text("Drag and drop files here")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
+            #endif
         }
         .frame(minHeight: 500)
     }
     
-    private func selectFile() {
+    #if os(macOS)
+    private func selectFileMacOS() {
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
@@ -73,12 +96,42 @@ struct EmptyDashboardView: View {
             }
         }
     }
+    #endif
 }
+
+#if os(iOS)
+struct DocumentPicker: UIViewControllerRepresentable {
+    @Binding var filePath: String?
+
+    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.data, .init(filenameExtension: "gz")!, .init(filenameExtension: "fastq")!, .init(filenameExtension: "bam")!])
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIDocumentPickerViewController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    class Coordinator: NSObject, UIDocumentPickerDelegate {
+        var parent: DocumentPicker
+
+        init(_ parent: DocumentPicker) {
+            self.parent = parent
+        }
+
+        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+            parent.filePath = urls.first?.path
+        }
+    }
+}
+#endif
 
 struct ConfigurationView: View {
     @Environment(QwDEngine.self) private var engine
     
-    // Persistent Storage (Used only for saving on Execute)
     @AppStorage("qwd_trim_front")       private var storeTrimFront: Int = 0
     @AppStorage("qwd_trim_tail")        private var storeTrimTail: Int = 0
     @AppStorage("qwd_min_quality")      private var storeMinQual: Double = 0.0
@@ -86,7 +139,6 @@ struct ConfigurationView: View {
     @AppStorage("qwd_enable_trimming")   private var storeEnableTrimming: Bool = false
     @AppStorage("qwd_enable_filtering")  private var storeEnableFiltering: Bool = false
     
-    // LOCAL STATE: Completely decoupled from persistent storage
     @State private var trimFront: Int = 0
     @State private var trimTail: Int = 0
     @State private var minQual: Double = 0.0
@@ -113,7 +165,7 @@ struct ConfigurationView: View {
                 .buttonStyle(.bordered)
             }
             
-            HStack(alignment: .top, spacing: 24) {
+            stackLayout {
                 // 1. Hardware & Strategy
                 VStack(alignment: .leading, spacing: 20) {
                     Text("Hardware & Strategy")
@@ -127,84 +179,54 @@ struct ConfigurationView: View {
                         PresetTile(title: "Concurrency", icon: "cpu", value: "\(tCount == 0 ? 4 : tCount) Threads")
                     }
                     .proPanel(padding: 16)
-                    
-                    Text("Global settings can be adjusted in the Settings menu.")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
                 }
-                .frame(width: 260)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 
-                // 2. Biological Gates (ACTIVE CONTROLS)
+                // 2. Biological Gates
                 VStack(alignment: .leading, spacing: 20) {
                     Text("Biological Gates")
                         .font(.headline)
                     
                     VStack(alignment: .leading, spacing: 24) {
-                        // Trimming Section
                         VStack(alignment: .leading, spacing: 12) {
-                            Toggle("Enable Sequence Trimming", isOn: $enableTrimming)
+                            Toggle("Trimming", isOn: $enableTrimming)
                                 .font(.subheadline.bold())
-                                .toggleStyle(.switch)
-                            
                             if enableTrimming {
-                                VStack(spacing: 12) {
-                                    BiologicalSlider(label: "5' Trim (Front)", value: Binding(get: { Double(trimFront) }, set: { trimFront = Int($0) }), range: 0...100, unit: "bp")
-                                    BiologicalSlider(label: "3' Trim (Tail)", value: Binding(get: { Double(trimTail) }, set: { trimTail = Int($0) }), range: 0...100, unit: "bp")
-                                    
-                                    VStack(alignment: .leading, spacing: 6) {
-                                        Text("Adapter Sequence").font(.caption.bold()).foregroundStyle(.secondary)
-                                        TextField("Enter DNA sequence...", text: $adapterSeq)
-                                            .textFieldStyle(.roundedBorder)
-                                            .font(.system(.body, design: .monospaced))
-                                            .autocorrectionDisabled(true)
-                                            .focused($isAdapterFocused)
-                                    }
-                                }
-                                .padding(.leading, 8)
-                                .transition(.opacity.combined(with: .move(edge: .top)))
+                                BiologicalSlider(label: "5' Trim", value: Binding(get: { Double(trimFront) }, set: { trimFront = Int($0) }), range: 0...100, unit: "bp")
+                                BiologicalSlider(label: "3' Trim", value: Binding(get: { Double(trimTail) }, set: { trimTail = Int($0) }), range: 0...100, unit: "bp")
+                                TextField("Adapter...", text: $adapterSeq)
+                                    .textFieldStyle(.roundedBorder)
+                                    .focused($isAdapterFocused)
                             }
                         }
-                        
                         Divider()
-                        
-                        // Quality Filtering Section
                         VStack(alignment: .leading, spacing: 12) {
-                            Toggle("Enable Quality Filtering", isOn: $enableFiltering)
+                            Toggle("Filtering", isOn: $enableFiltering)
                                 .font(.subheadline.bold())
-                                .toggleStyle(.switch)
-                            
                             if enableFiltering {
-                                BiologicalSlider(label: "Min Mean Quality", value: $minQual, range: 0...40, unit: "Phred")
-                                    .padding(.leading, 8)
-                                    .transition(.opacity.combined(with: .move(edge: .top)))
+                                BiologicalSlider(label: "Min Quality", value: $minQual, range: 0...40, unit: "Phred")
                             }
                         }
                     }
                     .proPanel(padding: 20)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        isAdapterFocused = false // Dismiss keyboard/focus when clicking panel
-                    }
+                    .onTapGesture { isAdapterFocused = false }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 
-                // 3. Execution Column
+                // 3. Status & Execute
                 VStack(alignment: .leading, spacing: 20) {
                     Text("Status")
                         .font(.headline)
-                    
                     VStack(alignment: .leading, spacing: 12) {
                         CheckItem(text: "Format detected")
                         CheckItem(text: "Resources verified")
-                        CheckItem(text: enableTrimming || enableFiltering ? "Gates active" : "Raw pass-through")
                     }
-                    
                     Spacer()
-                    
                     Button {
                         executeWithSaving()
                     } label: {
                         HStack {
-                            Text("Execute Pipeline")
+                            Text("Execute")
                             Image(systemName: "play.fill")
                         }
                         .font(.headline)
@@ -213,12 +235,10 @@ struct ConfigurationView: View {
                     .buttonStyle(.borderedProminent)
                     .tint(.green)
                 }
-                .frame(width: 220)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .frame(maxWidth: 1000)
         .onAppear {
-            // Load from persistent storage once
             trimFront = storeTrimFront
             trimTail = storeTrimTail
             minQual = storeMinQual
@@ -228,16 +248,22 @@ struct ConfigurationView: View {
         }
     }
     
+    @ViewBuilder
+    private func stackLayout<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        #if os(macOS)
+        HStack(alignment: .top, spacing: 24, content: content)
+        #else
+        VStack(alignment: .leading, spacing: 24, content: content)
+        #endif
+    }
+    
     private func executeWithSaving() {
-        // 1. Persist local state back to AppStorage
         storeTrimFront = trimFront
         storeTrimTail = trimTail
         storeMinQual = minQual
         storeAdapterSeq = adapterSeq
         storeEnableTrimming = enableTrimming
         storeEnableFiltering = enableFiltering
-        
-        // 2. Run Engine
         Task { await engine.runQC() }
     }
 }
@@ -265,22 +291,8 @@ struct ProcessingView: View {
         VStack(spacing: 32) {
             ProgressView()
                 .scaleEffect(1.5)
-                .controlSize(.large)
-            
-            VStack(spacing: 8) {
-                Text("Analyzing Sequence Data...")
-                    .font(.title2.bold())
-                Text("QwD SIMD Core is currently processing columnar chunks.")
-                    .foregroundStyle(.secondary)
-            }
-            
-            Text("DO NOT CLOSE THE APPLICATION")
-                .font(.caption.monospaced())
-                .padding(.horizontal, 12)
-                .padding(.vertical, 4)
-                .background(.red.opacity(0.1))
-                .foregroundStyle(.red)
-                .cornerRadius(4)
+            Text("Analyzing Sequence Data...")
+                .font(.title2.bold())
         }
         .frame(minHeight: 400)
     }
@@ -290,12 +302,9 @@ struct PresetTile: View {
     let title: String
     let icon: String
     let value: String
-    
     var body: some View {
         HStack {
-            Image(systemName: icon)
-                .frame(width: 24)
-                .foregroundStyle(.tint)
+            Image(systemName: icon).frame(width: 24).foregroundStyle(.tint)
             VStack(alignment: .leading) {
                 Text(title).font(.caption).foregroundStyle(.secondary)
                 Text(value).font(.subheadline.bold())
@@ -308,10 +317,8 @@ struct CheckItem: View {
     let text: String
     var body: some View {
         HStack {
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(.green)
-            Text(text)
-                .font(.subheadline)
+            Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+            Text(text).font(.subheadline)
         }
     }
 }

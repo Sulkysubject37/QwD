@@ -1,18 +1,19 @@
 const std = @import("std");
 const bam_reader = @import("bam_reader");
 
+/// BAM Stage abstraction.
 pub const BamStage = struct {
     ptr: *anyopaque,
     vtable: *const VTable,
 
     pub const VTable = struct {
-        process: *const fn (ptr: *anyopaque, record: *bam_reader.AlignmentRecord) anyerror!bool,
+        process: *const fn (ptr: *anyopaque, record: *const bam_reader.AlignmentRecord) anyerror!void,
         finalize: *const fn (ptr: *anyopaque) anyerror!void,
-        report: *const fn (ptr: *anyopaque, writer: std.io.AnyWriter) void,
-        reportJson: ?*const fn (ptr: *anyopaque, writer: std.io.AnyWriter) anyerror!void = null,
+        report: *const fn (ptr: *anyopaque, writer: *std.Io.Writer) void,
+        reportJson: *const fn (ptr: *anyopaque, writer: *std.Io.Writer) anyerror!void,
     };
 
-    pub fn process(self: BamStage, record: *bam_reader.AlignmentRecord) !bool {
+    pub fn processRecord(self: BamStage, record: *const bam_reader.AlignmentRecord) !void {
         return self.vtable.process(self.ptr, record);
     }
 
@@ -20,15 +21,11 @@ pub const BamStage = struct {
         return self.vtable.finalize(self.ptr);
     }
 
-    pub fn report(self: BamStage, writer: std.io.AnyWriter) void {
+    pub fn report(self: BamStage, writer: *std.Io.Writer) void {
         return self.vtable.report(self.ptr, writer);
     }
 
-    pub fn reportJson(self: BamStage, writer: std.io.AnyWriter) !void {
-        if (self.vtable.reportJson) |rj| {
-            try rj(self.ptr, writer);
-        } else {
-            try writer.writeAll("{}");
-        }
+    pub fn reportJson(self: BamStage, writer: *std.Io.Writer) !void {
+        return self.vtable.reportJson(self.ptr, writer);
     }
 };

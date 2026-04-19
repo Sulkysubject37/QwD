@@ -37,9 +37,6 @@ if _lib:
     _lib.qwd_fastq_qc.restype = ctypes.c_void_p
     _lib.qwd_fastq_qc.argtypes = [ctypes.c_char_p]
 
-    _lib.qwd_fastq_qc_fast.restype = ctypes.c_void_p
-    _lib.qwd_fastq_qc_fast.argtypes = [ctypes.c_char_p, ctypes.c_int]
-    
     _lib.qwd_fastq_qc_ex.restype = ctypes.c_void_p
     _lib.qwd_fastq_qc_ex.argtypes = [ctypes.c_char_p, ctypes.c_int, ctypes.c_int, ctypes.c_int]
 
@@ -60,10 +57,7 @@ def qc(fastq_path, approx=False, threads=0, gzip_mode="auto", **kwargs):
     """
     if not _lib: raise RuntimeError("QwD shared library not found")
     
-    # Backward compatibility
-    is_approx = approx or kwargs.get('fast', False)
-    
-    mode_idx = 1 if is_approx else 0
+    mode_idx = 1 if approx else 0
     
     gz_map = {
         "auto": 0,
@@ -76,6 +70,8 @@ def qc(fastq_path, approx=False, threads=0, gzip_mode="auto", **kwargs):
     gz_idx = gz_map.get(gzip_mode, 0)
     
     res_ptr = _lib.qwd_fastq_qc_ex(fastq_path.encode('utf-8'), threads, mode_idx, gz_idx)
+    if res_ptr is None:
+        raise RuntimeError("QwD Engine failed to process file")
     res_str = ctypes.string_at(res_ptr).decode('utf-8')
     data = json.loads(res_str)
     _lib.qwd_free_string(res_ptr)
@@ -84,6 +80,8 @@ def qc(fastq_path, approx=False, threads=0, gzip_mode="auto", **kwargs):
 def bamstats(bam_path, threads=1):
     if not _lib: raise RuntimeError("QwD shared library not found")
     res_ptr = _lib.qwd_bam_stats(bam_path.encode('utf-8'), threads)
+    if res_ptr is None:
+        raise RuntimeError("QwD Engine failed to process BAM file")
     res_str = ctypes.string_at(res_ptr).decode('utf-8')
     data = json.loads(res_str)
     _lib.qwd_free_string(res_ptr)

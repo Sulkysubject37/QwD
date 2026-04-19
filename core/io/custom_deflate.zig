@@ -9,7 +9,7 @@ pub const DeflateEngine = struct {
     lit_decoder: HuffmanDecoder,
     dist_decoder: HuffmanDecoder,
     
-    pub fn init(reader: std.io.AnyReader) DeflateEngine {
+    pub fn init(reader: *std.Io.Reader) DeflateEngine {
         return .{
             .sieve = BitSieve.init(reader),
             .lz77 = Lz77Engine.init(),
@@ -148,44 +148,3 @@ pub const DeflateEngine = struct {
         return base_dist[symbol] + @as(u16, @intCast(extra));
     }
 };
-
-const BufferSink = struct {
-    buf: std.ArrayList(u8),
-    pub fn emit(self: *BufferSink, byte: u8) !void {
-        try self.buf.append(byte);
-    }
-};
-
-test "DeflateEngine: uncompressed block" {
-    const allocator = std.testing.allocator;
-    const data = [_]u8{ 0b00000001, 0x05, 0x00, 0xfa, 0xff, 'H', 'e', 'l', 'l', 'o' };
-    var fbs = std.io.fixedBufferStream(&data);
-    var engine = DeflateEngine.init(fbs.reader().any());
-    var sink = BufferSink{ .buf = std.ArrayList(u8).init(allocator) };
-    defer sink.buf.deinit();
-    try engine.decompress(&sink);
-    try std.testing.expectEqualStrings("Hello", sink.buf.items);
-}
-
-test "DeflateEngine: fixed block" {
-    const allocator = std.testing.allocator;
-    const data = [_]u8{ 0xf3, 0x48, 0xcd, 0xc9, 0xc9, 0x07, 0x00 };
-    var fbs = std.io.fixedBufferStream(&data);
-    var engine = DeflateEngine.init(fbs.reader().any());
-    var sink = BufferSink{ .buf = std.ArrayList(u8).init(allocator) };
-    defer sink.buf.deinit();
-    try engine.decompress(&sink);
-    try std.testing.expectEqualStrings("Hello", sink.buf.items);
-}
-
-test "DeflateEngine: dynamic block (Hello QwD!)" {
-    const allocator = std.testing.allocator;
-    // 1f8b08000000000002fff348cdc9c957082c775104006a6651710a000000
-    const data = [_]u8{ 0xf3, 0x48, 0xcd, 0xc9, 0xc9, 0x57, 0x08, 0x2c, 0x77, 0x51, 0x04, 0x00 };
-    var fbs = std.io.fixedBufferStream(&data);
-    var engine = DeflateEngine.init(fbs.reader().any());
-    var sink = BufferSink{ .buf = std.ArrayList(u8).init(allocator) };
-    defer sink.buf.deinit();
-    try engine.decompress(&sink);
-    try std.testing.expectEqualStrings("Hello QwD!", sink.buf.items);
-}

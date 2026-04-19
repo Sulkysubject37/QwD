@@ -9,14 +9,19 @@ pub const FilterStage = struct {
     reads_filtered: usize = 0,
 
     pub fn init(min_quality: f64) FilterStage {
-        return FilterStage{
+        return .{
             .min_quality = min_quality,
         };
     }
 
-    pub fn process(ptr: *anyopaque, read: *const parser.Read) !bool {
+    pub fn process(ptr: *anyopaque, read: *const parser.Read) anyerror!bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         self.reads_seen += 1;
+
+        if (read.qual.len == 0) {
+            self.reads_passed += 1;
+            return true;
+        }
 
         var sum: u64 = 0;
         for (read.qual) |q| {
@@ -24,7 +29,7 @@ pub const FilterStage = struct {
             sum += phred;
         }
 
-        const avg = if (read.qual.len > 0) @as(f64, @floatFromInt(sum)) / @as(f64, @floatFromInt(read.qual.len)) else 0.0;
+        const avg = @as(f64, @floatFromInt(sum)) / @as(f64, @floatFromInt(read.qual.len));
 
         if (avg >= self.min_quality) {
             self.reads_passed += 1;
@@ -35,19 +40,14 @@ pub const FilterStage = struct {
         }
     }
 
-    pub fn finalize(ptr: *anyopaque) !void {
-        _ = ptr;
-    }
+    pub fn finalize(_: *anyopaque) anyerror!void {}
 
-    pub fn report(ptr: *anyopaque, writer: std.io.AnyWriter) void {
+    pub fn report(ptr: *anyopaque, writer: *std.Io.Writer) void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        writer.print("Filter Report (min_qual={d:.2}):\n", .{self.min_quality}) catch {};
-        writer.print("  Reads seen:     {d}\n", .{self.reads_seen}) catch {};
-        writer.print("  Reads passed:   {d}\n", .{self.reads_passed}) catch {};
-        writer.print("  Reads filtered: {d}\n", .{self.reads_filtered}) catch {};
+        writer.print("Filter (min_qual={d:.2}): {d}/{d} passed\n", .{ self.min_quality, self.reads_passed, self.reads_seen }) catch {};
     }
 
-    pub fn reportJson(ptr: *anyopaque, writer: std.io.AnyWriter) !void {
+    pub fn reportJson(ptr: *anyopaque, writer: *std.Io.Writer) anyerror!void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         try writer.print("\"filter\": {{\"reads_seen\": {d}, \"reads_passed\": {d}, \"reads_filtered\": {d}}}", .{
             self.reads_seen,
@@ -56,15 +56,34 @@ pub const FilterStage = struct {
         });
     }
 
-    pub fn stage(self: *@This()) stage_mod.Stage {
+    pub fn merge(ptr: *anyopaque, other_ptr: *anyopaque) anyerror!void {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        const other: *@This() = @ptrCast(@alignCast(other_ptr));
+        self.reads_seen += other.reads_seen;
+        self.reads_passed += other.reads_passed;
+        self.reads_filtered += other.reads_filtered;
+    }
+
+    pub fn clone(ptr: *anyopaque, allocator: std.mem.Allocator) anyerror!*anyopaque {
+        const self: *@This() = @ptrCast(@alignCast(ptr));
+        const new_self = try allocator.create(FilterStage);
+        new_self.* = self.*;
+        return new_self;
+    }
+
+    pub fn stage(self: *FilterStage) stage_mod.Stage {
         return .{
             .ptr = self,
-            .vtable = &.{
-                .process = process,
-                .finalize = finalize,
-                .report = report,
-                .reportJson = reportJson,
-            },
+            .vtable = &VTABLE,
         };
     }
+};
+
+const VTABLE = stage_mod.Stage.VTable{
+    .process = FilterStage.process,
+    .finalize = FilterStage.finalize,
+    .report = FilterStage.report,
+    .reportJson = FilterStage.reportJson,
+    .merge = FilterStage.merge,
+    .clone = FilterStage.clone,
 };

@@ -6,8 +6,13 @@ pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
 
-    const stdin = std.io.getStdIn().reader();
-    const stdout = std.io.getStdOut().writer();
+    var threaded_io = std.Io.Threaded.init(allocator, .{});
+    const io = threaded_io.io();
+    var read_io_buf: [65536]u8 = undefined;
+    var write_io_buf: [65536]u8 = undefined;
+
+    const stdin = io.getStdIn().reader(io, &read_io_buf);
+    const stdout = io.getStdOut().writer(io, &write_io_buf);
 
     const block_size = 64 * 1024; // standard BGZF block size
     var buffer = try allocator.alloc(u8, block_size);

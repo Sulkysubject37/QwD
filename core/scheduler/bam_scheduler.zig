@@ -6,14 +6,14 @@ pub const BamScheduler = struct {
     record_count: usize = 0,
     stages: std.ArrayList(bam_stage.BamStage),
 
-    pub fn init(allocator: std.mem.Allocator) BamScheduler {
+    pub fn init(_: std.mem.Allocator) BamScheduler {
         return BamScheduler{
-            .stages = std.ArrayList(bam_stage.BamStage).init(allocator),
+            .stages = std.ArrayList(bam_stage.BamStage).empty,
         };
     }
 
-    pub fn deinit(self: *BamScheduler) void {
-        self.stages.deinit();
+    pub fn deinit(self: *BamScheduler, allocator: std.mem.Allocator) void {
+        self.stages.deinit(allocator);
     }
 
     pub fn registerStage(self: *BamScheduler, stage: bam_stage.BamStage) !void {
@@ -24,7 +24,7 @@ pub const BamScheduler = struct {
         self.record_count += 1;
         var r = record;
         for (self.stages.items) |stage| {
-            if (!(try stage.process(&r))) break;
+            try stage.process(&r);
         }
     }
 
@@ -34,7 +34,7 @@ pub const BamScheduler = struct {
         }
     }
 
-    pub fn report(self: *BamScheduler, writer: std.io.AnyWriter) void {
+    pub fn report(self: *BamScheduler, writer: std.Io.Writer) void {
         for (self.stages.items) |stage| {
             stage.report(writer);
         }

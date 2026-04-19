@@ -1,14 +1,12 @@
 const std = @import("std");
 
 pub const Mode = enum {
-    EXACT,
-    APPROX,
+    exact,
+    fast,
 };
 
 pub const GzipMode = enum {
-    AUTO,
-    NATIVE,
-    LIBDEFLATE,
-    CHUNKED,
-    COMPAT,
+    auto,
+    native,
+    libdeflate,
 };

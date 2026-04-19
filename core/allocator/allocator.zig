@@ -30,7 +30,7 @@ pub fn destroyArena(arena: *QwDAllocator) void {
 }
 
 test "QwDAllocator test" {
-    const allocator = std.testing.allocator;
+    
     var qwd_alloc = createArena(allocator);
     defer destroyArena(&qwd_alloc);
 
