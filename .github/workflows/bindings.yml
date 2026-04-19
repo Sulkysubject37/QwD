@@ -20,7 +20,7 @@ jobs:
       - name: Setup Zig
         uses: mlugg/setup-zig@v1
         with:
-          version: 0.16.0-dev
+          version: 0.16.0
       - name: Install libdeflate (Linux)
         if: matrix.os == 'ubuntu-latest'
         run: sudo apt-get update && sudo apt-get install -y libdeflate-dev
@@ -45,7 +45,7 @@ jobs:
       - name: Setup Zig
         uses: mlugg/setup-zig@v1
         with:
-          version: 0.16.0-dev
+          version: 0.16.0
       - name: Install libdeflate (Linux)
         if: matrix.os == 'ubuntu-latest'
         run: sudo apt-get update && sudo apt-get install -y libdeflate-dev
