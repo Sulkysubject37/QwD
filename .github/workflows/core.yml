@@ -8,6 +8,7 @@ on:
       - 'stages/**'
       - 'bindings/c/**'
       - 'build.zig'
+      - '.github/workflows/core.yml'
   pull_request:
     branches: [ main ]
 

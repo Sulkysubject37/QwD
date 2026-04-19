@@ -6,6 +6,7 @@ on:
     paths:
       - 'core/**'
       - 'bindings/**'
+      - '.github/workflows/bindings.yml'
   pull_request:
     branches: [ main ]
 
