@@ -30,6 +30,8 @@ jobs:
         run: brew install libdeflate
       - name: Build Shared Library
         run: zig build -Doptimize=ReleaseFast
+      - name: Generate Test Data
+        run: mkdir -p tests/fixtures && python3 scripts/gen_test_data.py --reads 100000 --out tests/fixtures/sample.fastq
       - name: Run Python Smoke Test
         run: |
           export DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH:$(pwd)/zig-out/lib

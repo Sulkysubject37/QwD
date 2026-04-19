@@ -42,5 +42,8 @@ jobs:
       - name: Build Core
         run: zig build -Doptimize=ReleaseSafe ${{ matrix.target }}
 
+      - name: Generate Test Data
+        run: python3 scripts/gen_test_data.py --reads 1000000 --out tests/fixtures/sample.fastq
+
       - name: Run Native Benchmark (1M reads)
         run: ./zig-out/bin/qwd qc tests/fixtures/sample.fastq --threads 4
