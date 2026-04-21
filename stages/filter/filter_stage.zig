@@ -67,7 +67,7 @@ pub const FilterStage = struct {
     pub fn clone(ptr: *anyopaque, allocator: std.mem.Allocator) anyerror!*anyopaque {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         const new_self = try allocator.create(FilterStage);
-        new_self.* = self.*;
+        new_self.* = FilterStage.init(self.min_quality);
         return new_self;
     }
 

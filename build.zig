@@ -31,6 +31,7 @@ pub fn build(b: *std.Build) void {
     const cigar_parser_mod = b.addModule("cigar_parser", .{ .root_source_file = b.path("core/cigar/cigar_parser.zig") });
     const kmer_bitroll_mod = b.addModule("kmer_bitroll", .{ .root_source_file = b.path("core/simd/kmer_bitroll.zig") });
     const kmer_columnar_mod = b.addModule("kmer_columnar", .{ .root_source_file = b.path("core/vector/kmer_columnar.zig") });
+    const kmer_counter_mod = b.addModule("kmer_counter", .{ .root_source_file = b.path("core/analytics/kmer_counter.zig") });
 
     // GZIP Native Engine
     const bit_sieve_mod = b.addModule("bit_sieve", .{ .root_source_file = b.path("core/io/bit_sieve.zig") });
@@ -84,6 +85,7 @@ pub fn build(b: *std.Build) void {
 
     // Columnar
     const bitplanes_mod = b.addModule("bitplanes", .{ .root_source_file = b.path("core/columnar/bitplane_core.zig") });
+    bitplanes_mod.addImport("dna_2bit", dna_2bit_mod);
     const fastq_block_mod = b.addModule("fastq_block", .{ .root_source_file = b.path("core/columnar/fastq_block.zig") });
     fastq_block_mod.addImport("simd_transpose", simd_transpose_mod);
     const stage_interface_mod = b.addModule("stage", .{ .root_source_file = b.path("core/stage/stage.zig") });
@@ -147,6 +149,7 @@ pub fn build(b: *std.Build) void {
             mod.addImport("kmer_bitroll", kmer_bitroll_mod);
             mod.addImport("kmer_columnar", kmer_columnar_mod);
             mod.addImport("dna_2bit", dna_2bit_mod);
+            mod.addImport("kmer_counter", kmer_counter_mod);
         }
         if (std.mem.eql(u8, s.n, "kmer")) mod.addImport("kmer_columnar", kmer_columnar_mod);
         stage_mods.put(s.n, mod) catch unreachable;
@@ -208,6 +211,7 @@ pub fn build(b: *std.Build) void {
     parallel_scheduler_mod.addImport("vertical_scanner", vertical_scanner_mod);
     parallel_scheduler_mod.addImport("bgzf_native_reader", bgzf_native_reader_mod);
     parallel_scheduler_mod.addImport("deflate_impl", deflate_impl_mod);
+    parallel_scheduler_mod.addImport("global_allocator", global_allocator_mod);
 
     const pipeline_mod = b.addModule("pipeline", .{ .root_source_file = b.path("core/pipeline/pipeline.zig") });
     pipeline_mod.addImport("parallel_scheduler", parallel_scheduler_mod);

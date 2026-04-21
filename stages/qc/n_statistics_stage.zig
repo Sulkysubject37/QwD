@@ -37,10 +37,9 @@ pub const NStatisticsStage = struct {
         self.n_count += other.n_count;
         self.total_bases += other.total_bases;
     }
-    pub fn clone(ptr: *anyopaque, allocator: std.mem.Allocator) anyerror!*anyopaque {
-        const self: *@This() = @ptrCast(@alignCast(ptr));
+    pub fn clone(_: *anyopaque, allocator: std.mem.Allocator) anyerror!*anyopaque {
         const new_self = try allocator.create(NStatisticsStage);
-        new_self.* = self.*;
+        new_self.* = .{};
         return new_self;
     }
     pub fn stage(self: *NStatisticsStage) stage_mod.Stage { return .{ .ptr = self, .vtable = &VTABLE }; }

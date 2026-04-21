@@ -68,7 +68,13 @@ pub const Pipeline = struct {
 
     pub fn run(self: *Pipeline, input_file: std.Io.File, io: std.Io) !void {
         if (self.config.threads > 1 and self.parallel_scheduler == null) {
-            self.parallel_scheduler = try parallel_scheduler.ParallelScheduler.init(self.sys_allocator, self.config.threads, io);
+            self.parallel_scheduler = parallel_scheduler.ParallelScheduler.init(
+                self.sys_allocator, 
+                io, 
+                self.config.threads,
+                self.mode,
+                self.gzip_mode
+            );
             // Re-add stages to scheduler
             for (self.stages.items) |s| {
                 try self.parallel_scheduler.?.addStage(s);
@@ -99,7 +105,8 @@ pub const Pipeline = struct {
 
     pub fn finalize(self: *Pipeline) !void {
         if (self.parallel_scheduler) |*ps| {
-            try ps.finalize();
+            _ = ps;
+            try self.parallel_scheduler.?.finalize();
         } else {
             for (self.stages.items) |stage| {
                 try stage.finalize();
@@ -108,8 +115,11 @@ pub const Pipeline = struct {
     }
 
     pub fn report(self: *Pipeline, writer: *std.Io.Writer) void {
-        if (self.parallel_scheduler) |*ps| {
-            ps.report(writer);
+        if (self.parallel_scheduler) |_| {
+            // ps.report(writer); // ParallelScheduler doesn't have report()
+            for (self.stages.items) |stage| {
+                stage.report(writer);
+            }
         } else {
             for (self.stages.items) |stage| {
                 stage.report(writer);
@@ -119,13 +129,15 @@ pub const Pipeline = struct {
 
     pub fn reportJson(self: *Pipeline, writer: *std.Io.Writer) anyerror!void {
         const thread_count = if (self.parallel_scheduler) |ps| ps.num_threads else 1;
+        const total_alloc = if (self.parallel_scheduler) |*ps| ps.getAllocatedBytes() else 0;
         try writer.print(
             \\{{
             \\  "version": "1.3.0",
             \\  "thread_count": {d},
             \\  "read_count": {d},
+            \\  "memory_usage_mb": {d:.2},
             \\  "stages": {{
-        , .{ thread_count, self.read_count });
+        , .{ thread_count, self.read_count, @as(f64, @floatFromInt(total_alloc)) / 1024.0 / 1024.0 });
 
         for (self.stages.items, 0..) |stage, i| {
             if (i > 0) try writer.writeAll(",");
@@ -150,7 +162,8 @@ pub const Pipeline = struct {
     pub fn createStageInstance(self: *Pipeline, allocator: std.mem.Allocator, name: []const u8) !stage_mod.Stage {
         const child_allocator = allocator;
         if (std.mem.eql(u8, name, "basic_stats")) {
-            const s = try @import("basic_stats").BasicStatsStage.init(child_allocator);
+            const s = try child_allocator.create(@import("basic_stats").BasicStatsStage);
+            s.* = .{};
             return s.stage();
         }
         if (std.mem.eql(u8, name, "gc_distribution") or std.mem.eql(u8, name, "gc")) {
@@ -170,7 +183,7 @@ pub const Pipeline = struct {
         }
         if (std.mem.eql(u8, name, "duplication")) {
             const s = try child_allocator.create(@import("duplication").DuplicationStage);
-            s.* = @import("duplication").DuplicationStage.init(child_allocator);
+            s.* = @import("duplication").DuplicationStage.init(child_allocator, self.mode);
             return s.stage();
         }
         if (std.mem.eql(u8, name, "trim")) {
@@ -200,7 +213,7 @@ pub const Pipeline = struct {
         }
         if (std.mem.eql(u8, name, "overrepresented")) {
             const s = try child_allocator.create(@import("overrepresented").OverrepresentedStage);
-            s.* = @import("overrepresented").OverrepresentedStage.init(child_allocator);
+            s.* = @import("overrepresented").OverrepresentedStage.init(child_allocator, self.mode);
             return s.stage();
         }
         return error.StageNotFound;

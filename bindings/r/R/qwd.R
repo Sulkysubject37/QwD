@@ -58,3 +58,60 @@ qwd_qc <- function(fastq_path, approx = FALSE, threads = 0, gzip_mode = "auto", 
   json_str <- rawToChar(actual_buf[1:(terminator_idx - 1)])
   return(jsonlite::fromJSON(json_str))
 }
+
+#' QwD BAM Statistics
+#' @export
+qwd_bamstats <- function(bam_path, threads = 0, ...) {
+  # Robust Path Resolution
+  bam_path <- normalizePath(bam_path, mustWork = TRUE)
+
+  lib_file <- if (Sys.info()["sysname"] == "Windows") {
+    "qwd.dll"
+  } else if (Sys.info()["sysname"] == "Darwin") {
+    "libqwd.dylib"
+  } else {
+    "libqwd.so"
+  }
+
+  possible_paths <- c(
+    lib_file, 
+    file.path("zig-out", "lib", lib_file), 
+    file.path("zig-out", "bin", lib_file),
+    file.path(getwd(), "zig-out", "lib", lib_file)
+  )
+  
+  path <- ""
+  for (p in possible_paths) {
+    if (file.exists(p)) {
+      path <- p
+      break
+    }
+  }
+  
+  if (path == "") stop("QwD shared library not found. Build it with 'zig build'")
+  
+  dyn.load(path)
+  
+  max_len <- 16 * 1024 * 1024
+  res_buf <- raw(max_len)
+  
+  res <- .C("qwd_bam_stats_r", 
+            path = as.character(bam_path), 
+            threads = as.integer(threads), 
+            out = res_buf, 
+            max_len = as.integer(max_len))
+  
+  actual_buf <- res$out
+  
+  if (actual_buf[1] == as.raw(0)) {
+    stop("QwD Engine failed to process file or returned an empty report.")
+  }
+
+  terminator_idx <- match(as.raw(0), actual_buf)
+  if (is.na(terminator_idx) || terminator_idx <= 1) {
+    stop("QwD Engine returned an empty report.")
+  }
+  
+  json_str <- rawToChar(actual_buf[1:(terminator_idx - 1)])
+  return(jsonlite::fromJSON(json_str))
+}

@@ -52,10 +52,9 @@ pub const LengthDistributionStage = struct {
         }
         if (other.max_recorded > self.max_recorded) self.max_recorded = other.max_recorded;
     }
-    pub fn clone(ptr: *anyopaque, allocator: std.mem.Allocator) anyerror!*anyopaque {
-        const self: *@This() = @ptrCast(@alignCast(ptr));
+    pub fn clone(_: *anyopaque, allocator: std.mem.Allocator) anyerror!*anyopaque {
         const new_self = try allocator.create(LengthDistributionStage);
-        new_self.* = self.*;
+        new_self.* = .{};
         return new_self;
     }
     pub fn stage(self: *LengthDistributionStage) stage_mod.Stage { return .{ .ptr = self, .vtable = &VTABLE }; }

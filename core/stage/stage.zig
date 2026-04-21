@@ -25,6 +25,13 @@ pub const Stage = struct {
         return self.vtable.process(self.ptr, read);
     }
 
+    pub fn processBitplanes(self: Stage, bp: *const bitplanes.BitplaneCore, block: *const fastq_block.FastqColumnBlock) !bool {
+        if (self.vtable.processBitplanes) |p| {
+            return p(self.ptr, bp, block);
+        }
+        return true;
+    }
+
     pub fn finalize(self: Stage) !void {
         return self.vtable.finalize(self.ptr);
     }

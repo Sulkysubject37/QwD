@@ -18,29 +18,53 @@ pub const GcdistributionStage = struct {
             }
         }
         const gc_perc = (gc * 100) / read.seq.len;
-        self.bins[gc_perc] += 1;
+        self.bins[@min(gc_perc, 100)] += 1;
         return true; 
     }
-    pub fn processBitplanes(ptr: *anyopaque, _: *const bitplanes_mod.BitplaneCore, block: *const fastq_block.FastqColumnBlock) anyerror!bool {
+
+    pub fn processBitplanes(ptr: *anyopaque, bp: *const bitplanes_mod.BitplaneCore, block: *const fastq_block.FastqColumnBlock) anyerror!bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
-        for (0..block.read_count) |i| {
-            const len = block.read_lengths[i];
-            if (len == 0) continue;
-            var gc: usize = 0;
-            for (0..len) |pos| {
-                const b = block.bases[pos][i];
-                switch (b) {
-                    'G', 'g', 'C', 'c' => gc += 1,
-                    else => {},
+        const read_count = block.read_count;
+        const active_len = block.active_max_len;
+
+        var gc_totals = [_]u16{0} ** 1024;
+        
+        // BITPLANE ACCELERATION: Process 64 reads in parallel
+        for (0..active_len) |col| {
+            const offset = col * bp.u64_per_col;
+            
+            var i: usize = 0;
+            while (i < bp.u64_per_col) : (i += 1) {
+                var mask = bp.plane_g[offset + i] | bp.plane_c[offset + i];
+                
+                // TRUTH MASK: Mathematically ignore "ghost" data
+                const reads_in_lane = if ((i + 1) * 64 <= read_count) @as(usize, 64) else if (i * 64 >= read_count) @as(usize, 0) else read_count % 64;
+                if (reads_in_lane == 0) continue;
+                
+                const valid_mask = if (reads_in_lane == 64) ~@as(u64, 0) else (@as(u64, 1) << @as(u6, @intCast(reads_in_lane))) - 1;
+                mask &= valid_mask;
+
+                while (mask != 0) {
+                    const bit = @ctz(mask);
+                    gc_totals[i * 64 + bit] += 1;
+                    mask &= mask - 1;
                 }
             }
-            const gc_perc = (gc * 100) / len;
-            self.bins[gc_perc] += 1;
+        }
+
+        for (0..read_count) |i| {
+            const len = block.read_lengths[i];
+            if (len > 0) {
+                const perc = (@as(usize, gc_totals[i]) * 100) / len;
+                self.bins[@min(perc, 100)] += 1;
+            }
         }
         return true;
     }
+
     pub fn finalize(_: *anyopaque) anyerror!void {}
     pub fn report(_: *anyopaque, _: *std.Io.Writer) void {}
+    
     pub fn reportJson(ptr: *anyopaque, writer: *std.Io.Writer) anyerror!void { 
         const self: *@This() = @ptrCast(@alignCast(ptr));
         try writer.writeAll("\"gc_distribution\": {\"bins\": [");
@@ -50,6 +74,7 @@ pub const GcdistributionStage = struct {
         }
         try writer.writeAll("]}");
     }
+    
     pub fn merge(ptr: *anyopaque, other_ptr: *anyopaque) anyerror!void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         const other: *@This() = @ptrCast(@alignCast(other_ptr));
@@ -57,10 +82,10 @@ pub const GcdistributionStage = struct {
             self.bins[i] += other.bins[i];
         }
     }
-    pub fn clone(ptr: *anyopaque, allocator: std.mem.Allocator) anyerror!*anyopaque {
-        const self: *@This() = @ptrCast(@alignCast(ptr));
+    
+    pub fn clone(_: *anyopaque, allocator: std.mem.Allocator) anyerror!*anyopaque {
         const new_self = try allocator.create(GcdistributionStage);
-        new_self.* = self.*;
+        new_self.* = .{};
         return new_self;
     }
 

@@ -1,13 +1,14 @@
 const std = @import("std");
 const simd_transpose = @import("simd_transpose");
+const parser = @import("parser");
 
 pub const FastqColumnBlock = struct {
-    // bases[pos][read_index] - Flat-mapped for cache locality
     bases: [][]u8,
     qualities: [][]u8,
     read_lengths: []u16,
     read_count: usize,
-    max_read_len: usize,
+    max_read_len: usize, 
+    active_max_len: usize,
     capacity: usize,
     allocator: std.mem.Allocator,
 
@@ -33,6 +34,7 @@ pub const FastqColumnBlock = struct {
             .read_lengths = try allocator.alloc(u16, capacity),
             .read_count = 0,
             .max_read_len = max_read_len,
+            .active_max_len = 0,
             .capacity = capacity,
             .allocator = allocator,
         };
@@ -47,147 +49,99 @@ pub const FastqColumnBlock = struct {
     }
 
     pub fn clear(self: *FastqColumnBlock) void {
+        // SURGICAL RESET: only reset active memory range to maintain peak speed.
+        const total_bytes = self.active_max_len * self.capacity;
+        if (total_bytes > 0) {
+            @memset(self.bases[0].ptr[0..total_bytes], 0);
+            @memset(self.qualities[0].ptr[0..total_bytes], 0);
+        }
+        @memset(self.read_lengths[0..self.read_count], 0);
         self.read_count = 0;
+        self.active_max_len = 0;
     }
 
-    pub fn transposeFromIndices(self: *FastqColumnBlock, data: []const u8, indices: []const usize, start_nl: i64, count: usize) void {
+    pub fn transposeFromIndices(self: *FastqColumnBlock, data: []const u8, indices: []const usize, start_nl_idx: usize, count: usize) void {
         self.read_count = count;
-        
-        var read_idx: usize = 0;
-        while (read_idx + 16 <= count) : (read_idx += 16) {
+        var batch_max_len: usize = 0;
+
+        // Pass 1: SIMD 16-read blocks
+        var i: usize = 0;
+        while (i + 16 <= count) : (i += 16) {
             var b_ptrs: [16][]const u8 = undefined;
             var q_ptrs: [16][]const u8 = undefined;
-            inline for (0..16) |i| {
-                const r_idx = @as(i64, @intCast(read_idx + i));
-                const current_nl = start_nl + r_idx * 4;
-                
-                const seq_start = indices[@intCast(current_nl + 1)] + 1;
-                var seq_end = indices[@intCast(current_nl + 2)];
-                const qual_start = indices[@intCast(current_nl + 3)] + 1;
-                var qual_end = indices[@intCast(current_nl + 4)];
+            var local_max: usize = 0;
 
-                // Strip trailing \r if present (CRLF support)
-                if (seq_end > seq_start and data[seq_end - 1] == '\r') seq_end -= 1;
-                if (qual_end > qual_start and data[qual_end - 1] == '\r') qual_end -= 1;
+            inline for (0..16) |j| {
+                const idx_base = start_nl_idx + (i + j) * 4;
+                const seq_start = indices[idx_base] + 1;
+                const seq_end = indices[idx_base + 1];
+                const qual_start = indices[idx_base + 2] + 1;
+                const qual_end = indices[idx_base + 3];
                 
                 const seq_len = seq_end - seq_start;
-                
-                b_ptrs[i] = data[seq_start..seq_end];
-                q_ptrs[i] = data[qual_start..qual_end];
-                self.read_lengths[read_idx + i] = @intCast(seq_len);
+                const qual_len = qual_end - qual_start;
+                const len = @min(@min(seq_len, qual_len), self.max_read_len);
 
-                // Zero out tails for the current read in the block to prevent leakage
-                for (seq_len..self.max_read_len) |pos| {
-                   self.bases[pos][read_idx + i] = 0;
-                   self.qualities[pos][read_idx + i] = 0;
-                }
+                b_ptrs[j] = data[seq_start .. seq_start + len];
+                q_ptrs[j] = data[qual_start .. qual_start + len];
+                self.read_lengths[i + j] = @intCast(len);
+                if (len > local_max) local_max = len;
             }
-            
+            if (local_max > batch_max_len) batch_max_len = local_max;
+
             var pos: usize = 0;
-            while (pos < self.max_read_len) : (pos += 16) {
+            while (pos + 16 <= local_max) : (pos += 16) {
                 const b_rows = simd_transpose.load16x16Safe(b_ptrs, pos);
                 const transposed_b = simd_transpose.transpose16x16(b_rows);
-                inline for (0..16) |i| {
-                    if (pos + i < self.max_read_len) {
-                        const dest_col = self.bases[pos + i];
-                        const chunk: [16]u8 = @bitCast(transposed_b[i]);
-                        @memcpy(dest_col[read_idx..read_idx+16], &chunk);
-                    }
+                inline for (0..16) |trans_idx| {
+                    const chunk: [16]u8 = @bitCast(transposed_b[trans_idx]);
+                    @memcpy(self.bases[pos + trans_idx][i..][0..16], &chunk);
                 }
-
                 const q_rows = simd_transpose.load16x16Safe(q_ptrs, pos);
                 const transposed_q = simd_transpose.transpose16x16(q_rows);
-                inline for (0..16) |i| {
-                    if (pos + i < self.max_read_len) {
-                        const dest_col = self.qualities[pos + i];
-                        const chunk: [16]u8 = @bitCast(transposed_q[i]);
-                        @memcpy(dest_col[read_idx..read_idx+16], &chunk);
+                inline for (0..16) |trans_idx| {
+                    const chunk: [16]u8 = @bitCast(transposed_q[trans_idx]);
+                    @memcpy(self.qualities[pos + trans_idx][i..][0..16], &chunk);
+                }
+            }
+            // Residual scalar for the 16-read batch
+            while (pos < local_max) : (pos += 1) {
+                inline for (0..16) |j| {
+                    if (pos < b_ptrs[j].len) {
+                        self.bases[pos][i + j] = b_ptrs[j][pos];
+                        self.qualities[pos][i + j] = q_ptrs[j][pos];
                     }
                 }
             }
         }
 
-        // Residual 8x8 blocks
-        while (read_idx + 8 <= count) : (read_idx += 8) {
-            var b_ptrs: [8][]const u8 = undefined;
-            var q_ptrs: [8][]const u8 = undefined;
-            inline for (0..8) |i| {
-                const r_idx = @as(i64, @intCast(read_idx + i));
-                const current_nl = start_nl + r_idx * 4;
-                
-                const seq_start = indices[@intCast(current_nl + 1)] + 1;
-                var seq_end = indices[@intCast(current_nl + 2)];
-                const qual_start = indices[@intCast(current_nl + 3)] + 1;
-                var qual_end = indices[@intCast(current_nl + 4)];
-
-                // Strip trailing \r if present (CRLF support)
-                if (seq_end > seq_start and data[seq_end - 1] == '\r') seq_end -= 1;
-                if (qual_end > qual_start and data[qual_end - 1] == '\r') qual_end -= 1;
-                
-                const seq_len = seq_end - seq_start;
-                
-                b_ptrs[i] = data[seq_start..seq_end];
-                q_ptrs[i] = data[qual_start..qual_end];
-                self.read_lengths[read_idx + i] = @intCast(seq_len);
-
-                // Zero out tails for the current read in the block to prevent leakage
-                for (seq_len..self.max_read_len) |pos| {
-                   self.bases[pos][read_idx + i] = 0;
-                   self.qualities[pos][read_idx + i] = 0;
-                }
-            }
+        // Pass 2: Handle remaining reads
+        while (i < count) : (i += 1) {
+            const idx_base = start_nl_idx + i * 4;
+            const seq_start = indices[idx_base] + 1;
+            const seq_end = indices[idx_base + 1];
+            const qual_start = indices[idx_base + 2] + 1;
+            const qual_end = indices[idx_base + 3];
+            const len = @min(@min(seq_end - seq_start, qual_end - qual_start), self.max_read_len);
             
-            var pos: usize = 0;
-            while (pos < self.max_read_len) : (pos += 8) {
-                const b_rows = simd_transpose.load8x8Safe(b_ptrs, pos);
-                const transposed_b = simd_transpose.transpose8x8(b_rows);
-                inline for (0..8) |i| {
-                    if (pos + i < self.max_read_len) {
-                        const dest_col = self.bases[pos + i];
-                        const chunk: [8]u8 = @bitCast(transposed_b[i]);
-                        @memcpy(dest_col[read_idx..read_idx+8], &chunk);
-                    }
-                }
-
-                const q_rows = simd_transpose.load8x8Safe(q_ptrs, pos);
-                const transposed_q = simd_transpose.transpose8x8(q_rows);
-                inline for (0..8) |i| {
-                    if (pos + i < self.max_read_len) {
-                        const dest_col = self.qualities[pos + i];
-                        const chunk: [8]u8 = @bitCast(transposed_q[i]);
-                        @memcpy(dest_col[read_idx..read_idx+8], &chunk);
-                    }
-                }
-            }
-        }
-
-        // Residual reads handling
-        while (read_idx < count) : (read_idx += 1) {
-            const r_idx = @as(i64, @intCast(read_idx));
-            const current_nl = start_nl + r_idx * 4;
-            
-            const seq_start = indices[@intCast(current_nl + 1)] + 1;
-            var seq_end = indices[@intCast(current_nl + 2)];
-            const qual_start = indices[@intCast(current_nl + 3)] + 1;
-            var qual_end = indices[@intCast(current_nl + 4)];
-
-            // Strip trailing \r if present (CRLF support)
-            if (seq_end > seq_start and data[seq_end - 1] == '\r') seq_end -= 1;
-            if (qual_end > qual_start and data[qual_end - 1] == '\r') qual_end -= 1;
-            
-            const seq = data[seq_start..seq_end];
-            const qual = data[qual_start..qual_end];
-            const len = @min(seq.len, self.max_read_len);
             for (0..len) |pos| {
-                self.bases[pos][read_idx] = seq[pos];
-                self.qualities[pos][read_idx] = qual[pos];
+                self.bases[pos][i] = data[seq_start + pos];
+                self.qualities[pos][i] = data[qual_start + pos];
             }
-            // Zero out remainder of columns for this read to prevent leakage
-            for (len..self.max_read_len) |pos| {
-                self.bases[pos][read_idx] = 0;
-                self.qualities[pos][read_idx] = 0;
-            }
-            self.read_lengths[read_idx] = @intCast(len);
+            self.read_lengths[i] = @intCast(len);
+            if (len > batch_max_len) batch_max_len = len;
         }
+        self.active_max_len = batch_max_len;
+    }
+
+    pub fn getReadRaw(self: *const FastqColumnBlock, idx: usize, allocator: std.mem.Allocator) struct { seq: []u8, qual: []u8 } {
+        const len = self.read_lengths[idx];
+        const seq = allocator.alloc(u8, len) catch unreachable;
+        const qual = allocator.alloc(u8, len) catch unreachable;
+        for (0..len) |pos| {
+            seq[pos] = self.bases[pos][idx];
+            qual[pos] = self.qualities[pos][idx];
+        }
+        return .{ .seq = seq, .qual = qual };
     }
 };

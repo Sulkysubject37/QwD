@@ -14,30 +14,34 @@ pub const PerbasequalityStage = struct {
         if (len > self.max_pos) self.max_pos = len;
         for (read.qual, 0..) |q, i| {
             if (i >= 1000) break;
-            const phred = @min(@as(usize, q - 33), 40);
+            const phred = if (q >= 33) @min(@as(usize, q - 33), 40) else 0;
             self.quality_counts[i][phred] += 1;
         }
         return true; 
     }
+
     pub fn processBitplanes(ptr: *anyopaque, _: *const bitplanes_mod.BitplaneCore, block: *const fastq_block.FastqColumnBlock) anyerror!bool {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         const read_count = block.read_count;
-        const max_len = @min(block.max_read_len, 1000);
-        if (max_len > self.max_pos) self.max_pos = max_len;
+        const active_len = block.active_max_len;
+        if (active_len > self.max_pos) self.max_pos = @min(active_len, 1000);
 
-        for (0..max_len) |pos| {
-            const qual_col = block.qualities[pos];
-            for (0..read_count) |i| {
-                const q = qual_col[i];
+        // Surgical Loop: Process ONLY valid read count and bound by buffer capacity (1024)
+        for (0..read_count) |i| {
+            const len = @min(@as(usize, block.read_lengths[i]), 1000);
+            for (0..len) |pos| {
+                const q = block.qualities[pos][i];
                 if (q == 0) continue;
-                const phred = @min(@as(usize, q - 33), 40);
+                const phred = if (q >= 33) @min(@as(usize, q - 33), 40) else 0;
                 self.quality_counts[pos][phred] += 1;
             }
         }
         return true;
     }
+
     pub fn finalize(_: *anyopaque) anyerror!void {}
     pub fn report(_: *anyopaque, _: *std.Io.Writer) void {}
+
     pub fn reportJson(ptr: *anyopaque, writer: *std.Io.Writer) anyerror!void { 
         const self: *@This() = @ptrCast(@alignCast(ptr));
         try writer.print("\"quality_dist\": {{\"max_pos\": {d}, \"data\": [", .{self.max_pos});
@@ -53,6 +57,7 @@ pub const PerbasequalityStage = struct {
         }
         try writer.writeAll("]}");
     }
+
     pub fn merge(ptr: *anyopaque, other_ptr: *anyopaque) anyerror!void {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         const other: *@This() = @ptrCast(@alignCast(other_ptr));
@@ -63,10 +68,10 @@ pub const PerbasequalityStage = struct {
             }
         }
     }
-    pub fn clone(ptr: *anyopaque, allocator: std.mem.Allocator) anyerror!*anyopaque {
-        const self: *@This() = @ptrCast(@alignCast(ptr));
+
+    pub fn clone(_: *anyopaque, allocator: std.mem.Allocator) anyerror!*anyopaque {
         const new_self = try allocator.create(PerbasequalityStage);
-        new_self.* = self.*;
+        new_self.* = .{};
         return new_self;
     }
 

@@ -2,42 +2,50 @@ const std = @import("std");
 const parser = @import("parser");
 const stage_mod = @import("stage");
 const ring_buffer = @import("ring_buffer");
-const bgzf_native_reader = @import("bgzf_native_reader");
-const deflate_impl = @import("deflate_impl");
+const block_reader = @import("block_reader");
+const mode_mod = @import("mode");
 const fastq_block = @import("fastq_block");
 const bitplanes = @import("bitplanes");
 const vertical_scanner = @import("vertical_scanner");
+const bgzf_native_reader = @import("bgzf_native_reader");
+const deflate_impl = @import("deflate_impl");
+const custom_deflate = @import("custom_deflate");
 
-const Io = std.Io;
+pub const JobKind = enum { raw, compressed };
+pub const Job = struct {
+    data: []u8,
+    uncompressed_len: u32 = 0,
+    kind: JobKind,
+};
+
+pub const WorkerContext = struct {
+    scheduler: *ParallelScheduler,
+    stages: []stage_mod.Stage,
+    block: fastq_block.FastqColumnBlock,
+    bp_core: bitplanes.BitplaneCore,
+    indices: []usize,
+    queue: *ring_buffer.RingBuffer(Job),
+    read_count_atomic: *std.atomic.Value(usize),
+    mode: mode_mod.Mode,
+    id: usize,
+};
 
 pub const ParallelScheduler = struct {
-    num_threads: usize,
     sys_allocator: std.mem.Allocator,
-    io: Io,
+    io: std.Io,
+    num_threads: usize,
     stages: std.ArrayListUnmanaged(stage_mod.Stage),
-    
-    const Job = struct {
-        data: []u8,
-        uncompressed_len: u32 = 0,
-    };
+    mode: mode_mod.Mode = .exact,
+    gzip_mode: mode_mod.GzipMode = .auto,
 
-    const WorkerContext = struct {
-        id: usize,
-        scheduler: *const ParallelScheduler,
-        in_queue: *ring_buffer.RingBuffer(Job),
-        read_count: *std.atomic.Value(usize),
-        stages: []stage_mod.Stage, 
-        indices: []usize,
-        block: fastq_block.FastqColumnBlock,
-        bp_core: bitplanes.BitplaneCore,
-    };
-
-    pub fn init(allocator: std.mem.Allocator, num_threads: usize, io: Io) !ParallelScheduler {
-        return ParallelScheduler{
-            .num_threads = num_threads,
+    pub fn init(allocator: std.mem.Allocator, io: std.Io, threads: usize, mode: mode_mod.Mode, gzip_mode: mode_mod.GzipMode) ParallelScheduler {
+        return .{
             .sys_allocator = allocator,
             .io = io,
+            .num_threads = threads,
             .stages = .empty,
+            .mode = mode,
+            .gzip_mode = gzip_mode,
         };
     }
 
@@ -49,47 +57,120 @@ pub const ParallelScheduler = struct {
         try self.stages.append(self.sys_allocator, stage);
     }
 
+    pub fn getAllocatedBytes(self: *ParallelScheduler) usize {
+        const g_alloc: *@import("global_allocator").GlobalAllocator = @ptrCast(@alignCast(self.sys_allocator.ptr));
+        return g_alloc.allocated_bytes.load(.acquire);
+    }
+
     pub fn run(self: *ParallelScheduler, file: std.Io.File, pipeline_ptr: anytype) !void {
-        std.debug.print("[ParallelScheduler] Initializing {d} workers...\n", .{self.num_threads});
-        
-        var analyze_queue = try ring_buffer.RingBuffer(Job).init(self.sys_allocator, 256);
+        var analyze_queue = try ring_buffer.RingBuffer(Job).init(self.sys_allocator, 8);
         defer analyze_queue.deinit();
 
-        var read_count_atomic = std.atomic.Value(usize).init(0);
         var threads = try self.sys_allocator.alloc(std.Thread, self.num_threads);
-        var contexts = try self.sys_allocator.alloc(*WorkerContext, self.num_threads);
         defer self.sys_allocator.free(threads);
+
+        var contexts = try self.sys_allocator.alloc(*WorkerContext, self.num_threads);
         defer self.sys_allocator.free(contexts);
 
-        for (0..self.num_threads) |i| {
-            const local_stages = try self.sys_allocator.alloc(stage_mod.Stage, self.stages.items.len);
-            for (self.stages.items, 0..) |s, j| {
-                local_stages[j] = try s.clone(self.sys_allocator);
-            }
+        var read_count_atomic = std.atomic.Value(usize).init(0);
 
-            const ctx = try self.sys_allocator.create(WorkerContext);
+        for (0..self.num_threads) |i| {
+            var ctx = try self.sys_allocator.create(WorkerContext);
             ctx.* = .{
-                .id = i,
                 .scheduler = self,
-                .in_queue = analyze_queue,
-                .read_count = &read_count_atomic,
-                .stages = local_stages,
-                .indices = try self.sys_allocator.alloc(usize, 16384),
-                .block = try fastq_block.FastqColumnBlock.init(self.sys_allocator, 1024, 512),
-                .bp_core = try bitplanes.BitplaneCore.init(self.sys_allocator, 1024, 512),
+                .stages = try self.sys_allocator.alloc(stage_mod.Stage, self.stages.items.len),
+                .queue = analyze_queue,
+                .read_count_atomic = &read_count_atomic,
+                .mode = self.mode,
+                .id = i,
+                .indices = try self.sys_allocator.alloc(usize, 1024 * 1024),
+                .block = try fastq_block.FastqColumnBlock.init(self.sys_allocator, 1024, 1024),
+                .bp_core = try bitplanes.BitplaneCore.init(self.sys_allocator, 1024, 1024),
             };
+            for (self.stages.items, 0..) |stage, j| {
+                ctx.stages[j] = try stage.clone(self.sys_allocator);
+            }
             contexts[i] = ctx;
             threads[i] = try std.Thread.spawn(.{}, workerEntry, .{ctx});
         }
 
-        var bgzf = try bgzf_native_reader.BgzfNativeReader.init(self.sys_allocator, undefined);
-        defer bgzf.deinit();
+        var magic: [2]u8 = undefined;
+        const n_magic = file.readStreaming(self.io, &[_][]u8{magic[0..]}) catch 0;
+        var magic_used = false;
+        const is_bgzf = (n_magic == 2 and magic[0] == 0x1F and magic[1] == 0x8B);
 
-        while (try bgzf.nextBlock(file, self.io)) |block| {
-            _ = analyze_queue.push(self.io, .{
-                .data = block.compressed_data,
-                .uncompressed_len = block.uncompressed_len,
-            });
+        if (is_bgzf) {
+            std.debug.print("[ParallelScheduler] Mode: BGZF-Ordered-Parallel\n", .{});
+            var bgzf = try bgzf_native_reader.BgzfNativeReader.init(self.sys_allocator, undefined);
+            defer bgzf.deinit();
+
+            var carry_over: std.ArrayListUnmanaged(u8) = .empty;
+            defer carry_over.deinit(self.sys_allocator);
+
+            while (try bgzf.nextBlockHardened(file, self.io, if (magic_used) null else &magic)) |block| {
+                magic_used = true;
+                
+                const decompressed = try self.sys_allocator.alloc(u8, block.uncompressed_len);
+                
+                switch (self.gzip_mode) {
+                    .native => {
+                        var reader = std.Io.Reader.fixed(block.compressed_data);
+                        var engine = custom_deflate.DeflateEngine.init(&reader);
+                        const Sink = struct {
+                            out: []u8,
+                            pos: usize = 0,
+                            pub fn emit(s: *@This(), byte: u8) !void {
+                                if (s.pos >= s.out.len) return error.BufferFull;
+                                s.out[s.pos] = byte;
+                                s.pos += 1;
+                            }
+                        };
+                        var sink = Sink{ .out = decompressed };
+                        try engine.decompress(&sink);
+                    },
+                    else => {
+                        _ = try deflate_impl.decompress(block.compressed_data, decompressed);
+                    }
+                }
+                self.sys_allocator.free(block.compressed_data);
+
+                try carry_over.appendSlice(self.sys_allocator, decompressed);
+                self.sys_allocator.free(decompressed);
+
+                if (carry_over.items.len >= 16 * 1024 * 1024) {
+                    try self.pushAligned(analyze_queue, &carry_over);
+                }
+            }
+            if (carry_over.items.len > 0) {
+                const final_data = try self.sys_allocator.alloc(u8, carry_over.items.len);
+                @memcpy(final_data, carry_over.items);
+                _ = analyze_queue.push(self.io, .{ .data = final_data, .kind = .raw });
+            }
+        } else {
+            std.debug.print("[ParallelScheduler] Mode: Raw-Parallel\n", .{});
+            const target_chunk_size = 16 * 1024 * 1024;
+            var carry_over: std.ArrayListUnmanaged(u8) = .empty;
+            defer carry_over.deinit(self.sys_allocator);
+
+            while (true) {
+                var buf = try self.sys_allocator.alloc(u8, target_chunk_size);
+                const n = file.readStreaming(self.io, &[_][]u8{buf}) catch |err| if (err == error.EndOfStream) @as(usize, 0) else return err;
+                if (n == 0) {
+                    self.sys_allocator.free(buf);
+                    break;
+                }
+                try carry_over.appendSlice(self.sys_allocator, buf[0..n]);
+                self.sys_allocator.free(buf);
+                
+                if (carry_over.items.len >= target_chunk_size) {
+                    try self.pushAligned(analyze_queue, &carry_over);
+                }
+            }
+            if (carry_over.items.len > 0) {
+                const final_data = try self.sys_allocator.alloc(u8, carry_over.items.len);
+                @memcpy(final_data, carry_over.items);
+                _ = analyze_queue.push(self.io, .{ .data = final_data, .kind = .raw });
+            }
         }
 
         analyze_queue.shutdown(self.io, self.num_threads);
@@ -106,11 +187,33 @@ pub const ParallelScheduler = struct {
             self.sys_allocator.destroy(contexts[i]);
         }
         
-        for (self.stages.items) |stage| {
-            try stage.finalize();
-        }
-        
         pipeline_ptr.read_count = read_count_atomic.load(.acquire);
+    }
+
+    pub fn finalize(self: *ParallelScheduler) !void {
+        _ = self;
+    }
+
+    fn pushAligned(self: *ParallelScheduler, queue: *ring_buffer.RingBuffer(Job), carry_over: *std.ArrayListUnmanaged(u8)) !void {
+        const data = carry_over.items;
+        var last_valid: usize = 0;
+        var nl_count: usize = 0;
+        var search: usize = 0;
+        while (std.mem.indexOfScalarPos(u8, data, search, '\n')) |idx| {
+            nl_count += 1;
+            if (nl_count % 4 == 0) last_valid = idx + 1;
+            search = idx + 1;
+        }
+
+        if (last_valid > 0) {
+            const push_data = try self.sys_allocator.alloc(u8, last_valid);
+            @memcpy(push_data, data[0..last_valid]);
+            _ = queue.push(self.io, .{ .data = push_data, .kind = .raw });
+            
+            const rem = carry_over.items[last_valid..];
+            std.mem.copyForwards(u8, carry_over.items[0..rem.len], rem);
+            carry_over.items.len = rem.len;
+        }
     }
 
     fn workerEntry(ctx: *WorkerContext) void {
@@ -118,91 +221,35 @@ pub const ParallelScheduler = struct {
         const io = ctx.scheduler.io;
 
         while (true) {
-            const job_opt = ctx.in_queue.pop(io);
-            if (job_opt) |j| {
-                const decompressed = allocator.alloc(u8, j.uncompressed_len) catch {
-                    allocator.free(j.data);
-                    continue;
-                };
+            const job = ctx.queue.pop(io) orelse break;
+            const active_data = job.data;
 
-                _ = deflate_impl.decompress(j.data, decompressed) catch {
-                    allocator.free(j.data);
-                    allocator.free(decompressed);
-                    continue;
-                };
-                allocator.free(j.data);
+            var scan_res = vertical_scanner.FastqScanner.ScanResult{
+                .indices = ctx.indices,
+                .count = 0,
+            };
+            vertical_scanner.FastqScanner.scanNewlinesSIMD(active_data, &scan_res);
+            const total_reads = scan_res.count / 4;
 
-                var scan_res = vertical_scanner.FastqScanner.ScanResult{
-                    .indices = ctx.indices,
-                    .count = 0,
-                };
-                vertical_scanner.FastqScanner.scanNewlinesSIMD(decompressed, &scan_res);
-
-                const total_reads = scan_res.count / 4;
-                var reads_processed: usize = 0;
-                while (reads_processed < total_reads) {
-                    const batch_size = @min(1024, total_reads - reads_processed);
+            if (total_reads > 0) {
+                var reads_done: usize = 0;
+                while (reads_done < total_reads) {
+                    const chunk_size = @min(1024, total_reads - reads_done);
+                    
                     ctx.block.clear();
-                    ctx.block.transposeFromIndices(decompressed, ctx.indices, @intCast(reads_processed), batch_size);
-                    ctx.bp_core.fromColumnBlock(ctx.block);
+                    ctx.block.transposeFromIndices(active_data, ctx.indices, reads_done * 4, chunk_size);
+                    
+                    ctx.bp_core.clear(chunk_size);
+                    ctx.bp_core.fromColumnBlock(&ctx.block);
 
-                    for (ctx.stages) |s| {
-                        const vt = s.vtable;
-                        if (vt.processBitplanes) |bp_fn| {
-                            _ = bp_fn(s.ptr, &ctx.bp_core, &ctx.block) catch {};
-                        } else {
-                            for (0..batch_size) |idx| {
-                                const start = ctx.indices[(reads_processed + idx) * 4];
-                                const end = ctx.indices[(reads_processed + idx) * 4 + 1];
-                                const read = parser.Read{
-                                    .id = "b",
-                                    .seq = decompressed[start+1..end],
-                                    .qual = "!",
-                                };
-                                _ = s.processRead(&read) catch {};
-                            }
-                        }
+                    for (ctx.stages) |stage| {
+                        _ = stage.processBitplanes(&ctx.bp_core, &ctx.block) catch {};
                     }
-                    reads_processed += batch_size;
+                    _ = ctx.read_count_atomic.fetchAdd(chunk_size, .monotonic);
+                    reads_done += chunk_size;
                 }
-                _ = ctx.read_count.fetchAdd(total_reads, .monotonic);
-                allocator.free(decompressed);
-            } else break;
+            }
+            allocator.free(active_data);
         }
-        for (ctx.stages) |s| s.finalize() catch {};
-    }
-
-    pub fn finalize(_: *ParallelScheduler) !void {}
-
-    pub fn report(self: *ParallelScheduler, writer: *std.Io.Writer) void {
-        writer.print("Parallel Execution Engine: {d} threads\n", .{self.num_threads}) catch {};
-    }
-    pub fn reportJson(self: *ParallelScheduler, writer: *std.Io.Writer) !void {
-        try writer.print("\"parallel_execution\": {{\"threads\": {d}, \"engine\": \"native_parallel\"}}", .{self.num_threads});
-    }
-};
-
-const FileReader = struct {
-    file: std.Io.File,
-    io: std.Io,
-    internal_buf: [65536]u8 = undefined,
-    reader_instance: std.Io.Reader = undefined,
-
-    pub fn stream(r: *std.Io.Reader, writer: *std.Io.Writer, limit: std.Io.Limit) std.Io.Reader.StreamError!usize {
-        const self: *@This() = @fieldParentPtr("reader_instance", r);
-        const available = writer.buffer.len - writer.end;
-        const limit_val = @intFromEnum(limit);
-        const to_read = if (limit_val == 0) available else @min(available, limit_val);
-        if (to_read == 0) return 0;
-        const iov = [_][]u8{writer.buffer[writer.end .. writer.end + to_read]};
-        const n = self.file.readStreaming(self.io, &iov) catch |err| if (err == error.EndOfStream) return error.EndOfStream else return error.ReadFailed;
-        writer.end += n;
-        return n;
-    }
-    const VTABLE = std.Io.Reader.VTable{ .stream = stream };
-    pub fn init(file: std.Io.File, io: std.Io) FileReader {
-        var self = FileReader{ .file = file, .io = io };
-        self.reader_instance = .{ .vtable = &VTABLE, .buffer = &self.internal_buf, .seek = 0, .end = 0 };
-        return self;
     }
 };

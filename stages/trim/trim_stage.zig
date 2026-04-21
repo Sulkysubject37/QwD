@@ -36,7 +36,7 @@ pub const TrimStage = struct {
     pub fn clone(ptr: *anyopaque, allocator: std.mem.Allocator) anyerror!*anyopaque {
         const self: *@This() = @ptrCast(@alignCast(ptr));
         const new_self = try allocator.create(TrimStage);
-        new_self.* = self.*;
+        new_self.* = TrimStage.init(self.adapter_sequence, self.trim_front, self.trim_tail);
         return new_self;
     }
     pub fn stage(self: *TrimStage) stage_mod.Stage {

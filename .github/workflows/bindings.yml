@@ -31,12 +31,15 @@ jobs:
       - name: Build Shared Library
         run: zig build -Doptimize=ReleaseFast
       - name: Generate Test Data
-        run: mkdir -p tests/fixtures && python3 scripts/gen_test_data.py --reads 100000 --out tests/fixtures/sample.fastq
+        run: |
+          mkdir -p tests/fixtures
+          python3 scripts/gen_test_data.py --reads 100000 --out tests/fixtures/sample.fastq
+          ./zig-out/bin/qbgzip tests/fixtures/sample.fastq
       - name: Run Python Smoke Test
         run: |
           export DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH:$(pwd)/zig-out/lib
           export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$(pwd)/zig-out/lib
-          python3 -c "import sys; sys.path.append('bindings/python'); import qwd; res = qwd.qc('tests/fixtures/sample.fastq', threads=2); print(res); exit(0 if 'read_count' in res else 1)"
+          python3 -c "import sys; sys.path.append('bindings/python'); import qwd; res = qwd.qc('tests/fixtures/sample.fastq.bgzf.gz', threads=2); print(res); exit(0 if 'read_count' in res else 1)"
 
   test-r:
     strategy:
@@ -57,8 +60,13 @@ jobs:
         run: brew install libdeflate
       - name: Build Shared Library
         run: zig build -Doptimize=ReleaseFast
+      - name: Generate Test Data
+        run: |
+          mkdir -p tests/fixtures
+          python3 scripts/gen_test_data.py --reads 100000 --out tests/fixtures/sample.fastq
+          ./zig-out/bin/qbgzip tests/fixtures/sample.fastq
       - name: Run R Smoke Test
         run: |
           export DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH:$(pwd)/zig-out/lib
           export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$(pwd)/zig-out/lib
-          Rscript -e "source('bindings/r/R/qwd.R'); res <- qwd_qc('tests/fixtures/sample.fastq', threads=2); print(res); if (!'read_count' %in% names(res)) stop('Missing read_count')"
+          Rscript -e "source('bindings/r/R/qwd.R'); res <- qwd_qc('tests/fixtures/sample.fastq.bgzf.gz', threads=2); print(res); if (!'read_count' %in% names(res)) stop('Missing read_count')"

@@ -112,6 +112,38 @@ export fn qwd_bam_stats(file_path: [*:0]const u8, threads: i32) ?[*:0]const u8 {
     return p.reportJsonAlloc(allocator, g_io) catch null;
 }
 
+export fn qwd_bam_stats_r(file_path_ptr: *[*:0]const u8, threads: *i32, out_buf: [*]u8, max_len: *i32) void {
+    if (!g_initialized) qwd_init();
+    const allocator = std.heap.c_allocator;
+    const path_str = file_path_ptr.*;
+    _ = threads;
+
+    var p = bam_pipeline_mod.BamPipeline.init(allocator);
+    defer p.deinit();
+
+    // Add default BAM stages
+    const alignment_stats_stage = allocator.create(@import("alignment_stats").AlignmentStatsStage) catch return;
+    alignment_stats_stage.* = .{};
+    p.addStage(alignment_stats_stage.stage()) catch return;
+
+    const file = openDirect(path_str) catch return;
+    defer file.close(g_io);
+    
+    p.run(file, g_io) catch return;
+    p.finalize() catch {};
+    
+    const json = p.reportJsonAlloc(allocator, g_io) catch return;
+    defer {
+        const span = std.mem.span(json);
+        allocator.free(span);
+    }
+    
+    const json_slice = std.mem.span(json);
+    const copy_len = @min(json_slice.len, @as(usize, @intCast(max_len.*)) - 1);
+    @memcpy(out_buf[0..copy_len], json_slice[0..copy_len]);
+    out_buf[copy_len] = 0;
+}
+
 export fn qwd_pipeline(config_json: [*:0]const u8, input_path: [*:0]const u8) ?[*:0]const u8 {
     if (!g_initialized) qwd_init();
     const allocator = std.heap.c_allocator;

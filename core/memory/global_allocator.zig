@@ -19,65 +19,67 @@ pub const GlobalAllocator = struct {
             .vtable = &.{
                 .alloc = alloc,
                 .resize = resize,
+                .remap = remap,
                 .free = free,
             },
         };
     }
 
-    fn alloc(ctx: *anyopaque, len: usize, ptr_align: u8, ret_addr: usize) ?[*]u8 {
+    fn alloc(ctx: *anyopaque, len: usize, ptr_align: std.mem.Alignment, ret_addr: usize) ?[*]u8 {
         const self: *GlobalAllocator = @ptrCast(@alignCast(ctx));
         
-        var retries: usize = 0;
-        while (retries < 100) : (retries += 1) {
-            const current = self.allocated_bytes.load(.acquire);
-            if (current + len > self.max_bytes) return null; // No blocking sleep!
-            
-            if (self.allocated_bytes.cmpxchgWeak(current, current + len, .release, .monotonic)) |_| {
-                continue;
-            }
-            break;
-        } else return null;
+        const current = self.allocated_bytes.load(.acquire);
+        if (current + len > self.max_bytes) return null;
 
         if (self.parent_allocator.rawAlloc(len, ptr_align, ret_addr)) |ptr| {
+            _ = self.allocated_bytes.fetchAdd(len, .release);
             return ptr;
-        } else {
-            _ = self.allocated_bytes.fetchSub(len, .release);
-            return null;
         }
+        return null;
     }
 
-    fn resize(ctx: *anyopaque, buf: []u8, buf_align: u8, new_len: usize, ret_addr: usize) bool {
+    fn resize(ctx: *anyopaque, buf: []u8, buf_align: std.mem.Alignment, new_len: usize, ret_addr: usize) bool {
         const self: *GlobalAllocator = @ptrCast(@alignCast(ctx));
         if (new_len > buf.len) {
             const diff = new_len - buf.len;
-            var retries: usize = 0;
-            while (retries < 100) : (retries += 1) {
-                const current = self.allocated_bytes.load(.acquire);
-                if (current + diff > self.max_bytes) return false; // Non-blocking
-                
-                if (self.allocated_bytes.cmpxchgWeak(current, current + diff, .release, .monotonic)) |_| {
-                    continue;
-                }
-                break;
-            } else return false;
+            const current = self.allocated_bytes.load(.acquire);
+            if (current + diff > self.max_bytes) return false;
+            
             if (self.parent_allocator.rawResize(buf, buf_align, new_len, ret_addr)) {
+                _ = self.allocated_bytes.fetchAdd(diff, .release);
                 return true;
-            } else {
-                _ = self.allocated_bytes.fetchSub(diff, .release);
-                return false;
             }
         } else {
             const diff = buf.len - new_len;
             if (self.parent_allocator.rawResize(buf, buf_align, new_len, ret_addr)) {
                 _ = self.allocated_bytes.fetchSub(diff, .release);
                 return true;
-            } else {
-                return false;
             }
         }
+        return false;
     }
 
-    fn free(ctx: *anyopaque, buf: []u8, buf_align: u8, ret_addr: usize) void {
+    fn remap(ctx: *anyopaque, buf: []u8, buf_align: std.mem.Alignment, new_len: usize, ret_addr: usize) ?[*]u8 {
+        const self: *GlobalAllocator = @ptrCast(@alignCast(ctx));
+        
+        if (new_len > buf.len) {
+            const diff = new_len - buf.len;
+            const current = self.allocated_bytes.load(.acquire);
+            if (current + diff > self.max_bytes) return null;
+        }
+
+        if (self.parent_allocator.rawRemap(buf, buf_align, new_len, ret_addr)) |ptr| {
+            if (new_len > buf.len) {
+                _ = self.allocated_bytes.fetchAdd(new_len - buf.len, .release);
+            } else {
+                _ = self.allocated_bytes.fetchSub(buf.len - new_len, .release);
+            }
+            return ptr;
+        }
+        return null;
+    }
+
+    fn free(ctx: *anyopaque, buf: []u8, buf_align: std.mem.Alignment, ret_addr: usize) void {
         const self: *GlobalAllocator = @ptrCast(@alignCast(ctx));
         const bytes = buf.len;
         self.parent_allocator.rawFree(buf, buf_align, ret_addr);
