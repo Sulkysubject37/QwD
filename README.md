@@ -1,5 +1,12 @@
 # QwD (قَلَّ وَدَلَّ)
 
+> [!CAUTION]
+> **MAJOR ANNOUNCEMENT: PROJECT UNDERGOING MASSIVE ARCHITECTURAL CHANGES**
+> 
+> QwD is currently transitioning to a new era. With the **Zig 0.16 migration** now pushed, the development focus has shifted entirely toward **Ubiquitous Genomics**—unifying the engine into a single, high-performance machine-code application for Desktop, Web (WASM), and Mobile.
+>
+> **Expect instability:** As we transition to this unified "Genomic Command Center" architecture, some unstable code may be pushed to the main branch. Stability will be restored once the next official version tag is updated and pushed.
+
 ![Version](https://img.shields.io/badge/Version-1.2.0--secured-blue?style=flat-square)
 ![Zig](https://img.shields.io/badge/Language-Zig_0.13.0-orange?logo=zig&logoColor=white)
 ![SIMD](https://img.shields.io/badge/SIMD-NEON%20%2F%20AVX2-blueviolet?style=flat-square)
