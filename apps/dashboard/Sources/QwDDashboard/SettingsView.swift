@@ -68,7 +68,7 @@ struct SettingsView: View {
             }
             
             Section("System Diagnostics") {
-                LabeledContent("QwD Core", value: "v1.1.0 (Production)")
+                LabeledContent("QwD Core", value: "v1.3.0 (Raja Reform)")
                 LabeledContent("SIMD Acceleration", value: "Enabled (NEON/AVX2)")
                 LabeledContent("Native Deflate", value: "Verified Stable")
             }

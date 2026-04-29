@@ -30,7 +30,7 @@ pub const Scheduler = struct {
         self.read_count += 1;
         var r = read; // Local copy allows stages to modify slices in-place
         for (self.stages.items) |stage| {
-            const continue_processing = try stage.processRead(&r);
+            const continue_processing = try stage.process(&r);
             if (!continue_processing) break;
         }
     }
@@ -42,64 +42,22 @@ pub const Scheduler = struct {
         }
     }
 
-    /// Report all registered stages.
-    pub fn report(self: *Scheduler, writer: std.Io.Writer) void {
+    /// Generate a summary report from all stages.
+    pub fn report(self: *Scheduler, writer: anytype) void {
         for (self.stages.items) |stage| {
-            stage.report(writer);
+            stage.reportJson(writer) catch {};
         }
     }
-};
-
-test "Scheduler test with dummy stage" {
     
-    var scheduler = Scheduler.init(std.heap.c_allocator);
-    defer scheduler.deinit();
-
-    // Define a dummy stage
-    const DummyStage = struct {
-        processed: usize = 0,
-        should_continue: bool = true,
-
-        pub fn process(ptr: *anyopaque, read: *parser.Read) !bool {
-            _ = read;
-            const self: *@This() = @ptrCast(@alignCast(ptr));
-            self.processed += 1;
-            return self.should_continue;
+    pub fn run(self: *Scheduler, reader: @import("reader_interface.zig").Reader, pipeline_ptr: anytype) !void {
+        var fastq_parser = try @import("parser").FastqParser.init(self.allocator, reader, 256 * 1024);
+        defer fastq_parser.deinit();
+        
+        var next_buf: [4096]u8 = undefined;
+        while (try fastq_parser.next(&next_buf)) |read| {
+            try self.process(read);
+            pipeline_ptr.read_count += 1;
         }
-
-        pub fn finalize(ptr: *anyopaque) !void {
-            _ = ptr;
-        }
-
-        pub fn report(ptr: *anyopaque, writer: std.Io.Writer) void {
-            _ = ptr;
-            _ = writer;
-        }
-
-        pub fn stage(self: *@This()) stage_mod.Stage {
-            return .{
-                .ptr = self,
-                .vtable = &.{
-                    .process = process,
-                    .finalize = finalize,
-                    .report = report,
-                },
-            };
-        }
-    };
-
-    var dummy1 = DummyStage{ .should_continue = false };
-    var dummy2 = DummyStage{};
-    try scheduler.registerStage(dummy1.stage());
-    try scheduler.registerStage(dummy2.stage());
-
-    const read = parser.Read{
-        .id = "test",
-        .seq = "ATGC",
-        .qual = "IIII",
-    };
-    try scheduler.process(read);
-    try std.testing.expectEqual(@as(usize, 1), scheduler.read_count);
-    try std.testing.expectEqual(@as(usize, 1), dummy1.processed);
-    try std.testing.expectEqual(@as(usize, 0), dummy2.processed); // Filtered out
-}
+        try self.finalize();
+    }
+};

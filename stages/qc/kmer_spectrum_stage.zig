@@ -23,34 +23,6 @@ pub const KmerSpectrumStage = struct {
         self.counter.deinit();
     }
 
-    pub fn process(ptr: *anyopaque, read: *const parser.Read) anyerror!bool {
-        const self: *@This() = @ptrCast(@alignCast(ptr));
-        if (read.seq.len < self.k) return true;
-
-        var packed_val: u64 = 0;
-        var valid_len: usize = 0;
-        for (read.seq) |b| {
-            var val: u64 = 0;
-            var is_n = false;
-            switch (b) {
-                'A', 'a' => val = 0,
-                'C', 'c' => val = 1,
-                'G', 'g' => val = 2,
-                'T', 't' => val = 3,
-                else => is_n = true,
-            }
-            if (is_n) {
-                valid_len = 0;
-                packed_val = 0;
-            } else {
-                packed_val = ((packed_val << 2) | val) & ((@as(u64, 1) << (@as(u6, @intCast(self.k)) * 2)) - 1);
-                valid_len += 1;
-                if (valid_len >= self.k) self.counter.add(packed_val);
-            }
-        }
-        return true;
-    }
-
     /// HIGH-SPEED BITPLANE K-MER COUNTING (Phase S Optimized)
     /// Processes 64 reads in parallel using 2-bit rolling hashes.
     pub fn processBitplanes(ptr: *anyopaque, bp: *const bitplanes.BitplaneCore, block: *const fastq_block.FastqColumnBlock) anyerror!bool {
@@ -114,7 +86,6 @@ pub const KmerSpectrumStage = struct {
     }
 
     pub fn finalize(_: *anyopaque) anyerror!void {}
-    pub fn report(_: *anyopaque, _: *std.Io.Writer) void {}
 
     pub fn reportJson(ptr: *anyopaque, writer: *std.Io.Writer) anyerror!void { 
         const self: *@This() = @ptrCast(@alignCast(ptr));
@@ -125,30 +96,19 @@ pub const KmerSpectrumStage = struct {
         }); 
     }
 
-    pub fn merge(ptr: *anyopaque, other_ptr: *anyopaque) anyerror!void {
-        const self: *@This() = @ptrCast(@alignCast(ptr));
-        const other: *@This() = @ptrCast(@alignCast(other_ptr));
-        self.counter.merge(&other.counter);
+    pub fn stage(self: *KmerSpectrumStage) stage_mod.Stage {
+        const Gen = struct {
+            fn deinit(ctx: *anyopaque, allocator: std.mem.Allocator) void {
+                const s: *KmerSpectrumStage = @ptrCast(@alignCast(ctx));
+                s.deinit();
+                allocator.destroy(s);
+            }
+        };
+        return stage_mod.Stage.init(self, .kmer_spectrum, &.{
+            .processBitplanes = KmerSpectrumStage.processBitplanes,
+            .finalize = KmerSpectrumStage.finalize,
+            .reportJson = KmerSpectrumStage.reportJson,
+            .deinit = Gen.deinit,
+        });
     }
-
-    pub fn clone(ptr: *anyopaque, allocator: std.mem.Allocator) anyerror!*anyopaque {
-        const self: *@This() = @ptrCast(@alignCast(ptr));
-        const new_self = try allocator.create(KmerSpectrumStage);
-        new_self.* = KmerSpectrumStage.init(allocator, self.k);
-        return new_self;
-    }
-
-    pub fn stage(self: *@This()) stage_mod.Stage {
-        return .{ .ptr = self, .vtable = &VTABLE };
-    }
-};
-
-const VTABLE = stage_mod.Stage.VTable{
-    .process = KmerSpectrumStage.process,
-    .finalize = KmerSpectrumStage.finalize,
-    .report = KmerSpectrumStage.report,
-    .reportJson = KmerSpectrumStage.reportJson,
-    .merge = KmerSpectrumStage.merge,
-    .clone = KmerSpectrumStage.clone,
-    .processBitplanes = KmerSpectrumStage.processBitplanes,
 };

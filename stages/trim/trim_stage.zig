@@ -16,6 +16,10 @@ pub const TrimStage = struct {
         self.reads_seen += 1;
         return true; 
     }
+    pub fn processBitplanes(_: *anyopaque, _: *const @import("bitplanes").BitplaneCore, _: *const @import("fastq_block").FastqColumnBlock) anyerror!bool {
+        // Fallback to scalar processing for Trim
+        return true;
+    }
     pub fn finalize(_: *anyopaque) anyerror!void {}
     pub fn report(ptr: *anyopaque, writer: *std.Io.Writer) void {
         const self: *@This() = @ptrCast(@alignCast(ptr));

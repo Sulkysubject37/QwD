@@ -1,7 +1,7 @@
-# QwD v1.2.0-secured — Release Notes
+# QwD v1.3.0-secured — Release Notes
 
 ## Overview
-Release `v1.2.0-secured` marks the transition of the QwD engine into a hardened, production-grade instrument. This update focuses on **"Zero-Overhead Security"** and **"Scientific Formalization,"** ensuring that elite computational performance does not come at the cost of data integrity or system safety.
+Release `v1.3.0-secured` marks the transition of the QwD engine into a hardened, production-grade instrument. This update focuses on **"Zero-Overhead Security"** and **"Scientific Formalization,"** ensuring that elite computational performance does not come at the cost of data integrity or system safety.
 
 ---
 

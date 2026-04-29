@@ -1,0 +1,619 @@
+install
++- install qwd-dashboard
+   +- compile exe qwd-dashboard ReleaseSafe native 2 errors
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: error: #include nested too deeply
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/zig-pkg/N-V-__8AAI99OQD6IMBKYOcTFL9GFk_Qx60cVz4MiQ3T65Sn/cimgui.cpp:6:10: note: in file included from /Users/sulky/Desktop/qwd/zig-pkg/N-V-__8AAI99OQD6IMBKYOcTFL9GFk_Qx60cVz4MiQ3T65Sn/cimgui.cpp:6:
+#include "./imgui/imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/././imgui/imgui.h:1:10: note: in file included from /Users/sulky/Desktop/qwd/././imgui/imgui.h:1:
+#include "imgui.h"
+         ^
+/Users/sulky/Desktop/qwd/zig-pkg/N-V-__8AAI99OQD6IMBKYOcTFL9GFk_Qx60cVz4MiQ3T65Sn/cimgui.h:43:10: error: './imgui/misc/freetype/imgui_freetype.h' file not found
+#include "./imgui/misc/freetype/imgui_freetype.h"
+         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/sulky/Desktop/qwd/zig-pkg/N-V-__8AAI99OQD6IMBKYOcTFL9GFk_Qx60cVz4MiQ3T65Sn/cimgui.cpp:8:10: note: in file included from /Users/sulky/Desktop/qwd/zig-pkg/N-V-__8AAI99OQD6IMBKYOcTFL9GFk_Qx60cVz4MiQ3T65Sn/cimgui.cpp:8:
+#include "cimgui.h"
+         ^
+error: 2 compilation errors
+failed command: /Users/sulky/.zvm/master/zig build-exe -cflags -DIMGUI_ENABLE_FREETYPE -DIMGUI_USE_WCHAR32 -- /Users/sulky/Desktop/qwd/zig-pkg/N-V-__8AAI99OQD6IMBKYOcTFL9GFk_Qx60cVz4MiQ3T65Sn/cimgui.cpp -cflags -DIMGUI_USE_WCHAR32 -- /Users/sulky/Desktop/qwd/zig-pkg/N-V-__8AAC_GgAD5KdnDtN7y9raD0zMr0iIw1H8YidSlRCDy/imgui.cpp -cflags -DIMGUI_USE_WCHAR32 -- /Users/sulky/Desktop/qwd/zig-pkg/N-V-__8AAC_GgAD5KdnDtN7y9raD0zMr0iIw1H8YidSlRCDy/imgui_draw.cpp -cflags -DIMGUI_USE_WCHAR32 -- /Users/sulky/Desktop/qwd/zig-pkg/N-V-__8AAC_GgAD5KdnDtN7y9raD0zMr0iIw1H8YidSlRCDy/imgui_demo.cpp -cflags -DIMGUI_USE_WCHAR32 -- /Users/sulky/Desktop/qwd/zig-pkg/N-V-__8AAC_GgAD5KdnDtN7y9raD0zMr0iIw1H8YidSlRCDy/imgui_widgets.cpp -cflags -DIMGUI_USE_WCHAR32 -- /Users/sulky/Desktop/qwd/zig-pkg/N-V-__8AAC_GgAD5KdnDtN7y9raD0zMr0iIw1H8YidSlRCDy/imgui_tables.cpp -I/opt/homebrew/Cellar/libdeflate/1.25/include -L/opt/homebrew/Cellar/libdeflate/1.25/lib -ldeflate -OReleaseSafe -I /Users/sulky/Desktop/qwd/. -I /Users/sulky/Desktop/qwd/zig-pkg/N-V-__8AAI99OQD6IMBKYOcTFL9GFk_Qx60cVz4MiQ3T65Sn -I /Users/sulky/Desktop/qwd/zig-pkg/N-V-__8AAC_GgAD5KdnDtN7y9raD0zMr0iIw1H8YidSlRCDy --dep sokol --dep pipeline --dep pipeline_config --dep global_allocator -Mroot=/Users/sulky/Desktop/qwd/apps/dashboard/main.zig .zig-cache/o/f714eb350890ed7ccfdc5bb3f5891bf7/libsokol_clib.a -I .zig-cache/o/5324e619b26698816843494ecd9da4b3 -Msokol=/Users/sulky/Desktop/qwd/zig-pkg/sokol-0.1.0-pb1HK--6NwD5LC8pQDFz_oLbIrqs323BHW8VvMvMXLQp/src/sokol/sokol.zig --dep parallel_scheduler --dep scheduler --dep block_reader --dep parser --dep mode --dep pipeline_config --dep stage --dep bgzf_native_reader --dep bgzf_chunk_builder --dep bloom_filter --dep structured_output --dep n_statistics --dep per_base_quality --dep qc_length_dist --dep duplication --dep qc_adapter_detect --dep kmer --dep quality_dist --dep trim --dep taxed --dep nucleotide_composition --dep kmer_spectrum --dep filter --dep gc_distribution --dep gc --dep overrepresented --dep qc --dep basic_stats --dep qc_entropy -Mpipeline=/Users/sulky/Desktop/qwd/core/pipeline/pipeline.zig --dep mode -Mpipeline_config=/Users/sulky/Desktop/qwd/core/config/pipeline_config.zig -Mglobal_allocator=/Users/sulky/Desktop/qwd/core/memory/global_allocator.zig --dep parser --dep stage --dep ring_buffer --dep block_reader --dep mode --dep custom_deflate --dep deflate_wrapper --dep fastq_block --dep bitplanes --dep vertical_scanner --dep bgzf_native_reader --dep deflate_impl --dep global_allocator -Mparallel_scheduler=/Users/sulky/Desktop/qwd/core/parallel/parallel_scheduler.zig --dep parser --dep stage -Mscheduler=/Users/sulky/Desktop/qwd/core/scheduler/scheduler.zig --dep mode --dep gzip_reader --dep bgzf_native_reader --dep deflate_impl -Mblock_reader=/Users/sulky/Desktop/qwd/core/io/block_reader.zig --dep block_reader --dep newline_scan --dep mode -Mparser=/Users/sulky/Desktop/qwd/core/parser/parser.zig -Mmode=/Users/sulky/Desktop/qwd/core/config/mode.zig --dep parser --dep fastq_block --dep bitplanes -Mstage=/Users/sulky/Desktop/qwd/core/stage/stage.zig -Mbgzf_native_reader=/Users/sulky/Desktop/qwd/core/io/bgzf_native_reader.zig --dep bgzf_native_reader -Mbgzf_chunk_builder=/Users/sulky/Desktop/qwd/core/batch/bgzf_chunk_builder.zig -Mbloom_filter=/Users/sulky/Desktop/qwd/core/analytics/bloom_filter.zig -Mstructured_output=/Users/sulky/Desktop/qwd/core/output/structured_output.zig --dep stage --dep parser --dep fastq_block --dep bitplanes --dep mode --dep simd_ops --dep column_ops --dep structured_output -Mn_statistics=/Users/sulky/Desktop/qwd/stages/qc/n_statistics_stage.zig --dep stage --dep parser --dep fastq_block --dep bitplanes --dep mode --dep simd_ops --dep column_ops --dep structured_output -Mper_base_quality=/Users/sulky/Desktop/qwd/stages/qc/per_base_quality_stage.zig --dep stage --dep parser --dep fastq_block --dep bitplanes --dep mode --dep simd_ops --dep column_ops --dep structured_output -Mqc_length_dist=/Users/sulky/Desktop/qwd/stages/qc/length_distribution_stage.zig --dep stage --dep parser --dep fastq_block --dep bitplanes --dep mode --dep simd_ops --dep column_ops --dep structured_output --dep bloom_filter -Mduplication=/Users/sulky/Desktop/qwd/stages/qc/duplication_stage.zig --dep stage --dep parser --dep fastq_block --dep bitplanes --dep mode --dep simd_ops --dep column_ops --dep structured_output -Mqc_adapter_detect=/Users/sulky/Desktop/qwd/stages/qc/adapter_detection_stage.zig --dep stage --dep parser --dep fastq_block --dep bitplanes --dep mode --dep simd_ops --dep column_ops --dep structured_output --dep kmer_columnar -Mkmer=/Users/sulky/Desktop/qwd/stages/kmer/kmer_stage.zig --dep stage --dep parser --dep fastq_block --dep bitplanes --dep mode --dep simd_ops --dep column_ops --dep structured_output -Mquality_dist=/Users/sulky/Desktop/qwd/stages/qc/quality_dist_stage.zig --dep stage --dep parser --dep fastq_block --dep bitplanes --dep mode --dep simd_ops --dep column_ops --dep structured_output -Mtrim=/Users/sulky/Desktop/qwd/stages/trim/trim_stage.zig --dep stage --dep parser --dep fastq_block --dep bitplanes --dep mode --dep simd_ops --dep column_ops --dep structured_output --dep kmer_bitroll --dep kmer_columnar --dep dna_2bit -Mtaxed=/Users/sulky/Desktop/qwd/stages/qc/taxed_stage.zig --dep stage --dep parser --dep fastq_block --dep bitplanes --dep mode --dep simd_ops --dep column_ops --dep structured_output -Mnucleotide_composition=/Users/sulky/Desktop/qwd/stages/qc/nucleotide_composition_stage.zig --dep stage --dep parser --dep fastq_block --dep bitplanes --dep mode --dep simd_ops --dep column_ops --dep structured_output --dep kmer_bitroll --dep kmer_columnar --dep dna_2bit --dep kmer_counter -Mkmer_spectrum=/Users/sulky/Desktop/qwd/stages/qc/kmer_spectrum_stage.zig --dep stage --dep parser --dep fastq_block --dep bitplanes --dep mode --dep simd_ops --dep column_ops --dep structured_output -Mfilter=/Users/sulky/Desktop/qwd/stages/filter/filter_stage.zig --dep stage --dep parser --dep fastq_block --dep bitplanes --dep mode --dep simd_ops --dep column_ops --dep structured_output -Mgc_distribution=/Users/sulky/Desktop/qwd/stages/qc/gc_distribution_stage.zig --dep stage --dep parser --dep fastq_block --dep bitplanes --dep mode --dep simd_ops --dep column_ops --dep structured_output -Mgc=/Users/sulky/Desktop/qwd/stages/gc/gc_stage.zig --dep stage --dep parser --dep fastq_block --dep bitplanes --dep mode --dep simd_ops --dep column_ops --dep structured_output -Moverrepresented=/Users/sulky/Desktop/qwd/stages/qc/overrepresented_stage.zig --dep stage --dep parser --dep fastq_block --dep bitplanes --dep mode --dep simd_ops --dep column_ops --dep structured_output -Mqc=/Users/sulky/Desktop/qwd/stages/qc/qc_stage.zig --dep stage --dep parser --dep fastq_block --dep bitplanes --dep mode --dep simd_ops --dep column_ops --dep structured_output -Mbasic_stats=/Users/sulky/Desktop/qwd/stages/qc/basic_stats_stage.zig --dep stage --dep parser --dep fastq_block --dep bitplanes --dep mode --dep simd_ops --dep column_ops --dep structured_output --dep entropy_lut -Mqc_entropy=/Users/sulky/Desktop/qwd/stages/qc/entropy_stage.zig -Mring_buffer=/Users/sulky/Desktop/qwd/core/parallel/ring_buffer.zig --dep bit_sieve --dep huffman --dep lz77 -Mcustom_deflate=/Users/sulky/Desktop/qwd/core/io/custom_deflate.zig --dep deflate_impl --dep custom_deflate --dep build_options -Mdeflate_wrapper=/Users/sulky/Desktop/qwd/core/io/deflate_wrapper.zig --dep simd_transpose -Mfastq_block=/Users/sulky/Desktop/qwd/core/columnar/fastq_block.zig --dep dna_2bit -Mbitplanes=/Users/sulky/Desktop/qwd/core/columnar/bitplane_core.zig -Mvertical_scanner=/Users/sulky/Desktop/qwd/core/simd/vertical_scanner.zig -I /opt/homebrew/include -Mdeflate_impl=/Users/sulky/Desktop/qwd/core/io/deflate_libdeflate.zig --dep mode --dep ring_buffer --dep deflate_wrapper --dep custom_deflate -Mgzip_reader=/Users/sulky/Desktop/qwd/core/io/gzip_reader.zig -Mnewline_scan=/Users/sulky/Desktop/qwd/core/simd/newline_scan.zig -Msimd_ops=/Users/sulky/Desktop/qwd/core/simd/simd_ops.zig -Mcolumn_ops=/Users/sulky/Desktop/qwd/core/vector/column_ops.zig -Mkmer_columnar=/Users/sulky/Desktop/qwd/core/vector/kmer_columnar.zig -Mkmer_bitroll=/Users/sulky/Desktop/qwd/core/simd/kmer_bitroll.zig -Mdna_2bit=/Users/sulky/Desktop/qwd/core/encoding/dna_2bit.zig -Mkmer_counter=/Users/sulky/Desktop/qwd/core/analytics/kmer_counter.zig -Mentropy_lut=/Users/sulky/Desktop/qwd/core/entropy/entropy_lut.zig -Mbit_sieve=/Users/sulky/Desktop/qwd/core/io/bit_sieve.zig --dep bit_sieve -Mhuffman=/Users/sulky/Desktop/qwd/core/io/huffman_decoder.zig -Mlz77=/Users/sulky/Desktop/qwd/core/io/lz77_engine.zig -Mbuild_options=.zig-cache/c/27f3d79bbaa3b4a004898c5ea0b3f6e8/options.zig -Msimd_transpose=/Users/sulky/Desktop/qwd/core/simd/simd_transpose.zig -framework QuartzCore -framework AudioToolbox -framework Metal -framework AppKit -lc++ -lc --cache-dir .zig-cache --global-cache-dir /Users/sulky/.cache/zig --name qwd-dashboard -fcompiler-rt --zig-lib-dir /Users/sulky/.zvm/master/lib/ --listen=-
+
+Build Summary: 9/12 steps succeeded (1 failed)
+install transitive failure
++- install qwd-dashboard transitive failure
+   +- compile exe qwd-dashboard ReleaseSafe native 2 errors
+
+error: the following build command failed with exit code 1:
+.zig-cache/o/8a4e3c44a41d9d83af689f8a10464430/build /Users/sulky/.zvm/master/zig /Users/sulky/.zvm/master/lib /Users/sulky/Desktop/qwd .zig-cache /Users/sulky/.cache/zig --seed 0xdd1d28b3 -Ze8c590d48da15268 -Doptimize=ReleaseSafe

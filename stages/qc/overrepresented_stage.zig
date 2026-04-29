@@ -22,17 +22,17 @@ pub const OverrepresentedStage = struct {
         };
     }
 
-    pub fn deinit(self: *OverrepresentedStage) void {
+    pub fn deinit(self: *OverrepresentedStage, allocator: std.mem.Allocator) void {
         var it = self.hashes_to_seqs.valueIterator();
         while (it.next()) |seq| {
-            self.allocator.free(seq.*);
+            allocator.free(seq.*);
         }
         self.hashes_to_seqs.deinit();
         self.counts.deinit();
     }
 
     pub fn process(ptr: *anyopaque, read: *const parser.Read) anyerror!bool {
-        const self: *@This() = @ptrCast(@alignCast(ptr));
+        const self: *OverrepresentedStage = @ptrCast(@alignCast(ptr));
         self.total_reads += 1;
         
         // APPROX MODE: Sampling & Memory Capping
@@ -55,7 +55,7 @@ pub const OverrepresentedStage = struct {
     }
 
     pub fn processBitplanes(ptr: *anyopaque, bp: *const bitplanes.BitplaneCore, block: *const fastq_block.FastqColumnBlock) anyerror!bool {
-        const self: *@This() = @ptrCast(@alignCast(ptr));
+        const self: *OverrepresentedStage = @ptrCast(@alignCast(ptr));
         const count = block.read_count;
         
         const u64_count = (count + 63) / 64;
@@ -89,10 +89,9 @@ pub const OverrepresentedStage = struct {
     }
 
     pub fn finalize(_: *anyopaque) anyerror!void {}
-    pub fn report(_: *anyopaque, _: *std.Io.Writer) void {}
 
     pub fn reportJson(ptr: *anyopaque, writer: *std.Io.Writer) anyerror!void { 
-        const self: *@This() = @ptrCast(@alignCast(ptr));
+        const self: *OverrepresentedStage = @ptrCast(@alignCast(ptr));
         
         var most_frequent_hash: u64 = 0;
         var max_count: usize = 0;
@@ -112,50 +111,19 @@ pub const OverrepresentedStage = struct {
         }); 
     }
 
-    pub fn merge(ptr: *anyopaque, other_ptr: *anyopaque) anyerror!void {
-        const self: *@This() = @ptrCast(@alignCast(ptr));
-        const other: *@This() = @ptrCast(@alignCast(other_ptr));
-        self.total_reads += other.total_reads;
-
-        var it = other.counts.iterator();
-        while (it.next()) |entry| {
-            const hash = entry.key_ptr.*;
-            const count = entry.value_ptr.*;
-            
-            if (self.mode == .fast and self.counts.count() > 10000) break;
-
-            const res = try self.counts.getOrPut(hash);
-            if (!res.found_existing) {
-                res.value_ptr.* = 0;
-                if (other.hashes_to_seqs.get(hash)) |other_seq| {
-                    if (self.hashes_to_seqs.count() < 500) {
-                        const seq_copy = try self.allocator.dupe(u8, other_seq);
-                        try self.hashes_to_seqs.put(hash, seq_copy);
-                    }
-                }
-            }
-            res.value_ptr.* += count;
-        }
-    }
-
-    pub fn clone(ptr: *anyopaque, allocator: std.mem.Allocator) anyerror!*anyopaque {
-        const self: *@This() = @ptrCast(@alignCast(ptr));
-        const new_self = try allocator.create(OverrepresentedStage);
-        new_self.* = OverrepresentedStage.init(allocator, self.mode);
-        return new_self;
-    }
-
     pub fn stage(self: *OverrepresentedStage) stage_mod.Stage {
-        return .{ .ptr = self, .vtable = &VTABLE };
+        const Gen = struct {
+            fn deinit(ctx: *anyopaque, allocator: std.mem.Allocator) void {
+                const s: *OverrepresentedStage = @ptrCast(@alignCast(ctx));
+                s.deinit(allocator);
+                allocator.destroy(s);
+            }
+        };
+        return stage_mod.Stage.init(self, .overrepresented, &.{
+            .processBitplanes = OverrepresentedStage.processBitplanes,
+            .finalize = OverrepresentedStage.finalize,
+            .reportJson = OverrepresentedStage.reportJson,
+            .deinit = Gen.deinit,
+        });
     }
-};
-
-const VTABLE = stage_mod.Stage.VTable{
-    .process = OverrepresentedStage.process,
-    .finalize = OverrepresentedStage.finalize,
-    .report = OverrepresentedStage.report,
-    .reportJson = OverrepresentedStage.reportJson,
-    .merge = OverrepresentedStage.merge,
-    .clone = OverrepresentedStage.clone,
-    .processBitplanes = OverrepresentedStage.processBitplanes,
 };

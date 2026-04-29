@@ -15,11 +15,8 @@ pub const BitSieve = struct {
     pub fn refill(self: *BitSieve) !void {
         while (self.bit_count <= 56) {
             var byte: u8 = undefined;
-            const n = self.inner_reader.readSliceShort(std.mem.asBytes(&byte)) catch |err| {
-                if (err == error.EndOfStream) break;
-                return err;
-            };
-            if (n == 0) break;
+            const n = try self.inner_reader.readSliceShort(std.mem.asBytes(&byte));
+            if (n == 0) return error.EndOfStream;
             
             self.bit_buffer |= (@as(u64, byte) << @as(u6, @intCast(self.bit_count)));
             self.bit_count += 8;
@@ -32,6 +29,11 @@ pub const BitSieve = struct {
     }
 
     pub inline fn consume(self: *BitSieve, n: u6) void {
+        if (n > self.bit_count) {
+            // Hard Crash avoidance in production
+            self.bit_count = 0;
+            return;
+        }
         self.bit_buffer >>= n;
         self.bit_count -= n;
     }

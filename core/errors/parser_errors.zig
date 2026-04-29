@@ -6,6 +6,7 @@ pub const ParserError = error{
     MismatchedSequenceQuality,
     StreamError,
     MalformedCigar,
+    Cancelled,
 };
 
 pub fn logError(msg: []const u8) void {

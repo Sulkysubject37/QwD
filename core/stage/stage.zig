@@ -1,58 +1,54 @@
 const std = @import("std");
-const parser = @import("parser");
-const bitplanes = @import("bitplanes");
 const fastq_block = @import("fastq_block");
+const bitplanes = @import("bitplanes");
 
-/// Generic Stage abstraction for Phase Q.
-/// This interface is pointer-stable and avoids circular dependencies.
+pub const StageTag = enum {
+    adapter_detection,
+    basic_stats,
+    duplication,
+    entropy,
+    gc_distribution,
+    kmer_spectrum,
+    length_distribution,
+    n_statistics,
+    nucleotide_composition,
+    overrepresented,
+    per_base_quality,
+    quality_dist,
+    taxed,
+};
+
+/// The Sovereign Stage Interface
 pub const Stage = struct {
     ptr: *anyopaque,
+    tag: StageTag,
     vtable: *const VTable,
 
     pub const VTable = struct {
-        process: *const fn (ptr: *anyopaque, read: *const parser.Read) anyerror!bool,
-        finalize: *const fn (ptr: *anyopaque) anyerror!void,
-        report: *const fn (ptr: *anyopaque, writer: *std.Io.Writer) void,
-        reportJson: *const fn (ptr: *anyopaque, writer: *std.Io.Writer) anyerror!void,
-        merge: *const fn (ptr: *anyopaque, other_ptr: *anyopaque) anyerror!void,
-        clone: *const fn (ptr: *anyopaque, allocator: std.mem.Allocator) anyerror!*anyopaque,
-        
-        /// Optional high-performance SIMD path
-        processBitplanes: ?*const fn (ptr: *anyopaque, bp: *const bitplanes.BitplaneCore, block: *const fastq_block.FastqColumnBlock) anyerror!bool = null,
+        processBitplanes: *const fn (ctx: *anyopaque, bp: *const bitplanes.BitplaneCore, block: *const fastq_block.FastqColumnBlock) anyerror!bool,
+        finalize: *const fn (ctx: *anyopaque) anyerror!void,
+        // TYPE AGNOSTIC REPORTING: The stage must know how to cast this back.
+        reportJson: *const fn (ctx: *anyopaque, writer: *anyopaque) anyerror!void,
+        deinit: *const fn (ctx: *anyopaque, allocator: std.mem.Allocator) void,
     };
 
-    pub fn processRead(self: Stage, read: *const parser.Read) !bool {
-        return self.vtable.process(self.ptr, read);
+    pub fn init(ptr: *anyopaque, tag: StageTag, vtable: *const VTable) Stage {
+        return .{ .ptr = ptr, .tag = tag, .vtable = vtable };
     }
 
     pub fn processBitplanes(self: Stage, bp: *const bitplanes.BitplaneCore, block: *const fastq_block.FastqColumnBlock) !bool {
-        if (self.vtable.processBitplanes) |p| {
-            return p(self.ptr, bp, block);
-        }
-        return true;
+        return self.vtable.processBitplanes(self.ptr, bp, block);
     }
 
     pub fn finalize(self: Stage) !void {
         return self.vtable.finalize(self.ptr);
     }
 
-    pub fn report(self: Stage, writer: *std.Io.Writer) void {
-        self.vtable.report(self.ptr, writer);
+    pub fn reportJson(self: Stage, writer: anytype) !void {
+        return self.vtable.reportJson(self.ptr, @constCast(@ptrCast(writer)));
     }
 
-    pub fn reportJson(self: Stage, writer: *std.Io.Writer) !void {
-        return self.vtable.reportJson(self.ptr, writer);
-    }
-
-    pub fn merge(self: Stage, other: Stage) !void {
-        return self.vtable.merge(self.ptr, other.ptr);
-    }
-
-    pub fn clone(self: Stage, allocator: std.mem.Allocator) !Stage {
-        const new_ptr = try self.vtable.clone(self.ptr, allocator);
-        return Stage{
-            .ptr = new_ptr,
-            .vtable = self.vtable,
-        };
+    pub fn deinit(self: Stage, allocator: std.mem.Allocator) void {
+        return self.vtable.deinit(self.ptr, allocator);
     }
 };

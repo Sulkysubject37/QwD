@@ -6,41 +6,16 @@ pub const FastqScanner = struct {
         count: usize,
     };
 
-    /// SIMD-accelerated newline scanner using 32-lane vectors.
+    /// SIMD-accelerated newline scanner using platform-optimized indexOfScalar.
     pub fn scanNewlinesSIMD(chunk: []const u8, out: *ScanResult) void {
         out.count = 0;
-        if (chunk.len == 0) return;
-        
-        const vec_size = 32;
         var i: usize = 0;
-        const nl_vec: @Vector(vec_size, u8) = @splat('\n');
-
-        // Main SIMD loop
-        while (i + vec_size <= chunk.len) : (i += vec_size) {
-            const v: @Vector(vec_size, u8) = chunk[i..][0..vec_size].*;
-            const mask: @Vector(vec_size, bool) = v == nl_vec;
-            
-            const u1s: @Vector(vec_size, u1) = @intFromBool(mask);
-            var bitmask: u32 = @bitCast(u1s);
-
-            while (bitmask != 0) {
-                const bit_idx = @ctz(bitmask);
-                if (out.count < out.indices.len) {
-                    out.indices[out.count] = i + bit_idx;
-                    out.count += 1;
-                } else return;
-                bitmask &= bitmask - 1; 
-            }
-        }
-
-        // Residual scalar scan
-        while (i < chunk.len) : (i += 1) {
-            if (chunk[i] == '\n') {
-                if (out.count < out.indices.len) {
-                    out.indices[out.count] = i;
-                    out.count += 1;
-                } else return;
-            }
+        while (std.mem.indexOfScalarPos(u8, chunk, i, '\n')) |idx| {
+            if (out.count < out.indices.len) {
+                out.indices[out.count] = idx;
+                out.count += 1;
+                i = idx + 1;
+            } else break;
         }
     }
 };

@@ -8,8 +8,13 @@ pub const PerbasequalityStage = struct {
     quality_counts: [1000][41]usize = [_][41]usize{[_]usize{0} ** 41} ** 1000,
     max_pos: usize = 0,
 
+    pub fn deinit(self: *PerbasequalityStage, allocator: std.mem.Allocator) void {
+        _ = self;
+        _ = allocator;
+    }
+
     pub fn process(ptr: *anyopaque, read: *const parser.Read) anyerror!bool { 
-        const self: *@This() = @ptrCast(@alignCast(ptr));
+        const self: *PerbasequalityStage = @ptrCast(@alignCast(ptr));
         const len = read.qual.len;
         if (len > self.max_pos) self.max_pos = len;
         for (read.qual, 0..) |q, i| {
@@ -21,7 +26,7 @@ pub const PerbasequalityStage = struct {
     }
 
     pub fn processBitplanes(ptr: *anyopaque, _: *const bitplanes_mod.BitplaneCore, block: *const fastq_block.FastqColumnBlock) anyerror!bool {
-        const self: *@This() = @ptrCast(@alignCast(ptr));
+        const self: *PerbasequalityStage = @ptrCast(@alignCast(ptr));
         const read_count = block.read_count;
         const active_len = block.active_max_len;
         if (active_len > self.max_pos) self.max_pos = @min(active_len, 1000);
@@ -31,8 +36,7 @@ pub const PerbasequalityStage = struct {
             const len = @min(@as(usize, block.read_lengths[i]), 1000);
             for (0..len) |pos| {
                 const q = block.qualities[pos][i];
-                if (q == 0) continue;
-                const phred = if (q >= 33) @min(@as(usize, q - 33), 40) else 0;
+                const phred = @min(@as(usize, q), 40);
                 self.quality_counts[pos][phred] += 1;
             }
         }
@@ -40,10 +44,9 @@ pub const PerbasequalityStage = struct {
     }
 
     pub fn finalize(_: *anyopaque) anyerror!void {}
-    pub fn report(_: *anyopaque, _: *std.Io.Writer) void {}
 
     pub fn reportJson(ptr: *anyopaque, writer: *std.Io.Writer) anyerror!void { 
-        const self: *@This() = @ptrCast(@alignCast(ptr));
+        const self: *PerbasequalityStage = @ptrCast(@alignCast(ptr));
         try writer.print("\"quality_dist\": {{\"max_pos\": {d}, \"data\": [", .{self.max_pos});
         const limit = @min(self.max_pos, 1000);
         for (0..limit) |i| {
@@ -58,34 +61,19 @@ pub const PerbasequalityStage = struct {
         try writer.writeAll("]}");
     }
 
-    pub fn merge(ptr: *anyopaque, other_ptr: *anyopaque) anyerror!void {
-        const self: *@This() = @ptrCast(@alignCast(ptr));
-        const other: *@This() = @ptrCast(@alignCast(other_ptr));
-        if (other.max_pos > self.max_pos) self.max_pos = other.max_pos;
-        for (0..1000) |i| {
-            for (0..41) |j| {
-                self.quality_counts[i][j] += other.quality_counts[i][j];
+    pub fn stage(self: *PerbasequalityStage) stage_mod.Stage {
+        const Gen = struct {
+            fn deinit(ctx: *anyopaque, allocator: std.mem.Allocator) void {
+                const s: *PerbasequalityStage = @ptrCast(@alignCast(ctx));
+                s.deinit(allocator);
+                allocator.destroy(s);
             }
-        }
+        };
+        return stage_mod.Stage.init(self, .per_base_quality, &.{
+            .processBitplanes = PerbasequalityStage.processBitplanes,
+            .finalize = PerbasequalityStage.finalize,
+            .reportJson = PerbasequalityStage.reportJson,
+            .deinit = Gen.deinit,
+        });
     }
-
-    pub fn clone(_: *anyopaque, allocator: std.mem.Allocator) anyerror!*anyopaque {
-        const new_self = try allocator.create(PerbasequalityStage);
-        new_self.* = .{};
-        return new_self;
-    }
-
-    pub fn stage(self: *@This()) stage_mod.Stage {
-        return .{ .ptr = self, .vtable = &VTABLE };
-    }
-};
-
-const VTABLE = stage_mod.Stage.VTable{
-    .process = PerbasequalityStage.process,
-    .finalize = PerbasequalityStage.finalize,
-    .report = PerbasequalityStage.report,
-    .reportJson = PerbasequalityStage.reportJson,
-    .merge = PerbasequalityStage.merge,
-    .clone = PerbasequalityStage.clone,
-    .processBitplanes = PerbasequalityStage.processBitplanes,
 };

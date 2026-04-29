@@ -3,10 +3,12 @@ const deflate_wrapper = @import("deflate_wrapper");
 const ring_buffer = @import("ring_buffer");
 const mode = @import("mode");
 
-const Io = std.Io;
+const Io = @import("pipeline").Io;
+const builtin = @import("builtin");
+const is_wasm = builtin.target.os.tag == .emscripten;
 
 pub const GzipReader = struct {
-    file: std.Io.File,
+    file: Io.File,
     io: Io,
     inflator: deflate_wrapper.DeflateWrapper,
     ring: *ring_buffer.RingBuffer(u8),
@@ -15,7 +17,7 @@ pub const GzipReader = struct {
     compressed_buf: []u8,
     decompressed_buf: []u8,
 
-    pub fn init(allocator: std.mem.Allocator, file: std.Io.File, io: Io) !*GzipReader {
+    pub fn init(allocator: std.mem.Allocator, file: Io.File, io: Io) !*GzipReader {
         const self = try allocator.create(GzipReader);
         self.* = .{
             .file = file,
@@ -49,8 +51,10 @@ pub const GzipReader = struct {
     }
 
     fn fillRing(self: *GzipReader) !void {
-        const iov = [_][]u8{self.compressed_buf};
-        const n = self.file.readStreaming(self.io, &iov) catch |err| if (err == error.EndOfStream) 0 else return err;
+        const n = if (is_wasm) try self.file.read(self.compressed_buf) else {
+            const iov = [_][]u8{self.compressed_buf};
+            try self.file.readStreaming(self.io, &iov) catch |err| if (err == error.EndOfStream) @as(usize, 0) else return err;
+        };
         
         if (n == 0) {
             self.eof = true;

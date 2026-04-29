@@ -6,7 +6,8 @@ pub const KmerCounter = struct {
     allocator: std.mem.Allocator,
 
     pub fn init(allocator: std.mem.Allocator, k: usize) !KmerCounter {
-        const size = @as(usize, 1) << (@as(u6, @intCast(k)) * 2);
+        const shift = @as(u6, @intCast(k)) * 2;
+        const size = @as(usize, 1) << @as(u5, @intCast(shift));
         const counts = try allocator.alloc(u32, size);
         @memset(counts, 0);
         return KmerCounter{
@@ -21,16 +22,18 @@ pub const KmerCounter = struct {
     }
 
     pub fn add(self: *KmerCounter, packed_kmer: u64) void {
-        const mask = (@as(u64, 1) << (@as(u6, @intCast(self.k)) * 2)) - 1;
-        const idx = packed_kmer & mask;
+        const shift = @as(u6, @intCast(self.k)) * 2;
+        const mask = (@as(u64, 1) << @as(u6, @intCast(shift))) - 1;
+        const idx = @as(usize, @intCast(packed_kmer & mask));
         self.counts[idx] = self.counts[idx] +% 1;
     }
 
     pub fn addWord(self: *KmerCounter, packed_kmers: [64]u64) void {
-        const mask = (@as(u64, 1) << (@as(u6, @intCast(self.k)) * 2)) - 1;
+        const shift = @as(u6, @intCast(self.k)) * 2;
+        const mask = (@as(u64, 1) << @as(u6, @intCast(shift))) - 1;
         for (packed_kmers) |pk| {
             if (pk == 0xFFFFFFFFFFFFFFFF) continue; // Skip invalid
-            const idx = pk & mask;
+            const idx = @as(usize, @intCast(pk & mask));
             self.counts[idx] = self.counts[idx] +% 1;
         }
     }

@@ -16,6 +16,7 @@ generate_throughput_visual.py
 # Build & System
 .zig-cache/
 zig-out/
+zig-pkg/
 .venv_plots/
 test-results-*/
 run_*.txt

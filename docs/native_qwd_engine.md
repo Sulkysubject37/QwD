@@ -1,4 +1,4 @@
-# Native QwD Engine: Technical Reference (v1.1.0-stable Hardened)
+# Native QwD Engine: Technical Reference (v1.3.0 Raja Reform)
 
 ## Overview
 The QwD Engine is a high-density computational core specialized for genomic sequence analytics. It combines a custom DEFLATE decompression engine with a vertical SIMD analytical core, designed for scale-invariant stability and multi-threaded efficiency.
@@ -29,7 +29,7 @@ Handles string back-references using a 32KB circular window.
 ## Hardened Parallel Architecture
 
 ### 1. The Double-Pipeline Model
-To maximize throughput, QwD v1.1.0 implements a **concurrent double-pipeline** in `ParallelScheduler`:
+To maximize throughput, QwD v1.3.0 implements a **concurrent double-pipeline** in `ParallelScheduler`:
 - **Stage 1 (Decompression)**: A `Feeder` thread reads raw BGZF blocks and dispatches them to a `bgzf_queue`. Worker threads pull from this queue and decompress blocks into ordered slots.
 - **Stage 2 (Analysis)**: The main thread acts as an orchestrator, parsing decompressed data from slots into `raw_batch` chunks. These batches are pushed to a `work_queue`.
 - **Stage 3 (Execution)**: Worker threads pull `raw_batch` chunks, performing SIMD transposition into bitplanes and executing the analytical pipeline.

@@ -1,90 +1,53 @@
-# QwD (قَلَّ وَدَلَّ)
+# QwD (قَلَّ وَدَلَّ): The Genomic Command Center
+![Version](https://img.shields.io/badge/Version-1.3.0--Raja--Reform-blueviolet?style=flat-square)
+![Build](https://github.com/Sulkysubject37/qwd/actions/workflows/native_performance.yml/badge.svg)
+![License](https://img.shields.io/badge/License-AFL--3.0-green?style=flat-square)
 
-> [!CAUTION]
-> **MAJOR ANNOUNCEMENT: PROJECT UNDERGOING MASSIVE ARCHITECTURAL CHANGES**
-> 
-> QwD is currently transitioning to a new era. With the **Zig 0.16 migration** now pushed, the development focus has shifted entirely toward **Ubiquitous Genomics**—unifying the engine into a single, high-performance machine-code application for Desktop, Web (WASM), and Mobile.
->
-> **Expect instability:** As we transition to this unified "Genomic Command Center" architecture, some unstable code may be pushed to the main branch. Stability will be restored once the next official version tag is updated and pushed.
+**QwD (Raja Reform)** is a high-performance, platform-agnostic genomic engine designed for the ultra-fast analysis of FASTQ and BGZF data. Built with Zig 0.16.0-dev and C++17, it utilizes bitplane-columnar storage and register-based SIMD transposition to achieve sub-second latencies on standard hardware.
 
-![Version](https://img.shields.io/badge/Version-1.2.0--secured-blue?style=flat-square)
-![Zig](https://img.shields.io/badge/Language-Zig_0.13.0-orange?logo=zig&logoColor=white)
-![SIMD](https://img.shields.io/badge/SIMD-NEON%20%2F%20AVX2-blueviolet?style=flat-square)
-![Python](https://img.shields.io/badge/Bindings-Python_3.10+-3776AB?logo=python&logoColor=white)
-![R Statistics](https://img.shields.io/badge/Bindings-R_4.5+-276DC3?logo=r&logoColor=white)
-![Swift](https://img.shields.io/badge/Dashboard-SwiftUI-F05138?logo=swift&logoColor=white)
-![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux%20%7C%20Windows-000000?style=flat-square)
+## 🚀 The Raja Reform (v1.3.0)
+The "Raja Reform" milestone marks the transition to a **Pure Agnostic Core**. By decoupling the computational engine from platform-specific I/O and scheduling, QwD now runs with bit-exact consistency across Desktop and Mobile.
 
-### Build Status
-| Core Engine | Bindings & Ecosystem | SwiftUI Dashboard |
-| :--- | :--- | :--- |
-| [![Core CI](https://github.com/Sulkysubject37/QwD/actions/workflows/core.yml/badge.svg)](https://github.com/Sulkysubject37/QwD/actions/workflows/core.yml) | [![Ecosystem CI](https://github.com/Sulkysubject37/QwD/actions/workflows/bindings.yml/badge.svg)](https://github.com/Sulkysubject37/QwD/actions/workflows/bindings.yml) | [![Dashboard CI](https://github.com/Sulkysubject37/QwD/actions/workflows/dashboard.yml/badge.svg)](https://github.com/Sulkysubject37/QwD/actions/workflows/dashboard.yml) |
+### Key Pillars:
+- **Agnostic Core**: Zero dependencies on `std.Thread` or `std.posix` in the computational kernels.
+- **SIMD Power**: 16x16 register-based transposition (ARM NEON / x86 AVX2).
+- **Parallel Scheduler**: Dual-pool worker model for asynchronous decompression and analysis.
+- **Unified C-ABI**: A hardened binary interface for high-level integration (Swift, Android/Sokol).
+- **Native-First Strategy**: Optimized for raw hardware performance on Linux, macOS, and Android.
 
-QwD is a high-performance, SIMD-vectorized streaming Sequence Analytics Engine for genomic data. ![QwD Logo](qwd_logo.png)
+## 📊 Analytical Suite
+The engine provides a comprehensive set of QC metrics:
+- **Basic Stats**: Total reads, bases, and length distributions.
+- **GC Content**: High-resolution histogram bins (0-100%).
+- **N-Statistics**: Precise non-ACGT base tracking.
+- **Length Distribution**: Binned length mapping.
+- **Quality Distribution**: Position-wise PHRED score mappings.
+- **Nucleotide Composition**: Granular A/C/G/T/N counts.
 
-### Meaning
-QwD derives from Arabic:
-**قَلَّ وَدَلَّ (qalla wa dalla)**
-Meaning: **brevity with clarity**
+## 🛠 Project Structure
+- **`core/`**: The Agnostic Engine (Bitplanes, Pipeline, Parsers).
+- **`bindings/c/`**: Hardened C-ABI bridge for universal integration.
+- **`apps/cli/`**: High-throughput terminal analyzer.
+- **`apps/dashboard/`**: The Sokol-based Native Workstation (Cross-platform GUI).
+- **`stages/`**: Modular analytical units.
 
----
+## 🔨 Build & Run
+QwD uses a unified Zig build system.
 
-### Project Status (v1.2.0-secured Hardened)
-QwD v1.2.0-secured marks the transition of the engine into a hardened, production-grade instrument. This update focuses on **"Zero-Overhead Security"** and **"Scientific Formalization,"** ensuring that elite computational performance does not come at the cost of data integrity or system safety. The macOS Dashboard has been upgraded from a passive viewer to an **Active Control Platform**, allowing real-time biological parameter injection (trimming, filtering).
-
-### Key Features
-- **Active Control Dashboard (macOS)**: Interactive biological control surface for real-time parameter injection (5'/3' Trimming, Quality Filtering, Adapter Removal) via the new JSON-Configured Reactive Engine.
-- **Phase Sec-Zero Architecture**: Implemented hardware-level protection mechanisms (Bitplane Mutex Guard) and hardened decompression ceilings (32x expansion gate) to neutralize malicious genomic payloads.
-- **Scientific Formalization**: Verified $R^2 = 1.0$ against legacy baselines (EXACT mode) and $<0.05\%$ MAPE for hardware-level sampling (APPROX mode).
-- **Hardened Parallel Engine**: Multi-threaded stability with zero-overhead block-wait backoff and unified reporting across the ecosystem.
-- **Vertical SIMD & Bitplane Core**: Converts genomics data into parallel bit-matrices, reducing analytical complexity to **O(N/64)** using hardware popcount.
-- **Ordered Parallel BGZF Analysis**: Truly parallel double-pipeline offloading both decompression and analysis to the worker pool.
-- **Unified JSON Reporting**: Standardized schema parity across FASTQ, BAM, Python, R, and Swift.
-
----
-
-### Performance Metrics
-
-#### 1. Peak Decompression Throughput (1M Reads, Single-Core)
-| Format | Engine | Throughput | vs Plain |
-| :--- | :--- | :--- | :--- |
-| **BGZF GZIP** | **libdeflate (SIMD)** | **~5,830,000 reads/sec** | **1.04x** |
-| **BGZF GZIP** | **QwD Native (Zig)** | **~5,290,000 reads/sec** | **0.94x** |
-| Plain FASTQ | Direct I/O | ~5,590,000 reads/sec | 1.00x |
-| Standard GZIP | Compat Fallback | ~3,110,000 reads/sec | 0.55x |
-
-#### 2. End-to-End Analysis (1M Reads, Multi-threaded)
-| Stage | Mode | Threads | Time | Throughput |
-| :--- | :--- | :--- | :--- | :--- |
-| **FASTQ QC** | **EXACT** | **8** | **0.80s** | **~1,250,000 reads/sec** |
-| **BAM Stats** | **EXACT** | **1** | **~0.2s** | **~250,000 reads/sec** |
-
-*Note: QwD overlaps decompression with analysis, making compressed processing effectively "free" relative to raw I/O. Throughput scales linearly with available CPU cores.*
-
----
-
-### Installation & Build
+### Build CLI:
 ```bash
-/usr/local/zig/zig build -Doptimize=ReleaseFast
+zig build
+./zig-out/bin/qwd input.fastq
 ```
 
-### Quick Start
-- **CLI**: `qwd qc reads.fastq.gz --threads 8 --mode exact`
-- **Python**: `import qwd; metrics = qwd.qc("reads.fastq.gz", threads=8, approx=False)`
-- **R**: `library(qwd); res <- qwd_qc("reads.fastq.gz", threads=8, approx=FALSE)`
+### Build & Run Workstation:
+```bash
+zig build run-workstation
+```
+
+## 📱 Future: Android Native
+Phase 1.3.x focuses on the **Android Native APK**. Using a unified Sokol + Zig stack, the Genomic Command Center provides laboratory-grade analysis directly on mobile devices without JNI overhead.
 
 ---
-
-### Documentation
-- **[Architecture: Hardened Parallelism](docs/native_qwd_engine.md)**
-- **[Phase Tax-ed: Taxonomic Screening & HD Visuals](docs/phase_taxed.md)**
-- **[Phase Sec-Zero: Hardened Security](docs/phase_sec_zero.md)**
-- **[Phase P: Universal GZIP Engine](docs/phase_p.md)**
-- **[CLI Usage Guide](docs/cli_usage.md)**
-- **[Dashboard Setup](apps/dashboard/README.md)**
-
-### License
-Academic Free License (AFL) 3.0
-
-### Author
-MD. Arshad (arshad10867c@gmail.com)
+**Author:** MD. Arshad, Dept. of Computer Science, Jamia Millia Islamia.
+**License:** Academic Free License ("AFL") v. 3.0

@@ -25,7 +25,7 @@ pub const BloomFilter = struct {
         for (0..self.hash_count) |i| {
             // Double hashing technique: h(i) = h1 + i * h2
             const combined = h1 +% (i *% h2);
-            const bit_idx = combined % self.size_bits;
+            const bit_idx = @as(usize, @intCast(combined % self.size_bits));
             self.bits[bit_idx / 8] |= (@as(u8, 1) << @as(u3, @intCast(bit_idx % 8)));
         }
     }
@@ -36,7 +36,7 @@ pub const BloomFilter = struct {
 
         for (0..self.hash_count) |i| {
             const combined = h1 +% (i *% h2);
-            const bit_idx = combined % self.size_bits;
+            const bit_idx = @as(usize, @intCast(combined % self.size_bits));
             if ((self.bits[bit_idx / 8] & (@as(u8, 1) << @as(u3, @intCast(bit_idx % 8)))) == 0) {
                 return false;
             }

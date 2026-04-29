@@ -17,7 +17,7 @@ pub const Lz77Engine = struct {
     }
 
     /// Optimized match copy.
-    pub fn copyMatch(self: *Lz77Engine, distance: u15, length: u16, sink: anytype) !void {
+    pub fn copyMatch(self: *Lz77Engine, distance: u16, length: u16, sink: anytype) !void {
         var len = length;
         // Correct distance logic: start_pos is 'distance' bytes BEHIND current 'pos'
         var src_pos = (@as(isize, @intCast(self.pos)) - @as(isize, @intCast(distance))) & 0x7FFF;

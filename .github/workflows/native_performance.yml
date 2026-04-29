@@ -1,0 +1,48 @@
+name: QwD Native Performance (v1.3.0)
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build-and-test:
+    name: Build & Verify (Linux/macOS)
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Setup Zig
+      uses: mlugg/setup-zig@v1
+      with:
+        version: master
+
+    - name: Install Dependencies (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libdeflate-dev libasound2-dev libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev
+
+    - name: Install Dependencies (macOS)
+      if: runner.os == 'macOS'
+      run: brew install libdeflate
+
+    - name: Build QwD CLI
+      run: zig build -Doptimize=ReleaseFast
+
+    - name: Verify CLI JSON Output
+      run: |
+        ./tools/gen_fastq.sh 10000 test.fastq || zig run tools/gen_fastq.zig -- 10000 test.fastq
+        ./zig-out/bin/qwd test.fastq > report.json
+        cat report.json
+        grep "read_count" report.json
+
+    - name: Verify Workstation Build
+      run: zig build workstation_dummy -Doptimize=ReleaseSafe

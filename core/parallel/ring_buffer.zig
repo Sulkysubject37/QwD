@@ -1,123 +1,104 @@
 const std = @import("std");
+const blocking_sync = @import("blocking_sync");
 
-/// A thread-safe, blocking, bounded ring buffer for Job dispatch with race-free shutdown.
+/// A thread-safe, genuinely blocking, bounded ring buffer for Job dispatch.
 pub fn RingBuffer(comptime T: type) type {
     return struct {
         const Self = @This();
         
         buffer: []T,
-        head: std.atomic.Value(usize),
-        tail: std.atomic.Value(usize),
+        head: usize = 0,
+        tail: usize = 0,
         capacity: usize,
         allocator: std.mem.Allocator,
-        is_shutdown: std.atomic.Value(bool),
+        is_shutdown: bool = false,
         
-        // Semaphores for blocking (std.Io.Semaphore in 0.16.0-dev)
-        empty_sem: std.Io.Semaphore,
-        full_sem: std.Io.Semaphore,
+        // NEW: Condition Variable Sync
+        mutex: blocking_sync.Mutex,
+        cond_empty: blocking_sync.Condition, // Wait for space
+        cond_full: blocking_sync.Condition,  // Wait for data
 
         pub fn init(allocator: std.mem.Allocator, capacity: usize) !*Self {
             const actual_capacity = try std.math.ceilPowerOfTwo(usize, capacity);
-            
             const self = try allocator.create(Self);
             self.* = .{
                 .buffer = try allocator.alloc(T, actual_capacity),
-                .head = std.atomic.Value(usize).init(0),
-                .tail = std.atomic.Value(usize).init(0),
                 .capacity = actual_capacity,
                 .allocator = allocator,
-                .is_shutdown = std.atomic.Value(bool).init(false),
-                .empty_sem = .{ .permits = 0 },
-                .full_sem = .{ .permits = actual_capacity },
+                .mutex = blocking_sync.Mutex.init(),
+                .cond_empty = blocking_sync.Condition.init(),
+                .cond_full = blocking_sync.Condition.init(),
             };
             return self;
         }
 
         pub fn deinit(self: *Self) void {
             self.allocator.free(self.buffer);
+            self.mutex.deinit();
+            self.cond_empty.deinit();
+            self.cond_full.deinit();
             self.allocator.destroy(self);
         }
 
-        pub fn shutdown(self: *Self, io: std.Io, num_workers: usize) void {
-            self.is_shutdown.store(true, .release);
-            // Wake up all workers
-            for (0..num_workers) |_| {
-                self.empty_sem.post(io);
-            }
+        pub fn shutdown(self: *Self) void {
+            self.mutex.lock();
+            self.is_shutdown = true;
+            self.mutex.unlock();
+            self.cond_full.broadcast();
+            self.cond_empty.broadcast();
         }
 
-        pub fn count(self: *const Self) usize {
-            const h = self.head.load(.acquire);
-            const t = self.tail.load(.acquire);
-            return h -% t;
-        }
+        pub fn tryPush(self: *Self, item: T) bool {
+            self.mutex.lock();
+            defer self.mutex.unlock();
+            if (self.is_shutdown) return false;
+            if (self.head -% self.tail == self.capacity) return false;
 
-        pub fn write(self: *Self, items: []const T) usize {
-            var n: usize = 0;
-            while (n < items.len) {
-                const h = self.head.load(.acquire);
-                const t = self.tail.load(.acquire);
-                if (h -% t == self.capacity) break;
-                self.buffer[h & (self.capacity - 1)] = items[n];
-                self.head.store(h +% 1, .release);
-                n += 1;
-            }
-            return n;
-        }
-
-        pub fn read(self: *Self, dest: []T) usize {
-            var n: usize = 0;
-            while (n < dest.len) {
-                const t = self.tail.load(.acquire);
-                const h = self.head.load(.acquire);
-                if (h == t) break;
-                dest[n] = self.buffer[t & (self.capacity - 1)];
-                self.tail.store(t +% 1, .release);
-                n += 1;
-            }
-            return n;
-        }
-
-        pub fn push(self: *Self, io: std.Io, item: T) bool {
-            if (self.is_shutdown.load(.acquire)) return false;
-            self.full_sem.waitUncancelable(io);
-            
-            const h = self.head.load(.monotonic);
-            self.buffer[h & (self.capacity - 1)] = item;
-            self.head.store(h +% 1, .release);
-            
-            self.empty_sem.post(io);
+            self.buffer[self.head & (self.capacity - 1)] = item;
+            self.head += 1;
+            self.cond_full.signal();
             return true;
         }
 
-        pub fn pop(self: *Self, io: std.Io) ?T {
-            self.empty_sem.waitUncancelable(io);
-            
-            // Race-free slot claim loop
-            while (true) {
-                const t = self.tail.load(.acquire);
-                const h = self.head.load(.acquire);
-                
-                // If buffer is empty and shutdown is active, this was a shutdown permit.
-                if (h == t and self.is_shutdown.load(.acquire)) return null;
-                
-                // If buffer is empty but not shutdown, another thread took the item we were alerted for.
-                // This shouldn't happen with correct semaphore counts, but we must be robust.
-                if (h == t) {
-                    std.Thread.yield() catch {};
-                    continue;
-                }
+        pub fn tryPop(self: *Self) ?T {
+            self.mutex.lock();
+            defer self.mutex.unlock();
+            if (self.head == self.tail) return null;
 
-                // Claim the slot
-                if (self.tail.cmpxchgWeak(t, t +% 1, .release, .acquire)) |_| {
-                    std.Thread.yield() catch {};
-                    continue;
-                }
-                
-                const item = self.buffer[t & (self.capacity - 1)];
-                self.full_sem.post(io);
-                return item;
+            const item = self.buffer[self.tail & (self.capacity - 1)];
+            self.tail += 1;
+            self.cond_empty.signal();
+            return item;
+        }
+
+        pub fn push(self: *Self, item: T) bool {
+            self.mutex.lock();
+            defer self.mutex.unlock();
+
+            while (self.head -% self.tail == self.capacity) {
+                if (self.is_shutdown) return false;
+                self.cond_empty.wait(&self.mutex);
             }
+
+            self.buffer[self.head & (self.capacity - 1)] = item;
+            self.head += 1;
+            self.cond_full.signal();
+            return true;
+        }
+
+        pub fn pop(self: *Self) ?T {
+            self.mutex.lock();
+            defer self.mutex.unlock();
+
+            while (self.head == self.tail) {
+                if (self.is_shutdown) return null;
+                self.cond_full.wait(&self.mutex);
+            }
+
+            const item = self.buffer[self.tail & (self.capacity - 1)];
+            self.tail += 1;
+            self.cond_empty.signal();
+            return item;
         }
     };
 }
