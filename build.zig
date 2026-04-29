@@ -5,7 +5,7 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     // 0. GLOBAL FLAGS
-    const global_cflags = &[_][]const u8{ "-DIMGUI_DEFINE_MATH_OPERATORS", "-DSOKOL_METAL", "-DIMGUI_DISABLE_OBSOLETE_FUNCTIONS", "-DIMGUI_DISABLE_OBSOLETE_KEYIO", "-fno-exceptions", "-fno-rtti" };
+    const global_cflags = &[_][]const u8{ "-DIMGUI_DEFINE_MATH_OPERATORS", "-DSOKOL_METAL", "-fno-exceptions", "-fno-rtti" };
 
     // 1. CORE ENGINE MODULES
     const mode_mod = b.createModule(.{ .root_source_file = b.path("core/config/mode.zig"), .target = target, .optimize = optimize });
@@ -207,4 +207,17 @@ pub fn build(b: *std.Build) void {
     cli.root_module.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
     cli.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
     b.installArtifact(cli);
+
+    // 6. SHARED LIBRARY (For Python, R, etc.)
+    const shared_bridge_mod = b.createModule(.{ .root_source_file = b.path("bindings/c/qwd_scripting.zig"), .target = target, .optimize = optimize, .link_libc = true });
+    shared_bridge_mod.addImport("pipeline", pipeline_mod);
+    shared_bridge_mod.addImport("pipeline_config", pipeline_config_mod);
+    shared_bridge_mod.addImport("global_allocator", global_allocator_mod);
+    shared_bridge_mod.addImport("reader_interface", reader_mod);
+    shared_bridge_mod.addImport("parallel_scheduler", parallel_scheduler_mod);
+    const shared_lib = b.addLibrary(.{ .name = "qwd", .root_module = shared_bridge_mod, .linkage = .dynamic });
+    shared_lib.root_module.linkSystemLibrary("deflate", .{});
+    shared_lib.root_module.addLibraryPath(.{ .cwd_relative = "/opt/homebrew/lib" });
+    shared_lib.root_module.addIncludePath(.{ .cwd_relative = "/opt/homebrew/include" });
+    b.installArtifact(shared_lib);
 }

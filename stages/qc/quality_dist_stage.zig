@@ -51,7 +51,7 @@ pub const QualitydistStage = struct {
             }
             try writer.writeAll("]");
         }
-        try writer.writeAll("]}}");
+        try writer.writeAll("]}");
     }
 
     pub fn stage(self: *QualitydistStage) stage_mod.Stage {

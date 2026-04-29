@@ -1,7 +1,7 @@
 Package: qwd
 Type: Package
 Title: R Bindings for QwD Bioinformatics Streaming Engine
-Version: 0.1.0
+Version: 1.3.0
 Author: MD. Arshad <arshad10867c@gmail.com>
 Maintainer: MD. Arshad <arshad10867c@gmail.com>
 Description: High-performance streaming analytics for FASTQ and BAM data.

@@ -22,17 +22,18 @@ jobs:
     - name: Setup Zig
       uses: mlugg/setup-zig@v1
       with:
-        version: master
+        version: 0.16.0-dev.3153+d6f43caad
 
     - name: Install Dependencies (Linux)
       if: runner.os == 'Linux'
       run: |
         sudo apt-get update
-        sudo apt-get install -y libdeflate-dev libasound2-dev libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev
+        sudo apt-get install -y libdeflate-dev libasound2-dev libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev python3-pip r-base
 
     - name: Install Dependencies (macOS)
       if: runner.os == 'macOS'
-      run: brew install libdeflate
+      run: |
+        brew install libdeflate python r
 
     - name: Build QwD CLI
       run: zig build -Doptimize=ReleaseFast
@@ -46,3 +47,21 @@ jobs:
 
     - name: Verify Workstation Build
       run: zig build workstation_dummy -Doptimize=ReleaseSafe
+
+    - name: Verify Python Bindings
+      run: |
+        python3 -m venv venv
+        source venv/bin/activate
+        pip install -e bindings/python
+        python -c "import qwd; print('Python bindings installed successfully')"
+
+    - name: Verify R Bindings
+      run: |
+        Rscript -e "install.packages('bindings/r', repos=NULL, type='source')"
+        Rscript -e "library(qwd); print('R bindings installed successfully')"
+
+    - name: Verify Swift UI Dashboard (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        cd apps/dashboard
+        swift build

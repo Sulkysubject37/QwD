@@ -29,13 +29,13 @@ qwd_qc <- function(fastq_path, approx = FALSE, threads = 0, gzip_mode = "auto", 
   
   if (path == "") stop("QwD shared library not found. Build it with 'zig build'")
   
-  dyn.load(path)
+  lib <- dyn.load(path)
   
   max_len <- 16 * 1024 * 1024
   res_buf <- raw(max_len)
   
   # .C returns a list of modified arguments. We must capture it.
-  res <- .C("qwd_fastq_qc_ex_r", 
+  res <- .C(getNativeSymbolInfo("qwd_fastq_qc_ex_r", lib), 
             path = as.character(fastq_path), 
             threads = as.integer(threads), 
             mode = as.integer(if(approx) 1 else 0), 

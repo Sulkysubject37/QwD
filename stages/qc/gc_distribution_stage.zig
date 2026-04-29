@@ -37,7 +37,7 @@ pub const GcdistributionStage = struct {
             try writer.print("{d}", .{count});
             if (i < 100) try writer.writeAll(", ");
         }
-        try writer.writeAll("]}}");
+        try writer.writeAll("]}");
     }
 
     pub fn stage(self: *GcdistributionStage) stage_mod.Stage {
